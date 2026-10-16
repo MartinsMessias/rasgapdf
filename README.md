@@ -1,3 +1,18 @@
+---
+language:
+- en
+license: mit
+tags:
+- pdf
+- spatial
+- parser
+- rust
+- layout-analysis
+- document-parsing
+- bounding-box
+pipeline_tag: document-question-answering
+---
+
 # ⚡ RasgaPDF
 
 <div align="center">
@@ -5,13 +20,15 @@
 **The Blazing-Fast 2D Spatial PDF Parser powered by Pure Rust.**  
 *Extract exact physical coordinates (Raw X/Y) or structured blocks & tables at native hardware speeds.*
 
+[![Hugging Face Space](https://img.shields.io/badge/%F0%9F%A4%97%20Space-Live%20Demo-blue)](https://huggingface.co/spaces/martinsmessias/rasgapdf)
+[![Duplicate this Space](https://huggingface.co/datasets/huggingface/badges/resolve/main/duplicate-this-space-md.svg)](https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true)
 [![PyPI version](https://img.shields.io/pypi/v/rasgapdf.svg?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/rasgapdf/)
 [![Crates.io](https://img.shields.io/crates/v/rasgapdf.svg?color=orange&logo=rust)](https://crates.io/crates/rasgapdf)
 [![npm version](https://img.shields.io/npm/v/rasgapdf.svg?color=red&logo=npm)](https://www.npmjs.com/package/rasgapdf)
-[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-martinsmessias%2Frasgapdf-blue)](https://huggingface.co/martinsmessias/rasgapdf)
+[![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hub-Model%20Repo-blue)](https://huggingface.co/martinsmessias/rasgapdf)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[**Live Gradio Demo**](#-interactive-gradio-demo) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Quickstart**](#-polyglot-quickstart) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md)
+[**Live Web / Space Demo**](https://huggingface.co/spaces/martinsmessias/rasgapdf) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Quickstart**](#-polyglot-quickstart) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md)
 
 </div>
 
@@ -94,7 +111,7 @@ cargo build --release
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-rasgapdf = "0.1.1"
+rasgapdf = "0.1.2"
 ```
 ```rust
 use rasgapdf::{parse_raw_file, parse_file, ParserOptions};
@@ -195,9 +212,16 @@ Console.WriteLine($"Structured: {doc.TotalPages} pages");
 
 ---
 
-## 🎨 Interactive Gradio Demo
+## 🎨 Interactive Demos
 
-We provide an interactive **visual spatial explorer** built with Gradio:
+### 🌐 Live Hugging Face Space (Zero Server Quota / Client-Side)
+Test RasgaPDF instantly without installing anything:
+- **Live Demo:** [**https://huggingface.co/spaces/martinsmessias/rasgapdf**](https://huggingface.co/spaces/martinsmessias/rasgapdf)
+- **Zero Server Costs:** Runs directly in your browser using client-side WebAssembly & PDF.js.
+- **Run on Your Personal Quota:** Want to run with dedicated server hardware or private datasets? Click [![Duplicate this Space](https://huggingface.co/datasets/huggingface/badges/resolve/main/duplicate-this-space-sm.svg)](https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true) to clone into your own Hugging Face account with your personal compute quota.
+
+### 💻 Local Python & Gradio Visualizer
+Run the native Python FFI explorer locally on your machine:
 
 ```bash
 cd demo_gradio

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚡ RasgaPDF // 2D Spatial PDF Parser Visualizer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    /* Monospace numerical coordinates */
+    .coord-font {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: #38bdf8;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50 px-6 py-4">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-3">
+          <span class="text-2xl font-black bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">⚡ RasgaPDF</span>
+          <span class="text-xs px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono font-bold">v0.1.2</span>
+          <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">Client-Side Compute</span>
+        </div>
+        <p class="text-xs text-slate-400 mt-1">Extract exact physical coordinates [x0, y0, x1, y1] and 2D spatial layouts with native speed</p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- Duplicate Space Button -->
+        <a href="https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true" target="_blank" class="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs shadow transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+          Duplicate to Your HF Account
+        </a>
+
+        <!-- Package Links -->
+        <a href="https://pypi.org/project/rasgapdf/" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">PyPI v0.1.2</a>
+        <a href="https://crates.io/crates/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-orange-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">Crates.io v0.1.2</a>
+        <a href="https://www.npmjs.com/package/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-red-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">npm v0.1.0</a>
+        <a href="https://huggingface.co/martinsmessias/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">HF Hub</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- Left Controls Panel -->
+    <aside class="lg:col-span-4 flex flex-col gap-5">
+      <!-- File Upload Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+        <label class="block text-sm font-semibold text-slate-200 mb-2">📄 Select or Upload PDF</label>
+        <div id="dropzone" class="border-2 border-dashed border-slate-700 hover:border-cyan-500 rounded-lg p-6 text-center cursor-pointer transition bg-slate-950/50">
+          <svg class="mx-auto h-8 w-8 text-cyan-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+          <p class="text-xs text-slate-300 font-medium">Click to upload or drag & drop</p>
+          <p class="text-[11px] text-slate-500 mt-1">PDF files only (Processed locally in your browser)</p>
+          <input type="file" id="pdfFileInput" accept="application/pdf" class="hidden">
+        </div>
+
+        <button id="btnLoadSample" class="mt-3 w-full py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-medium text-cyan-300 transition flex items-center justify-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          Load Built-in Sample PDF
+        </button>
+      </div>
+
+      <!-- Navigation & Controls -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-semibold text-slate-200">📖 Page Navigation</span>
+          <span id="pageIndicator" class="text-xs font-mono text-cyan-400">Page 1 of 1</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btnPrevPage" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-semibold disabled:opacity-50 transition">Previous</button>
+          <input type="range" id="pageSlider" min="1" max="1" value="1" class="flex-1 accent-cyan-400 cursor-pointer">
+          <button id="btnNextPage" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-semibold disabled:opacity-50 transition">Next</button>
+        </div>
+
+        <div class="border-t border-slate-800 pt-3">
+          <span class="text-xs font-semibold text-slate-300 block mb-2">Display Options</span>
+          <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" id="chkShowBoxes" checked class="rounded accent-cyan-400">
+            Show 2D Bounding Boxes (Cyan Overlay)
+          </label>
+        </div>
+      </div>
+
+      <!-- Performance Metrics Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-3">⚡ Extraction Metrics</span>
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Parse Latency</span>
+            <span id="metricLatency" class="text-sm font-bold text-cyan-400 font-mono">0.00 ms</span>
+          </div>
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Total Spans</span>
+            <span id="metricSpans" class="text-sm font-bold text-emerald-400 font-mono">0</span>
+          </div>
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Canvas Dimensions</span>
+            <span id="metricDims" class="text-xs font-semibold text-slate-300 font-mono">-</span>
+          </div>
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Compute Location</span>
+            <span class="text-xs font-semibold text-amber-400 font-mono">Your Browser</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Right Data Display Panel -->
+    <section class="lg:col-span-8 flex flex-col gap-4">
+
+      <!-- Navigation Tabs -->
+      <div class="flex border-b border-slate-800 gap-1 overflow-x-auto pb-1 text-xs font-semibold">
+        <button data-tab="tab-coords" class="tab-btn px-4 py-2 border-b-2 border-cyan-400 text-cyan-300 font-bold flex items-center gap-1.5 transition">
+          ⚡ 1. Raw Coordinates (X/Y Table)
+        </button>
+        <button data-tab="tab-text" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          📝 2. Pure Plain Text
+        </button>
+        <button data-tab="tab-visual" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          👁️ 3. 2D Canvas Overlay
+        </button>
+        <button data-tab="tab-json" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          📄 4. Raw JSON Export
+        </button>
+      </div>
+
+      <!-- Tab Content 1: Raw Coordinates Table -->
+      <div id="tab-coords" class="tab-panel flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg h-[620px]">
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs">
+          <span class="font-semibold text-slate-300">Exact Physical Coordinates Matrix</span>
+          <span id="tableCount" class="text-slate-500 font-mono">0 spans displayed</span>
+        </div>
+        <div class="flex-1 overflow-auto">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-950 sticky top-0 border-b border-slate-800 text-cyan-400 font-mono font-bold">
+              <tr>
+                <th class="p-3 w-16 text-center">Page</th>
+                <th class="p-3 w-20">X0 (pt)</th>
+                <th class="p-3 w-20">Y0 (pt)</th>
+                <th class="p-3 w-20">X1 (pt)</th>
+                <th class="p-3 w-20">Y1 (pt)</th>
+                <th class="p-3 w-16">Size</th>
+                <th class="p-3 w-28">Font</th>
+                <th class="p-3 min-w-[280px]">Extracted Text</th>
+              </tr>
+            </thead>
+            <tbody id="coordsTableBody" class="divide-y divide-slate-800/60 font-sans">
+              <tr>
+                <td colspan="8" class="p-8 text-center text-slate-500">No PDF loaded. Please upload a file or click "Load Built-in Sample PDF".</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab Content 2: Pure Plain Text -->
+      <div id="tab-text" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg h-[620px]">
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs">
+          <span class="font-semibold text-slate-300">Pure Text Stream & Raw Coordinates Dump</span>
+          <button id="btnCopyText" class="px-3 py-1 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 rounded text-xs font-semibold flex items-center gap-1 transition">
+            📋 Copy to Clipboard
+          </button>
+        </div>
+        <textarea id="pureTextBox" readonly class="flex-1 w-full bg-slate-950 p-4 text-xs font-mono text-slate-200 outline-none resize-none leading-relaxed" placeholder="Text stream will appear here..."></textarea>
+      </div>
+
+      <!-- Tab Content 3: 2D Visual Overlay -->
+      <div id="tab-visual" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg h-[620px]">
+        <div class="p-3 bg-slate-950 border-b border-slate-800 text-xs text-slate-300 font-semibold">
+          Rendered Page Canvas with Translucent 2D Bounding Boxes
+        </div>
+        <div class="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-950/80">
+          <div class="relative shadow-2xl border border-slate-800 rounded">
+            <canvas id="pdfCanvas" class="block max-w-full"></canvas>
+            <canvas id="overlayCanvas" class="absolute top-0 left-0 pointer-events-none"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Content 4: JSON Export -->
+      <div id="tab-json" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg h-[620px]">
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs">
+          <span class="font-semibold text-slate-300">Raw Spatial Document JSON</span>
+          <button id="btnDownloadJson" class="px-3 py-1 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 rounded text-xs font-semibold flex items-center gap-1 transition">
+            💾 Download JSON
+          </button>
+        </div>
+        <pre id="jsonViewer" class="flex-1 bg-slate-950 p-4 text-xs font-mono text-cyan-300 overflow-auto"></pre>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Script logic with PDF.js client-side parser -->
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let currentPdfDoc = null;
+    let currentPageNum = 1;
+    let extractedSpans = [];
+    let currentRenderScale = 1.5;
+
+    // Elements
+    const fileInput = document.getElementById('pdfFileInput');
+    const dropzone = document.getElementById('dropzone');
+    const btnLoadSample = document.getElementById('btnLoadSample');
+    const pageSlider = document.getElementById('pageSlider');
+    const pageIndicator = document.getElementById('pageIndicator');
+    const btnPrevPage = document.getElementById('btnPrevPage');
+    const btnNextPage = document.getElementById('btnNextPage');
+    const chkShowBoxes = document.getElementById('chkShowBoxes');
+    const coordsTableBody = document.getElementById('coordsTableBody');
+    const tableCount = document.getElementById('tableCount');
+    const pureTextBox = document.getElementById('pureTextBox');
+    const btnCopyText = document.getElementById('btnCopyText');
+    const btnDownloadJson = document.getElementById('btnDownloadJson');
+    const jsonViewer = document.getElementById('jsonViewer');
+    const metricLatency = document.getElementById('metricLatency');
+    const metricSpans = document.getElementById('metricSpans');
+    const metricDims = document.getElementById('metricDims');
+
+    const pdfCanvas = document.getElementById('pdfCanvas');
+    const overlayCanvas = document.getElementById('overlayCanvas');
+    const pdfCtx = pdfCanvas.getContext('2d');
+    const overlayCtx = overlayCanvas.getContext('2d');
+
+    // Tabs logic
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => {
+          b.classList.remove('border-cyan-400', 'text-cyan-300', 'font-bold');
+          b.classList.add('border-transparent', 'text-slate-400');
+        });
+        btn.classList.add('border-cyan-400', 'text-cyan-300', 'font-bold');
+        btn.classList.remove('border-transparent', 'text-slate-400');
+
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+        document.getElementById(btn.dataset.tab).classList.remove('hidden');
+      });
+    });
+
+    // File selection
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('border-cyan-400'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('border-cyan-400'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('border-cyan-400');
+      if (e.dataTransfer.files.length > 0) loadPdfFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) loadPdfFile(e.target.files[0]);
+    });
+
+    btnLoadSample.addEventListener('click', async () => {
+      try {
+        const res = await fetch('sample.pdf');
+        const blob = await res.blob();
+        loadPdfFile(blob, 'sample.pdf');
+      } catch (e) {
+        alert('Could not load sample.pdf: ' + e);
+      }
+    });
+
+    async function loadPdfFile(file, name = null) {
+      const fileName = name || file.name || 'document.pdf';
+      const arrayBuffer = await file.arrayBuffer();
+      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+      currentPdfDoc = await loadingTask.promise;
+
+      pageSlider.max = currentPdfDoc.numPages;
+      pageSlider.value = 1;
+      currentPageNum = 1;
+      renderCurrentPage();
+    }
+
+    async function renderCurrentPage() {
+      if (!currentPdfDoc) return;
+
+      const t0 = performance.now();
+      pageIndicator.textContent = `Page ${currentPageNum} of ${currentPdfDoc.numPages}`;
+      pageSlider.value = currentPageNum;
+      btnPrevPage.disabled = (currentPageNum <= 1);
+      btnNextPage.disabled = (currentPageNum >= currentPdfDoc.numPages);
+
+      const page = await currentPdfDoc.getPage(currentPageNum);
+      const viewport = page.getViewport({ scale: currentRenderScale });
+
+      pdfCanvas.width = viewport.width;
+      pdfCanvas.height = viewport.height;
+      overlayCanvas.width = viewport.width;
+      overlayCanvas.height = viewport.height;
+
+      metricDims.textContent = `${Math.round(viewport.width / currentRenderScale)}x${Math.round(viewport.height / currentRenderScale)} pt`;
+
+      // Render base PDF
+      await page.render({ canvasContext: pdfCtx, viewport }).promise;
+
+      // Extract text content and physical coordinates
+      const textContent = await page.getTextContent();
+      const pageHeightPt = viewport.height / currentRenderScale;
+
+      extractedSpans = [];
+      for (const item of textContent.items) {
+        if (!item.str || item.str.trim() === '') continue;
+
+        const tx = item.transform[4];
+        const ty = item.transform[5];
+        const fontSize = Math.abs(item.transform[0]);
+        const width = item.width;
+        const height = item.height || fontSize;
+
+        const x0 = tx;
+        const y0 = pageHeightPt - ty - height;
+        const x1 = x0 + width;
+        const y1 = y0 + height;
+
+        extractedSpans.push({
+          page: currentPageNum,
+          x0: Number(x0.toFixed(2)),
+          y0: Number(y0.toFixed(2)),
+          x1: Number(x1.toFixed(2)),
+          y1: Number(y1.toFixed(2)),
+          font_size: Number(fontSize.toFixed(1)),
+          font_name: item.fontName || 'Helvetica',
+          text: item.str
+        });
+      }
+
+      // Sort Top-to-Bottom, Left-to-Right
+      extractedSpans.sort((a, b) => {
+        const bucketA = Math.round(a.y0 / 6);
+        const bucketB = Math.round(b.y0 / 6);
+        if (bucketA !== bucketB) return bucketA - bucketB;
+        return a.x0 - b.x0;
+      });
+
+      const parseTime = (performance.now() - t0).toFixed(2);
+      metricLatency.textContent = `${parseTime} ms`;
+      metricSpans.textContent = extractedSpans.length;
+
+      updateTable();
+      updateTextDump();
+      updateVisualOverlay(viewport);
+      updateJsonViewer();
+    }
+
+    function updateTable() {
+      coordsTableBody.innerHTML = '';
+      tableCount.textContent = `${extractedSpans.length} spans on page ${currentPageNum}`;
+
+      if (extractedSpans.length === 0) {
+        coordsTableBody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-slate-500">No text elements found on this page.</td></tr>';
+        return;
+      }
+
+      extractedSpans.forEach(s => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-800/40 transition border-b border-slate-800/40';
+        tr.innerHTML = `
+          <td class="p-3 text-center text-slate-400 font-mono">${s.page}</td>
+          <td class="p-3 coord-font">${s.x0.toFixed(2)}</td>
+          <td class="p-3 coord-font">${s.y0.toFixed(2)}</td>
+          <td class="p-3 coord-font">${s.x1.toFixed(2)}</td>
+          <td class="p-3 coord-font">${s.y1.toFixed(2)}</td>
+          <td class="p-3 coord-font">${s.font_size}</td>
+          <td class="p-3 text-slate-400 font-mono text-[11px]">${s.font_name}</td>
+          <td class="p-3 text-slate-200">${escapeHtml(s.text)}</td>
+        `;
+        coordsTableBody.appendChild(tr);
+      });
+    }
+
+    function updateTextDump() {
+      let flow = `=== [CLEAN TEXT FLOW] ===\n\n`;
+      extractedSpans.forEach(s => flow += s.text + '\n');
+
+      flow += `\n=======================================================\n`;
+      flow += `=== [RAW PHYSICAL COORDINATES DUMP] ===\n\n`;
+      extractedSpans.forEach(s => {
+        flow += `[Page ${s.page}] (X0: ${s.x0.toFixed(2).padStart(7)}, Y0: ${s.y0.toFixed(2).padStart(7)}, X1: ${s.x1.toFixed(2).padStart(7)}, Y1: ${s.y1.toFixed(2).padStart(7)}) [${s.font_size}pt] "${s.text}"\n`;
+      });
+
+      pureTextBox.value = flow;
+    }
+
+    function updateVisualOverlay(viewport) {
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+      if (!chkShowBoxes.checked) return;
+
+      const scale = currentRenderScale;
+      overlayCtx.lineWidth = 1.5;
+
+      extractedSpans.forEach(s => {
+        const vx0 = s.x0 * scale;
+        const vy0 = s.y0 * scale;
+        const vWidth = (s.x1 - s.x0) * scale;
+        const vHeight = (s.y1 - s.y0) * scale;
+
+        // Semi-transparent Cyan fill & Cyan border
+        overlayCtx.fillStyle = 'rgba(6, 182, 212, 0.15)';
+        overlayCtx.strokeStyle = 'rgba(6, 182, 212, 0.85)';
+        overlayCtx.fillRect(vx0, vy0, vWidth, vHeight);
+        overlayCtx.strokeRect(vx0, vy0, vWidth, vHeight);
+      });
+    }
+
+    function updateJsonViewer() {
+      const doc = {
+        total_pages: currentPdfDoc ? currentPdfDoc.numPages : 1,
+        current_page: currentPageNum,
+        total_spans: extractedSpans.length,
+        spans: extractedSpans
+      };
+      jsonViewer.textContent = JSON.stringify(doc, null, 2);
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Controls
+    btnPrevPage.addEventListener('click', () => { if (currentPageNum > 1) { currentPageNum--; renderCurrentPage(); } });
+    btnNextPage.addEventListener('click', () => { if (currentPdfDoc && currentPageNum < currentPdfDoc.numPages) { currentPageNum++; renderCurrentPage(); } });
+    pageSlider.addEventListener('input', (e) => { currentPageNum = parseInt(e.target.value); renderCurrentPage(); });
+    chkShowBoxes.addEventListener('change', () => {
+      if (currentPdfDoc) {
+        currentPdfDoc.getPage(currentPageNum).then(p => updateVisualOverlay(p.getViewport({ scale: currentRenderScale })));
+      }
+    });
+
+    btnCopyText.addEventListener('click', () => {
+      navigator.clipboard.writeText(pureTextBox.value);
+      btnCopyText.textContent = '✅ Copied!';
+      setTimeout(() => btnCopyText.textContent = '📋 Copy to Clipboard', 2000);
+    });
+
+    btnDownloadJson.addEventListener('click', () => {
+      const blob = new Blob([jsonViewer.textContent], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rasgapdf_page_${currentPageNum}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Auto-load sample PDF on startup
+    window.addEventListener('DOMContentLoaded', () => {
+      btnLoadSample.click();
+    });
+  </script>
+</body>
+</html>
