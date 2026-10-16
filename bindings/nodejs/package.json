@@ -3,8 +3,17 @@
   "version": "0.1.0",
   "description": "Ultra-fast 2D spatial PDF parser powered by pure Rust",
   "main": "index.js",
+  "files": [
+    "index.js",
+    "librasgapdf.so",
+    "README.md"
+  ],
   "scripts": {
-    "test": "node test.js"
+    "test": "node -e \"console.log(require('./index.js').version())\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/messiasmartins/rasgapdf.git"
   },
   "keywords": [
     "pdf",

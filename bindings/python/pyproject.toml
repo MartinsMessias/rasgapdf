@@ -15,7 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Rust",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+    "Operating System :: POSIX :: Linux",
     "Topic :: Text Processing :: General",
 ]
 dependencies = []
@@ -23,3 +23,10 @@ dependencies = []
 [project.urls]
 "Homepage" = "https://github.com/messiasmartins/rasgapdf"
 "Bug Tracker" = "https://github.com/messiasmartins/rasgapdf/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rasgapdf*"]
+
+[tool.setuptools.package-data]
+rasgapdf = ["*.so", "*.dylib", "*.dll"]
