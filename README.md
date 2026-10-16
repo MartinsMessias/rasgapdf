@@ -6,8 +6,8 @@
 *Extract exact physical coordinates (Raw X/Y) or structured blocks & tables at native hardware speeds.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/rasgapdf.svg?logo=pypi&logoColor=white)](https://pypi.org/project/rasgapdf/)
 [![Rust](https://img.shields.io/badge/Rust-2021%2B-orange?logo=rust)](Cargo.toml)
-[![Python](https://img.shields.io/badge/Python-3.8%2B-yellow?logo=python)](bindings/python)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green?logo=node.js)](bindings/nodejs)
 [![Go](https://img.shields.io/badge/Go-1.20%2B-cyan?logo=go)](bindings/go)
 [![.NET](https://img.shields.io/badge/.NET-8.0%2B-purple?logo=dotnet)](bindings/csharp)
