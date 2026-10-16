@@ -15,8 +15,30 @@ import (
 	"unsafe"
 )
 
-// Options defines the parser configurations
+// RawCoordSpan representa o elemento atômico mais direto de coordenada espacial
+type RawCoordSpan struct {
+	Page     int     `json:"page"`
+	X0       float32 `json:"x0"`
+	Y0       float32 `json:"y0"`
+	X1       float32 `json:"x1"`
+	Y1       float32 `json:"y1"`
+	FontSize float32 `json:"font_size"`
+	FontName string  `json:"font_name"`
+	Text     string  `json:"text"`
+}
+
+// RawSpatialDocument é o documento plano contendo a lista pura de coordenadas X/Y
+type RawSpatialDocument struct {
+	FileName    string         `json:"file_name"`
+	TotalPages  int            `json:"total_pages"`
+	TotalSpans  int            `json:"total_spans"`
+	ParseTimeMs float64        `json:"parse_time_ms"`
+	Spans       []RawCoordSpan `json:"spans"`
+}
+
+// Options defines the parser configurations for structured mode
 type Options struct {
+	Mode             string  `json:"mode,omitempty"`
 	DetectTables     bool    `json:"detect_tables"`
 	MinTableColumns  int     `json:"min_table_columns"`
 	ColumnTolerance  float32 `json:"column_tolerance"`
@@ -26,6 +48,7 @@ type Options struct {
 // DefaultOptions returns standard parsing options
 func DefaultOptions() Options {
 	return Options{
+		Mode:            "structured",
 		DetectTables:    true,
 		MinTableColumns: 3,
 		ColumnTolerance: 16.0,
@@ -69,12 +92,12 @@ type SpatialBlock struct {
 
 // SpatialTable represents an extracted table
 type SpatialTable struct {
-	TableID  int        `json:"table_id"`
+	TableID  int         `json:"table_id"`
 	BBox     BoundingBox `json:"bbox"`
-	ColCount int        `json:"col_count"`
-	RowCount int        `json:"row_count"`
-	Headers  []string   `json:"headers"`
-	Rows     [][]string `json:"rows"`
+	ColCount int         `json:"col_count"`
+	RowCount int         `json:"row_count"`
+	Headers  []string    `json:"headers"`
+	Rows     [][]string  `json:"rows"`
 }
 
 // SpatialPage holds elements for a single page
@@ -90,10 +113,40 @@ type SpatialPage struct {
 
 // SpatialDocument represents the entire parsed PDF document
 type SpatialDocument struct {
-	FileName     string        `json:"file_name"`
-	TotalPages   int           `json:"total_pages"`
-	ParseTimeMs  float64       `json:"parse_time_ms"`
-	Pages        []SpatialPage `json:"pages"`
+	FileName    string        `json:"file_name"`
+	TotalPages  int           `json:"total_pages"`
+	ParseTimeMs float64       `json:"parse_time_ms"`
+	Pages       []SpatialPage `json:"pages"`
+}
+
+// ParseRaw parses a PDF and returns pure raw X/Y coordinate spans without block grouping
+func ParseRaw(path string) (*RawSpatialDocument, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		return nil, errors.New("file not found: " + absPath)
+	}
+
+	cPath := C.CString(absPath)
+	defer C.free(unsafe.Pointer(cPath))
+
+	cRes := C.rasgapdf_parse_raw(cPath)
+	if cRes == nil {
+		return nil, errors.New("rasgapdf native parser returned null")
+	}
+	defer C.rasgapdf_free_string(cRes)
+
+	goStr := C.GoString(cRes)
+
+	var doc RawSpatialDocument
+	if err := json.Unmarshal([]byte(goStr), &doc); err != nil {
+		return nil, err
+	}
+
+	return &doc, nil
 }
 
 // ParseFile parses a PDF from a path and returns the SpatialDocument

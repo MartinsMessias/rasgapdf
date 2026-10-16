@@ -15,41 +15,53 @@ extern "C" {
 #include <stdint.h>
 
 /**
- * Parses a PDF file from disk and returns a JSON string with complete spatial geometry.
- * The returned pointer MUST be freed using `rasgapdf_free_string`.
+ * Modo 1 (Bruto): Retorna exclusivamente a lista plana de coordenadas X/Y
+ * no formato {"file_name": "...", "spans": [{"page": 1, "x0": ..., "y0": ..., "x1": ..., "y1": ..., "text": "..."}]}.
+ * O chamador DEVE liberar a memória chamando `rasgapdf_free_string`.
  * 
- * @param path_ptr Path to the PDF file (null-terminated UTF-8 string)
- * @return Null-terminated JSON string allocated on the heap, or JSON error object
+ * @param path_ptr Caminho do arquivo PDF (UTF-8 terminado em null)
+ * @return String JSON alocada na heap
+ */
+char* rasgapdf_parse_raw(const char* path_ptr);
+
+/**
+ * Modo 2 (Estruturado): Processa o PDF e retorna o JSON espacial hierárquico
+ * com blocos de texto, linhas, spans e detecção automática de tabelas.
+ * O chamador DEVE liberar a memória chamando `rasgapdf_free_string`.
+ * 
+ * @param path_ptr Caminho do arquivo PDF (UTF-8 terminado em null)
+ * @return String JSON alocada na heap
  */
 char* rasgapdf_parse_file(const char* path_ptr);
 
 /**
- * Parses a PDF file with custom options passed as a JSON string.
- * Options schema:
+ * Modo 2 (Estruturado com Opções): Processa um PDF com opções JSON customizadas.
+ * Exemplo de opções:
  * {
+ *   "mode": "structured" | "raw",
  *   "detect_tables": bool,
  *   "min_table_columns": int,
  *   "column_tolerance": float,
  *   "row_tolerance": float
  * }
  * 
- * @param path_ptr Path to the PDF file
- * @param options_json_ptr JSON string with options, or NULL for defaults
- * @return Null-terminated JSON string
+ * @param path_ptr Caminho do arquivo PDF
+ * @param options_json_ptr String JSON de opções, ou NULL para padrão
+ * @return String JSON alocada na heap
  */
 char* rasgapdf_parse_file_options(const char* path_ptr, const char* options_json_ptr);
 
 /**
- * Frees a string pointer allocated by RasgaPDF.
+ * Libera a memória da string alocada pelo RasgaPDF na heap do Rust.
  * 
- * @param ptr Pointer returned by rasgapdf_parse_file*
+ * @param ptr Ponteiro retornado por rasgapdf_parse_*
  */
 void rasgapdf_free_string(char* ptr);
 
 /**
- * Returns the library version string.
+ * Retorna a versão da biblioteca.
  * 
- * @return Statically-allocated null-terminated version string (e.g. "0.1.0")
+ * @return String estática terminada em null (ex: "0.1.0")
  */
 const char* rasgapdf_version(void);
 

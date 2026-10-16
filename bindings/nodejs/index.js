@@ -49,6 +49,7 @@ if (sharedLibPath) {
     const koffi = require('koffi');
     const lib = koffi.load(sharedLibPath);
     ffiLib = {
+      parseRaw: lib.func('char* rasgapdf_parse_raw(str)'),
       parseFile: lib.func('char* rasgapdf_parse_file_options(str, str)'),
       freeString: lib.func('void rasgapdf_free_string(char*)'),
       version: lib.func('str rasgapdf_version()')
@@ -59,10 +60,44 @@ if (sharedLibPath) {
 }
 
 /**
- * Parses a PDF file and returns complete 2D spatial document geometry.
+ * ⚡ Modo 1 (Bruto): Retorna exclusivamente a lista plana de coordenadas X/Y
+ * sem overhead de agrupamento em blocos ou tabelas.
  * 
- * @param {string} filePath Path to PDF file
- * @param {object} options Parser options
+ * @param {string} filePath Caminho do arquivo PDF
+ * @returns {object} RawSpatialDocument { file_name, total_pages, total_spans, parse_time_ms, spans: [...] }
+ */
+function parseRaw(filePath) {
+  const absPath = path.resolve(filePath);
+  if (!fs.existsSync(absPath)) {
+    throw new Error(`PDF file not found: ${absPath}`);
+  }
+
+  // Se FFI estiver ativo
+  if (ffiLib && ffiLib.parseRaw) {
+    const ptr = ffiLib.parseRaw(absPath);
+    if (!ptr) throw new Error('Null pointer returned from native rasgapdf library');
+    try {
+      const parsed = JSON.parse(ptr);
+      if (parsed.error) throw new Error(parsed.message || 'Error parsing PDF');
+      return parsed;
+    } finally {
+      ffiLib.freeString(ptr);
+    }
+  }
+
+  // Fallback via binary CLI
+  const binPath = findBinary();
+  const args = [absPath, '--raw'];
+  const stdout = execFileSync(binPath, args, { encoding: 'utf-8', maxBuffer: 100 * 1024 * 1024 });
+  return JSON.parse(stdout);
+}
+
+/**
+ * 🎯 Modo 2 (Estruturado): Processa o PDF e retorna a árvore geométrica hierárquica
+ * com blocos de texto, linhas, spans e tabelas detectadas.
+ * 
+ * @param {string} filePath Caminho do arquivo PDF
+ * @param {object} options Opções de detecção espacial
  * @returns {object} SpatialDocument
  */
 function parsePdf(filePath, options = {}) {
@@ -72,6 +107,7 @@ function parsePdf(filePath, options = {}) {
   }
 
   const defaultOptions = {
+    mode: 'structured',
     detect_tables: true,
     min_table_columns: 3,
     column_tolerance: 16.0,
@@ -110,6 +146,7 @@ function version() {
 }
 
 module.exports = {
+  parseRaw,
   parsePdf,
   version
 };

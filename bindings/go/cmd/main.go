@@ -3,23 +3,37 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/messiasmartins/rasgapdf/bindings/go"
 )
 
 func main() {
-	fmt.Println("RasgaPDF Go Native Version:", rasgapdf.Version())
+	pdfPath := "../../demo_gradio/sample.pdf"
+	if len(os.Args) > 1 {
+		pdfPath = os.Args[1]
+	}
 
-	opts := rasgapdf.DefaultOptions()
-	doc, err := rasgapdf.ParseFile("/home/messias_martins/poc_pdf_c/artigo_ia.pdf", &opts)
+	fmt.Println("=== RasgaPDF Go Native Test ===")
+	fmt.Println("Version:", rasgapdf.Version())
+
+	// 1. Teste Raw
+	rawDoc, err := rasgapdf.ParseRaw(pdfPath)
 	if err != nil {
-		log.Fatalf("Error parsing PDF: %v", err)
+		log.Fatalf("Error parsing PDF raw: %v", err)
+	}
+	fmt.Printf("⚡ [Modo Raw]: %d spans extraídos em %.2f ms\n", rawDoc.TotalSpans, rawDoc.ParseTimeMs)
+	if len(rawDoc.Spans) > 0 {
+		s := rawDoc.Spans[0]
+		fmt.Printf("   Primeiro span: (X0: %.2f, Y0: %.2f) -> %q\n", s.X0, s.Y0, s.Text)
 	}
 
-	fmt.Printf("Document: %s\n", doc.FileName)
-	fmt.Printf("Total Pages: %d\n", doc.TotalPages)
-	fmt.Printf("Parse Time: %.2f ms\n", doc.ParseTimeMs)
-	if len(doc.Pages) > 0 && len(doc.Pages[0].TextBlocks) > 0 {
-		fmt.Printf("First Block: %s\n", doc.Pages[0].TextBlocks[0].Lines[0].Text)
+	// 2. Teste Estruturado
+	opts := rasgapdf.DefaultOptions()
+	doc, err := rasgapdf.ParseFile(pdfPath, &opts)
+	if err != nil {
+		log.Fatalf("Error parsing PDF structured: %v", err)
 	}
+
+	fmt.Printf("🎯 [Modo Estruturado]: %d blocos em %.2f ms\n", len(doc.Pages[0].TextBlocks), doc.ParseTimeMs)
 }

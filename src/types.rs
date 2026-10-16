@@ -23,6 +23,29 @@ impl BoundingBox {
     }
 }
 
+/// Item de coordenada 2D mais bruto e direto possível
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawCoordSpan {
+    pub page: usize,
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
+    pub font_size: f32,
+    pub font_name: String,
+    pub text: String,
+}
+
+/// Documento bruto contendo exclusivamente a lista plana de coordenadas
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawSpatialDocument {
+    pub file_name: String,
+    pub total_pages: usize,
+    pub total_spans: usize,
+    pub parse_time_ms: f64,
+    pub spans: Vec<RawCoordSpan>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpatialSpan {
     pub text: String,
@@ -87,6 +110,7 @@ pub struct SpatialDocument {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParserOptions {
+    pub mode: String, // "structured" (default) ou "raw"
     pub detect_tables: bool,
     pub min_table_columns: usize,
     pub column_tolerance: f32,
@@ -96,6 +120,7 @@ pub struct ParserOptions {
 impl Default for ParserOptions {
     fn default() -> Self {
         Self {
+            mode: "structured".to_string(),
             detect_tables: true,
             min_table_columns: 3,
             column_tolerance: 16.0,

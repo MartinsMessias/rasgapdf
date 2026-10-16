@@ -5,7 +5,7 @@ import ctypes
 import fitz
 import gradio as gr
 import pandas as pd
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 # Carrega a biblioteca nativa RasgaPDF
 def get_lib():
@@ -17,10 +17,15 @@ def get_lib():
     for c in candidates:
         if os.path.exists(c):
             lib = ctypes.CDLL(c)
+            lib.rasgapdf_parse_raw.argtypes = [ctypes.c_char_p]
+            lib.rasgapdf_parse_raw.restype = ctypes.c_void_p
+
             lib.rasgapdf_parse_file_options.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
             lib.rasgapdf_parse_file_options.restype = ctypes.c_void_p
+
             lib.rasgapdf_free_string.argtypes = [ctypes.c_void_p]
             lib.rasgapdf_free_string.restype = None
+
             lib.rasgapdf_version.argtypes = []
             lib.rasgapdf_version.restype = ctypes.c_char_p
             return lib
@@ -28,11 +33,27 @@ def get_lib():
 
 _lib = get_lib()
 
+def parse_raw_pdf(file_path):
+    """⚡ Modo 1: Coordenadas Brutas X/Y"""
+    if not _lib:
+        raise RuntimeError("RasgaPDF native library not found")
+    path_b = os.path.abspath(file_path).encode("utf-8")
+    res_ptr = _lib.rasgapdf_parse_raw(path_b)
+    if not res_ptr:
+        raise RuntimeError("Null pointer returned from native library")
+    try:
+        raw_json = ctypes.string_at(res_ptr).decode("utf-8")
+        return json.loads(raw_json)
+    finally:
+        _lib.rasgapdf_free_string(res_ptr)
+
 def parse_spatial_pdf(file_path, detect_tables=True, min_cols=3, col_tol=16.0, row_tol=6.0):
+    """🎯 Modo 2: Estruturado (Blocos e Tabelas)"""
     if not _lib:
         raise RuntimeError("RasgaPDF native library not found")
     
     opts = {
+        "mode": "structured",
         "detect_tables": detect_tables,
         "min_table_columns": int(min_cols),
         "column_tolerance": float(col_tol),
@@ -101,7 +122,6 @@ def render_page_with_overlay(pdf_path, page_num, spatial_doc, show_text=True, sh
             # Borda verde esmeralda para tabelas
             draw.rectangle([tx0, ty0, tx1, ty1], fill=(0, 223, 137, 40), outline=(0, 223, 137, 240), width=3)
 
-            # Células internas
             for cell in t.get("cells", []):
                 cx0 = cell["bbox"]["x0"] * scale_x
                 cy0 = cell["bbox"]["y0"] * scale_y
@@ -109,28 +129,43 @@ def render_page_with_overlay(pdf_path, page_num, spatial_doc, show_text=True, sh
                 cy1 = cell["bbox"]["y1"] * scale_y
                 draw.rectangle([cx0, cy0, cx1, cy1], outline=(16, 185, 129, 140), width=1)
 
-    # Mescla overlay com a imagem original
     img = img.convert("RGBA")
     combined = Image.alpha_composite(img, overlay)
     return combined.convert("RGB")
 
 def process_pdf(pdf_file, page_num, detect_tables, min_cols, col_tol, row_tol, show_text, show_tables):
     if not pdf_file:
-        return None, None, {}, "⚠️ Por favor, faça upload de um arquivo PDF."
+        empty_df = pd.DataFrame()
+        return None, empty_df, empty_df, {}, {}, "⚠️ Por favor, faça upload de um arquivo PDF."
 
     file_path = pdf_file.name if hasattr(pdf_file, "name") else str(pdf_file)
 
     try:
+        # Extrai em ambos os modos para enriquecer a visualização
+        raw_doc = parse_raw_pdf(file_path)
         spatial_doc = parse_spatial_pdf(file_path, detect_tables, min_cols, col_tol, row_tol)
     except Exception as e:
-        return None, None, {"error": str(e)}, f"❌ Erro na extração espacial: {e}"
+        empty_df = pd.DataFrame()
+        return None, empty_df, empty_df, {"error": str(e)}, {}, f"❌ Erro na extração espacial: {e}"
 
     total_pages = spatial_doc.get("total_pages", 1)
     page_idx = min(max(int(page_num), 1), total_pages)
 
     overlay_img = render_page_with_overlay(file_path, page_idx, spatial_doc, show_text, show_tables)
 
-    # Extrai tabelas para DataFrame
+    # 1. Tabela de Coordenadas Brutas (Raw X/Y)
+    raw_spans = raw_doc.get("spans", [])
+    if raw_spans:
+        # Filtra pela página atual ou mostra todos
+        page_spans = [s for s in raw_spans if s["page"] == page_idx]
+        if not page_spans:
+            page_spans = raw_spans
+        raw_df = pd.DataFrame(page_spans)[["page", "x0", "y0", "x1", "y1", "font_size", "font_name", "text"]]
+        raw_df.columns = ["Pág.", "X0 (pt)", "Y0 (pt)", "X1 (pt)", "Y1 (pt)", "Tam.", "Fonte", "Texto"]
+    else:
+        raw_df = pd.DataFrame({"Mensagem": ["Nenhum span de coordenada extraído."]})
+
+    # 2. Tabelas Estruturadas
     table_dfs = []
     if "pages" in spatial_doc and len(spatial_doc["pages"]) >= page_idx:
         p_data = spatial_doc["pages"][page_idx - 1]
@@ -144,21 +179,20 @@ def process_pdf(pdf_file, page_num, detect_tables, min_cols, col_tol, row_tol, s
     main_df = table_dfs[0] if table_dfs else pd.DataFrame({"Mensagem": ["Nenhuma tabela detectada nesta página."]})
 
     stats_msg = (
-        f"⚡ **RasgaPDF Engine (Rust 100% Nativo)**\n"
-        f"- ⏱️ **Tempo de Parse:** {spatial_doc.get('parse_time_ms', 0):.2f} ms\n"
-        f"- 📄 **Páginas:** {total_pages} (Exibindo Página {page_idx})\n"
-        f"- 📦 **Blocos de Texto:** {len(spatial_doc['pages'][page_idx - 1].get('text_blocks', []))}\n"
+        f"⚡ **RasgaPDF Native Core (Rayon + MuPDF C-ABI)**\n"
+        f"- ⚡ **Tempo Modo Bruto (Raw X/Y):** {raw_doc.get('parse_time_ms', 0):.2f} ms ({raw_doc.get('total_spans', 0)} spans)\n"
+        f"- 🎯 **Tempo Modo Estruturado:** {spatial_doc.get('parse_time_ms', 0):.2f} ms ({len(spatial_doc['pages'][page_idx - 1].get('text_blocks', []))} blocos)\n"
+        f"- 📄 **Total de Páginas:** {total_pages} (Exibindo Página {page_idx})\n"
         f"- 📊 **Tabelas Detectadas:** {len(spatial_doc['pages'][page_idx - 1].get('tables', []))}"
     )
 
-    return overlay_img, main_df, spatial_doc, stats_msg
+    return overlay_img, raw_df, main_df, raw_doc, spatial_doc, stats_msg
 
-# Interface Gradio Moderna
 demo_title = "⚡ RasgaPDF // High-Performance 2D Spatial PDF Parser"
 demo_desc = (
-    "Biblioteca aberta de alta performance para **extração espacial 2D de PDFs** em **Rust nativo**, "
-    "com bindings oficiais para **Python, Node.js, Go e C#**. Preserva bounding boxes exatas `[x0, y0, x1, y1]`, "
-    "linhas, palavras e agrupamento matricial de tabelas com latência sub-milissegundo."
+    "Parser espacial 2D de altíssima performance em **Rust nativo**, com suporte a **ambos os modos**: "
+    "**Coordenadas Brutas (Raw X/Y plano)** para máxima velocidade, e **Modo Estruturado** "
+    "(blocos, linhas e detecção matricial de tabelas). Bindings para Python, Node.js, Go e C#."
 )
 
 with gr.Blocks(title="RasgaPDF Spatial Viewer", theme=gr.themes.Soft(primary_hue="cyan", neutral_hue="slate")) as demo:
@@ -169,7 +203,7 @@ with gr.Blocks(title="RasgaPDF Spatial Viewer", theme=gr.themes.Soft(primary_hue
             file_input = gr.File(label="📄 Arquivo PDF", file_types=[".pdf"])
             page_slider = gr.Slider(minimum=1, maximum=50, value=1, step=1, label="📖 Número da Página")
 
-            with gr.Accordion("⚙️ Parâmetros Espaciais", open=False):
+            with gr.Accordion("⚙️ Parâmetros do Modo Estruturado", open=False):
                 detect_tables_check = gr.Checkbox(label="Detectar Tabelas Espaciais", value=True)
                 min_cols_slider = gr.Slider(minimum=2, maximum=10, value=3, step=1, label="Mínimo de Colunas")
                 col_tol_slider = gr.Slider(minimum=4.0, maximum=50.0, value=16.0, step=1.0, label="Tolerância de Coluna (pt)")
@@ -179,25 +213,32 @@ with gr.Blocks(title="RasgaPDF Spatial Viewer", theme=gr.themes.Soft(primary_hue
                 show_text_check = gr.Checkbox(label="Exibir Caixas de Texto (Ciano)", value=True)
                 show_tables_check = gr.Checkbox(label="Exibir Tabelas (Verde)", value=True)
 
-            btn_parse = gr.Button("🚀 Analisar Geometria Espacial", variant="primary")
+            btn_parse = gr.Button("🚀 Analisar PDF", variant="primary")
             stats_box = gr.Markdown()
 
         with gr.Column(scale=2):
             with gr.Tabs():
-                with gr.TabItem("👁️ Visual 2D Bounding Boxes"):
+                with gr.TabItem("⚡ 1. Coordenadas Brutas (Raw X/Y)"):
+                    gr.Markdown("### Lista plana de coordenadas físicas puras `[x0, y0, x1, y1]` de cada elemento:")
+                    raw_df_output = gr.DataFrame(label="Tabela de Coordenadas Físicas", wrap=True)
+
+                with gr.TabItem("👁️ 2. Visual 2D Bounding Boxes"):
                     img_output = gr.Image(label="Overlay Espacial 2D", type="pil")
 
-                with gr.TabItem("📊 Tabelas Detectadas"):
-                    df_output = gr.DataFrame(label="Tabelas Estruturadas")
+                with gr.TabItem("📊 3. Tabelas Detectadas"):
+                    df_output = gr.DataFrame(label="Tabelas Estruturadas Detectadas")
 
-                with gr.TabItem("🌳 Árvore JSON Espacial"):
-                    json_output = gr.JSON(label="JSON Estruturado com Coordenadas Físicas")
+                with gr.TabItem("📄 4. JSON Raw (Plano)"):
+                    raw_json_output = gr.JSON(label="JSON Plano de Coordenadas Brutas")
+
+                with gr.TabItem("🌳 5. JSON Estruturado (Hierárquico)"):
+                    struct_json_output = gr.JSON(label="JSON Hierárquico Completo (Blocos/Linhas/Tabelas)")
 
     inputs = [
         file_input, page_slider, detect_tables_check, min_cols_slider,
         col_tol_slider, row_tol_slider, show_text_check, show_tables_check
     ]
-    outputs = [img_output, df_output, json_output, stats_box]
+    outputs = [img_output, raw_df_output, df_output, raw_json_output, struct_json_output, stats_box]
 
     btn_parse.click(fn=process_pdf, inputs=inputs, outputs=outputs)
     file_input.change(fn=process_pdf, inputs=inputs, outputs=outputs)
