@@ -430,35 +430,49 @@
       // 2. Cache clean rasterized bitmap of PDF for zero-latency redrawing
       cleanPdfBitmap = await createImageBitmap(pdfCanvas);
 
-      // 3. Extract text content & exact spatial bounding boxes
+      // 3. Extract text content & exact spatial bounding boxes (rotation & matrix aware)
       const textContent = await page.getTextContent();
-      const pageHeightPt = viewport.height / currentRenderScale;
 
       extractedSpans = [];
       for (const item of textContent.items) {
         if (!item.str || item.str.trim() === '') continue;
 
-        const tx = item.transform[4];
-        const ty = item.transform[5];
-        const fontSize = Math.abs(item.transform[0]);
-        const width = item.width;
-        const ascent = fontSize * 0.85;
-        const descent = fontSize * 0.20;
+        // Compose viewport transform with item text matrix to handle any page rotation (0, 90, 180, 270)
+        const m = pdfjsLib.Util.transform(viewport.transform, item.transform);
+        const fontHeightPx = Math.hypot(m[2], m[3]);
+        const fontScaleX = Math.hypot(m[0], m[1]);
+        if (fontHeightPx === 0 || fontScaleX === 0) continue;
 
-        // Physical coordinates in pt (top-down origin)
-        const x0 = tx;
-        const y0 = pageHeightPt - ty - ascent;
-        const x1 = tx + width;
-        const y1 = y0 + fontSize;
+        // Unit vector along the text baseline in canvas space
+        const ux = m[0] / fontScaleX;
+        const uy = m[1] / fontScaleX;
+        const advancePx = item.width * currentRenderScale;
 
-        // Viewport canvas pixel bounding box
-        const rect = viewport.convertToViewportRectangle([
-          tx,
-          ty - descent,
-          tx + width,
-          ty + ascent
-        ]);
-        const norm = pdfjsLib.Util.normalizeRect(rect);
+        // Ascent and descent vectors in canvas space (m[2], m[3] points from baseline to glyph top)
+        const ascX = m[2] * 0.85;
+        const ascY = m[3] * 0.85;
+        const descX = -m[2] * 0.20;
+        const descY = -m[3] * 0.20;
+
+        // Project all 4 corners of the glyph bounding box in canvas pixels
+        const c1x = m[4] + ascX,                 c1y = m[5] + ascY;
+        const c2x = m[4] + ascX + ux * advancePx, c2y = m[5] + ascY + uy * advancePx;
+        const c3x = m[4] + descX,                c3y = m[5] + descY;
+        const c4x = m[4] + descX + ux * advancePx, c4y = m[5] + descY + uy * advancePx;
+
+        const vx0 = Math.min(c1x, c2x, c3x, c4x);
+        const vy0 = Math.min(c1y, c2y, c3y, c4y);
+        const vx1 = Math.max(c1x, c2x, c3x, c4x);
+        const vy1 = Math.max(c1y, c2y, c3y, c4y);
+        const vw = Math.max(vx1 - vx0, 1.0);
+        const vh = Math.max(vy1 - vy0, 1.0);
+
+        // Normalize back to unscaled typographical points (pt) in visual top-down page coordinates
+        const x0 = vx0 / currentRenderScale;
+        const y0 = vy0 / currentRenderScale;
+        const x1 = vx1 / currentRenderScale;
+        const y1 = vy1 / currentRenderScale;
+        const fontSizePt = fontHeightPx / currentRenderScale;
 
         extractedSpans.push({
           page: currentPageNum,
@@ -466,13 +480,13 @@
           y0: Number(y0.toFixed(2)),
           x1: Number(x1.toFixed(2)),
           y1: Number(y1.toFixed(2)),
-          font_size: Number(fontSize.toFixed(1)),
+          font_size: Number(fontSizePt.toFixed(1)),
           font_name: item.fontName || 'Helvetica',
           text: item.str,
-          vx0: norm[0],
-          vy0: norm[1],
-          vw: norm[2] - norm[0],
-          vh: norm[3] - norm[1]
+          vx0,
+          vy0,
+          vw,
+          vh
         });
       }
 
