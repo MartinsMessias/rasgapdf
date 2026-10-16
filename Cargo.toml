@@ -1,6 +1,6 @@
 [package]
 name = "rasgapdf"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["Messias Martins"]
 description = "Blazing-fast spatial 2D PDF parser in pure Rust with multi-language bindings (Python, Node.js, Go, C#)"
@@ -12,6 +12,7 @@ categories = ["text-processing", "parsing"]
 exclude = [
     "bindings/*",
     "demo_gradio/*",
+    "space_hf/*",
     "upload_to_hf.py",
     "publish_all.sh",
 ]

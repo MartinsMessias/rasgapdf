@@ -105,135 +105,100 @@ cargo build --release
 
 ---
 
-## 🚀 Polyglot Quickstart
+## 🚀 Rust Quickstart
 
-### 🦀 Rust
-Add to your `Cargo.toml`:
+Add `rasgapdf` to your `Cargo.toml`:
+
 ```toml
 [dependencies]
-rasgapdf = "0.1.2"
+rasgapdf = "0.1.3"
 ```
+
+### ⚡ Mode 1: Raw Physical Coordinates (Raw X/Y)
+Extract exact 2D bounding boxes `[x0, y0, x1, y1]` for every text span on the page with zero block overhead (~3 to 8 ms):
+
 ```rust
-use rasgapdf::{parse_raw_file, parse_file, ParserOptions};
+use rasgapdf::parse_raw_file;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // ⚡ Mode 1: Raw Physical Coordinates
     let raw = parse_raw_file("sample.pdf")?;
     println!("Extracted {} spans in {:.2} ms", raw.total_spans, raw.parse_time_ms);
 
-    // 🎯 Mode 2: Hierarchical Structured Document
-    let options = ParserOptions::default();
-    let doc = parse_file("sample.pdf", &options)?;
-    println!("Processed {} pages", doc.total_pages);
+    for span in &raw.spans {
+        println!(
+            "[Page {}] bbox=({:.2}, {:.2}, {:.2}, {:.2}) font={} ({:.1}pt) \"{}\"",
+            span.page, span.x0, span.y0, span.x1, span.y1,
+            span.font_name, span.font_size, span.text
+        );
+    }
+    Ok(())
+}
+```
+
+### 🎯 Mode 2: Hierarchical Structured Document
+Reconstruct the visual hierarchy into visual paragraphs (`text_blocks`), text lines (`lines`), and auto-detect matrix tables:
+
+```rust
+use rasgapdf::{parse_file, ParserOptions};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let options = ParserOptions {
+        detect_tables: true,
+        min_table_cols: 3,
+        col_tolerance: 16.0,
+        row_tolerance: 6.0,
+        ..Default::default()
+    };
+
+    let doc = parse_file("document.pdf", &options)?;
+    println!("Processed {} pages in {:.2} ms", doc.total_pages, doc.parse_time_ms);
+
+    for page in &doc.pages {
+        println!("--- Page {} ({}x{} pt) ---", page.page_number, page.width, page.height);
+
+        // 1. Text blocks and lines
+        for block in &page.text_blocks {
+            println!("Block #{} at {:?}", block.block_id, block.bbox);
+            for line in &block.lines {
+                println!("  Line: {}", line.text);
+            }
+        }
+
+        // 2. Reconstructed tables
+        for table in &page.tables {
+            println!("Table ({} cols x {} rows):", table.col_count, table.row_count);
+            println!("  Headers: {:?}", table.headers);
+            for row in &table.rows {
+                println!("  Row: {:?}", row);
+            }
+        }
+    }
     Ok(())
 }
 ```
 
 ---
 
-### 🐍 Python
-```bash
-pip install --upgrade rasgapdf
-```
-```python
-import rasgapdf
+## 📦 Native Bindings for Other Ecosystems
 
-# ⚡ Mode 1: Raw Physical Coordinates
-raw = rasgapdf.parse_raw("document.pdf")
-print(f"Extracted {raw['total_spans']} spans in {raw['parse_time_ms']:.2f} ms")
-for s in raw["spans"][:5]:
-    print(f"[Page {s['page']}] ({s['x0']:.2f}, {s['y0']:.2f}) -> {s['text']}")
+RasgaPDF provides native C-ABI bindings for other languages, each published with its own language-specific package and documentation:
 
-# 🎯 Mode 2: Hierarchical Structured Document
-doc = rasgapdf.parse_pdf("document.pdf", detect_tables=True)
-for page in doc["pages"]:
-    for table in page["tables"]:
-        print("Detected Table:", table["headers"], table["rows"])
-```
+| Language | Registry | Package / Installation | Documentation |
+| :--- | :--- | :--- | :--- |
+| **Python** | [PyPI](https://pypi.org/project/rasgapdf/) | `pip install rasgapdf` | [Python Guide & Examples](bindings/python/README.md) |
+| **Node.js** | [npm](https://www.npmjs.com/package/rasgapdf) | `npm install rasgapdf` | [Node.js Guide & Examples](bindings/nodejs/README.md) |
+| **Go** | Go Module | `bindings/go` | [Go Bindings](bindings/go/) |
+| **C# / .NET** | .NET Class Library | `bindings/csharp` | [C# Bindings](bindings/csharp/) |
 
 ---
 
-### 🟢 Node.js
-```bash
-npm install rasgapdf
-```
-```javascript
-const { parseRaw, parsePdf } = require('rasgapdf');
-
-// ⚡ Mode 1: Raw Physical Coordinates
-const raw = parseRaw('document.pdf');
-console.log(`Raw: ${raw.total_spans} spans in ${raw.parse_time_ms.toFixed(2)} ms`);
-
-// 🎯 Mode 2: Hierarchical Structured Document
-const doc = parsePdf('document.pdf');
-console.log(`Text Blocks: ${doc.pages[0].text_blocks.length}`);
-```
-
----
-
-### 🔵 Go
-```bash
-go get github.com/messiasmartins/rasgapdf/bindings/go
-```
-```go
-package main
-
-import (
-    "fmt"
-    "github.com/messiasmartins/rasgapdf/bindings/go"
-)
-
-func main() {
-    // ⚡ Mode 1: Raw Physical Coordinates
-    raw, _ := rasgapdf.ParseRaw("document.pdf")
-    fmt.Printf("Raw: %d spans in %.2f ms\n", raw.TotalSpans, raw.ParseTimeMs)
-
-    // 🎯 Mode 2: Hierarchical Structured Document
-    opts := rasgapdf.DefaultOptions()
-    doc, _ := rasgapdf.ParseFile("document.pdf", &opts)
-    fmt.Printf("Structured: %d pages\n", doc.TotalPages)
-}
-```
-
----
-
-### 🟣 C# / .NET 8
-```csharp
-using RasgaPdf;
-
-// ⚡ Mode 1: Raw Physical Coordinates
-var raw = SpatialPdf.ParseRaw("document.pdf");
-Console.WriteLine($"Raw: {raw.TotalSpans} spans in {raw.ParseTimeMs:F2} ms");
-
-// 🎯 Mode 2: Hierarchical Structured Document
-var doc = SpatialPdf.Parse("document.pdf");
-Console.WriteLine($"Structured: {doc.TotalPages} pages");
-```
-
----
-
-## 🎨 Interactive Demos
+## 🎨 Interactive Web Visualizer
 
 ### 🌐 Live Hugging Face Space (Zero Server Quota / Client-Side)
 Test RasgaPDF instantly without installing anything:
 - **Live Demo:** [**https://huggingface.co/spaces/martinsmessias/rasgapdf**](https://huggingface.co/spaces/martinsmessias/rasgapdf)
 - **Zero Server Costs:** Runs directly in your browser using client-side WebAssembly & PDF.js.
-- **Run on Your Personal Quota:** Want to run with dedicated server hardware or private datasets? Click [![Duplicate this Space](https://huggingface.co/datasets/huggingface/badges/resolve/main/duplicate-this-space-sm.svg)](https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true) to clone into your own Hugging Face account with your personal compute quota.
-
-### 💻 Local Python & Gradio Visualizer
-Run the native Python FFI explorer locally on your machine:
-
-```bash
-cd demo_gradio
-pip install -r requirements.txt
-python app.py
-```
-Open `http://localhost:7860` to:
-- Inspect the **Responsive Physical Coordinates Table (Raw X/Y)**.
-- Read and instantly copy the **Pure Plain Text Stream & Coordinates Dump**.
-- Visualize **translucent 2D bounding boxes** overlaid onto the PDF page.
-- Analyze **detected tables** rendered in interactive DataFrames.
-- Export raw or structured JSON geometries.
+- **Run on Your Personal Quota:** Click [![Duplicate this Space](https://huggingface.co/datasets/huggingface/badges/resolve/main/duplicate-this-space-sm.svg)](https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true) to clone into your own Hugging Face account with your personal compute quota.
 
 ---
 
