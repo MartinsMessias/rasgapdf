@@ -9,6 +9,12 @@ readme = "README.md"
 repository = "https://github.com/messiasmartins/rasgapdf"
 keywords = ["pdf", "spatial", "parser", "layout-analysis", "bounding-box"]
 categories = ["text-processing", "parsing"]
+exclude = [
+    "bindings/*",
+    "demo_gradio/*",
+    "upload_to_hf.py",
+    "publish_all.sh",
+]
 
 [lib]
 name = "rasgapdf"
