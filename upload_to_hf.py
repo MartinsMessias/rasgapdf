@@ -10,28 +10,27 @@ def main():
         print(f"✅ Autenticado no Hugging Face como: {username}")
     except Exception as e:
         print(f"❌ Não autenticado no Hugging Face: {e}")
-        print("Execute o login antes de subir o Space.")
         sys.exit(1)
 
     repo_id = f"{username}/rasgapdf"
-    print(f"🚀 Criando / Atualizando Hugging Face Space: {repo_id}...")
+    print(f"🚀 Sincronizando com Hugging Face Hub (Model Repository): {repo_id}...")
 
     try:
         create_repo(
             repo_id=repo_id,
-            repo_type="space",
-            space_sdk="gradio",
+            repo_type="model",
             exist_ok=True
         )
-        print("📦 Fazendo upload dos arquivos do Gradio e biblioteca nativa...")
+        print("📦 Fazendo upload dos pacotes, fontes, bindings e binários...")
         upload_folder(
-            folder_path="/home/messias_martins/rasgapdf/demo_gradio",
+            folder_path="/home/messias_martins/rasgapdf",
             repo_id=repo_id,
-            repo_type="space",
-            commit_message="feat: deploy RasgaPDF 2D spatial visualizer"
+            repo_type="model",
+            ignore_patterns=["target/*", ".git/*", "*__pycache__*"],
+            commit_message="chore: update release packages, bindings and publish script"
         )
-        print(f"\n🎉 SUCESSO! Space disponível em:")
-        print(f"👉 https://huggingface.co/spaces/{repo_id}")
+        print(f"\n🎉 SUCESSO! Repositório atualizado em:")
+        print(f"👉 https://huggingface.co/{repo_id}")
     except Exception as e:
         print(f"❌ Erro ao subir para o Hugging Face: {e}")
 
