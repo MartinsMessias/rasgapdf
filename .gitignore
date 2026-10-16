@@ -1,0 +1,35 @@
+/target
+**/*.rs.bk
+Cargo.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+env/
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Go
+*.exe
+*.test
+*.prof
+
+# .NET / C#
+bin/
+obj/
+*.user
+*.suo
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.bak

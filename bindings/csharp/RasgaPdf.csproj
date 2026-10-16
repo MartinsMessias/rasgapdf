@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>RasgaPdf</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Messias Martins</Authors>
+    <Description>Ultra-fast 2D spatial PDF parser powered by Rust for .NET</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/messiasmartins/rasgapdf</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\target\release\librasgapdf.so" Condition="Exists('..\..\target\release\librasgapdf.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\target\release\rasgapdf.dll" Condition="Exists('..\..\target\release\rasgapdf.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

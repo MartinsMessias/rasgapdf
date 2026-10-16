@@ -1,0 +1,22 @@
+{
+  "name": "rasgapdf",
+  "version": "0.1.0",
+  "description": "Ultra-fast 2D spatial PDF parser powered by pure Rust",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "pdf",
+    "spatial",
+    "parser",
+    "bounding-box",
+    "layout-analysis",
+    "rust"
+  ],
+  "author": "Messias Martins",
+  "license": "MIT",
+  "optionalDependencies": {
+    "koffi": "^2.8.0"
+  }
+}

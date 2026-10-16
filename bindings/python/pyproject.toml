@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rasgapdf"
+version = "0.1.0"
+authors = [
+  { name="Messias Martins" },
+]
+description = "Ultra-fast 2D spatial PDF parser powered by Rust"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Text Processing :: General",
+]
+dependencies = []
+
+[project.urls]
+"Homepage" = "https://github.com/messiasmartins/rasgapdf"
+"Bug Tracker" = "https://github.com/messiasmartins/rasgapdf/issues"
