@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,72 +12,71 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       color: #38bdf8;
     }
-    /* Custom scrollbar */
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: #0f172a; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    /* Custom scrollbars */
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: #090d16; }
+    ::-webkit-scrollbar-thumb { background: #26334d; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3b4d71; }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans">
+<body class="bg-slate-950 text-slate-100 h-full flex flex-col font-sans overflow-x-hidden">
 
-  <!-- Header -->
-  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50 px-6 py-4">
-    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
-      <div>
-        <div class="flex items-center gap-3">
-          <span class="text-2xl font-black bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">⚡ RasgaPDF</span>
-          <span class="text-xs px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono font-bold">v0.1.3</span>
-          <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">Client-Side Compute</span>
-        </div>
-        <p class="text-xs text-slate-400 mt-1">Extract exact physical coordinates [x0, y0, x1, y1] and 2D spatial layouts with native speed</p>
+  <!-- Header (Sticky & Compact) -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50 px-4 sm:px-6 py-2.5 shrink-0">
+    <div class="w-full flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <span class="text-xl sm:text-2xl font-black bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">⚡ RasgaPDF</span>
+        <span class="text-xs px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono font-bold">v0.1.3</span>
+        <span class="hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">Client-Side Compute</span>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
         <!-- Duplicate Space Button -->
-        <a href="https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true" target="_blank" class="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs shadow transition">
+        <a href="https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true" target="_blank" class="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs shadow transition">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-          Duplicate to Your HF Account
+          <span class="hidden xs:inline">Duplicate to Your HF Account</span>
+          <span class="xs:hidden">Duplicate</span>
         </a>
 
-        <!-- Package Links -->
+        <!-- Repository & Package Links -->
         <a href="https://github.com/MartinsMessias/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition flex items-center gap-1">
           <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path></svg>
           GitHub
         </a>
-        <a href="https://pypi.org/project/rasgapdf/" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">PyPI v0.1.2</a>
-        <a href="https://crates.io/crates/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-orange-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">Crates.io v0.1.3</a>
-        <a href="https://www.npmjs.com/package/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-red-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">npm v0.1.0</a>
+        <a href="https://pypi.org/project/rasgapdf/" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">PyPI</a>
+        <a href="https://crates.io/crates/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-orange-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">Crates</a>
+        <a href="https://www.npmjs.com/package/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-red-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">npm</a>
         <a href="https://huggingface.co/martinsmessias/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">HF Hub</a>
       </div>
     </div>
   </header>
 
-  <!-- Main Container -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+  <!-- Main Viewport-Filling Workspace -->
+  <main class="flex-1 w-full p-3 sm:p-5 flex flex-col lg:flex-row gap-4 min-h-0 overflow-y-auto lg:overflow-hidden">
 
-    <!-- Left Controls Panel -->
-    <aside class="lg:col-span-4 flex flex-col gap-5">
+    <!-- Left Controls Sidebar (Compact on mobile, fixed width on desktop) -->
+    <aside class="w-full lg:w-80 xl:w-96 flex flex-col gap-3 shrink-0 overflow-y-visible lg:overflow-y-auto pr-0 lg:pr-1">
+      
       <!-- File Upload Card -->
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
-        <label class="block text-sm font-semibold text-slate-200 mb-2">📄 Select or Upload PDF</label>
-        <div id="dropzone" class="border-2 border-dashed border-slate-700 hover:border-cyan-500 rounded-lg p-6 text-center cursor-pointer transition bg-slate-950/50">
-          <svg class="mx-auto h-8 w-8 text-cyan-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg">
+        <label class="block text-xs font-semibold text-slate-200 mb-2">📄 Select or Upload PDF</label>
+        <div id="dropzone" class="border-2 border-dashed border-slate-700 hover:border-cyan-500 rounded-lg p-4 sm:p-5 text-center cursor-pointer transition bg-slate-950/50">
+          <svg class="mx-auto h-7 w-7 text-cyan-400 mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
           <p class="text-xs text-slate-300 font-medium">Click to upload or drag & drop</p>
-          <p class="text-[11px] text-slate-500 mt-1">PDF files only (Processed locally in your browser)</p>
+          <p class="text-[10px] text-slate-500 mt-0.5">Processed 100% locally in your browser</p>
           <input type="file" id="pdfFileInput" accept="application/pdf" class="hidden">
         </div>
 
-        <button id="btnLoadSample" class="mt-3 w-full py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-medium text-cyan-300 transition flex items-center justify-center gap-1.5">
+        <button id="btnLoadSample" class="mt-2.5 w-full py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-medium text-cyan-300 transition flex items-center justify-center gap-1.5">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
           Load Built-in Sample PDF
         </button>
       </div>
 
       <!-- Navigation & Controls -->
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col gap-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col gap-3">
         <div class="flex items-center justify-between">
-          <span class="text-sm font-semibold text-slate-200">📖 Page Navigation</span>
+          <span class="text-xs font-semibold text-slate-200">📖 Page Navigation</span>
           <span id="pageIndicator" class="text-xs font-mono text-cyan-400">Page 1 of 1</span>
         </div>
 
@@ -87,65 +86,89 @@
           <button id="btnNextPage" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-semibold disabled:opacity-50 transition">Next</button>
         </div>
 
-        <div class="border-t border-slate-800 pt-3">
-          <span class="text-xs font-semibold text-slate-300 block mb-2">Display Options</span>
+        <div class="border-t border-slate-800/80 pt-2.5">
           <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
             <input type="checkbox" id="chkShowBoxes" checked class="rounded accent-cyan-400">
-            Show 2D Bounding Boxes (Translucent Cyan)
+            <span>Show 2D Bounding Boxes (Translucent Cyan)</span>
           </label>
         </div>
       </div>
 
       <!-- Performance Metrics Card -->
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
-        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-3">⚡ Extraction Metrics</span>
-        <div class="grid grid-cols-2 gap-3 text-xs">
-          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg">
+        <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2.5">⚡ Extraction Metrics</span>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
             <span class="text-slate-500 block text-[10px]">Parse Latency</span>
-            <span id="metricLatency" class="font-mono text-cyan-400 font-bold text-sm">0.00 ms</span>
+            <span id="metricLatency" class="font-mono text-cyan-400 font-bold text-xs">0.00 ms</span>
           </div>
-          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
+          <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
             <span class="text-slate-500 block text-[10px]">Total Spans</span>
-            <span id="metricSpans" class="font-mono text-cyan-400 font-bold text-sm">0</span>
+            <span id="metricSpans" class="font-mono text-cyan-400 font-bold text-xs">0</span>
           </div>
-          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
+          <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
             <span class="text-slate-500 block text-[10px]">Canvas Dimensions</span>
-            <span id="metricDims" class="font-mono text-slate-300 text-xs">-</span>
+            <span id="metricDims" class="font-mono text-slate-300 text-[11px]">-</span>
           </div>
-          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
-            <span class="text-slate-500 block text-[10px]">Compute Location</span>
-            <span class="font-mono text-amber-400 font-bold text-xs">Your Browser</span>
+          <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Compute Mode</span>
+            <span class="font-mono text-amber-400 font-bold text-[11px]">Client Browser</span>
           </div>
         </div>
       </div>
     </aside>
 
-    <!-- Right Content Tabs -->
-    <section class="lg:col-span-8 flex flex-col gap-4">
+    <!-- Right Workspace Area (Full Width & Height) -->
+    <section class="flex-1 h-full min-h-[550px] lg:min-h-0 flex flex-col gap-3 overflow-hidden">
 
       <!-- Navigation Tabs -->
-      <div class="flex border-b border-slate-800 gap-1 overflow-x-auto pb-1 text-xs font-semibold">
-        <button data-tab="tab-coords" class="tab-btn px-4 py-2 border-b-2 border-cyan-400 text-cyan-300 font-bold flex items-center gap-1.5 transition">
-          ⚡ 1. Raw Coordinates (X/Y Table)
+      <div class="flex border-b border-slate-800 gap-1 overflow-x-auto pb-1 text-xs font-semibold shrink-0">
+        <button data-tab="tab-visual" class="tab-btn px-4 py-2 border-b-2 border-cyan-400 text-cyan-300 font-bold flex items-center gap-1.5 transition">
+          👁️ 1. 2D Canvas Overlay
+        </button>
+        <button data-tab="tab-coords" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          ⚡ 2. Raw Coordinates (X/Y Table)
         </button>
         <button data-tab="tab-text" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
-          📝 2. Pure Plain Text
-        </button>
-        <button data-tab="tab-visual" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
-          👁️ 3. 2D Canvas Overlay
+          📝 3. Pure Plain Text
         </button>
         <button data-tab="tab-json" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
           📄 4. Raw JSON Export
         </button>
       </div>
 
-      <!-- Tab Content 1: Raw Coordinates Table -->
-      <div id="tab-coords" class="tab-panel flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg h-[620px]">
-        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs">
+      <!-- Tab Content 1: 2D Visual Overlay (Primary Tab, Full Height & Width) -->
+      <div id="tab-visual" class="tab-panel flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+        <div class="p-2.5 sm:p-3 bg-slate-950 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs shrink-0">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="font-semibold text-slate-200 whitespace-nowrap">Rendered Canvas Overlay</span>
+            <span id="hoverInfo" class="hidden font-mono text-[11px] text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800 truncate max-w-[360px]"></span>
+          </div>
+          <!-- Responsive Zoom Controls -->
+          <div class="flex items-center gap-1 shrink-0">
+            <span class="text-slate-400 text-[11px] mr-1 hidden sm:inline">Zoom:</span>
+            <button id="btnFitPage" class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold" title="Fit entire page vertically and horizontally">🔍 Fit Page</button>
+            <button id="btnFitWidth" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition" title="Fit page width to screen">↔️ Fit Width</button>
+            <button id="btnZoom100" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition">100%</button>
+            <button id="btnZoom150" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition">150%</button>
+          </div>
+        </div>
+
+        <!-- Canvas Scroll Area: Starts from Top (y=0), Full Screen Scrollable -->
+        <div id="canvasScrollArea" class="flex-1 w-full h-full min-h-0 overflow-auto p-4 sm:p-6 flex flex-col items-center justify-start bg-slate-950/80">
+          <div id="canvasWrapper" class="shadow-2xl border border-slate-700/80 rounded bg-white overflow-hidden transition-all my-auto max-w-full">
+            <canvas id="pdfCanvas" class="block max-w-full h-auto cursor-crosshair"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Content 2: Raw Coordinates Table -->
+      <div id="tab-coords" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs shrink-0">
           <span class="font-semibold text-slate-300">Exact Physical Coordinates Matrix</span>
           <span id="tableCount" class="text-slate-500 font-mono">0 spans displayed</span>
         </div>
-        <div class="flex-1 overflow-auto">
+        <div class="flex-1 overflow-auto w-full">
           <table class="w-full text-left text-xs border-collapse">
             <thead class="bg-slate-950 sticky top-0 border-b border-slate-800 text-cyan-400 font-mono font-bold">
               <tr>
@@ -168,48 +191,26 @@
         </div>
       </div>
 
-      <!-- Tab Content 2: Pure Plain Text -->
-      <div id="tab-text" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg h-[620px]">
-        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs">
+      <!-- Tab Content 3: Pure Plain Text -->
+      <div id="tab-text" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs shrink-0">
           <span class="font-semibold text-slate-300">Pure Text Stream & Raw Coordinates Dump</span>
           <button id="btnCopyText" class="px-3 py-1 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 rounded text-xs font-semibold flex items-center gap-1 transition">
             📋 Copy to Clipboard
           </button>
         </div>
-        <textarea id="pureTextBox" readonly class="flex-1 w-full bg-slate-950 p-4 text-xs font-mono text-slate-200 outline-none resize-none leading-relaxed" placeholder="Text stream will appear here..."></textarea>
-      </div>
-
-      <!-- Tab Content 3: 2D Visual Overlay -->
-      <div id="tab-visual" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg h-[620px]">
-        <div class="p-3 bg-slate-950 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs">
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="font-semibold text-slate-300 whitespace-nowrap">Rendered Canvas Overlay</span>
-            <span id="hoverInfo" class="hidden font-mono text-[11px] text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800 truncate max-w-[340px]"></span>
-          </div>
-          <!-- Zoom Controls -->
-          <div class="flex items-center gap-1.5">
-            <span class="text-slate-400 text-[11px]">Zoom:</span>
-            <button id="btnZoom100" class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold">100%</button>
-            <button id="btnZoom125" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition">125%</button>
-            <button id="btnZoom150" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition">150%</button>
-          </div>
-        </div>
-        <div class="flex-1 overflow-auto p-6 flex flex-col items-center justify-start bg-slate-950/80">
-          <div class="shadow-2xl border border-slate-700 rounded bg-white overflow-hidden transition-all">
-            <canvas id="pdfCanvas" class="block cursor-crosshair"></canvas>
-          </div>
-        </div>
+        <textarea id="pureTextBox" readonly class="flex-1 w-full h-full bg-slate-950 p-4 text-xs font-mono text-slate-200 outline-none resize-none leading-relaxed" placeholder="Text stream will appear here..."></textarea>
       </div>
 
       <!-- Tab Content 4: JSON Export -->
-      <div id="tab-json" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg h-[620px]">
-        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs">
+      <div id="tab-json" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs shrink-0">
           <span class="font-semibold text-slate-300">Raw Spatial Document JSON</span>
           <button id="btnDownloadJson" class="px-3 py-1 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 rounded text-xs font-semibold flex items-center gap-1 transition">
             💾 Download JSON
           </button>
         </div>
-        <pre id="jsonViewer" class="flex-1 bg-slate-950 p-4 text-xs font-mono text-cyan-300 overflow-auto"></pre>
+        <pre id="jsonViewer" class="flex-1 w-full h-full bg-slate-950 p-4 text-xs font-mono text-cyan-300 overflow-auto"></pre>
       </div>
 
     </section>
@@ -223,6 +224,7 @@
     let currentPageNum = 1;
     let extractedSpans = [];
     let currentRenderScale = 1.0;
+    let activeZoomMode = 'fit-page'; // 'fit-page' | 'fit-width' | 'manual'
     let currentViewport = null;
     let cleanPdfBitmap = null;
     let hoveredSpan = null;
@@ -246,9 +248,11 @@
     const metricSpans = document.getElementById('metricSpans');
     const metricDims = document.getElementById('metricDims');
     const hoverInfo = document.getElementById('hoverInfo');
+    const canvasScrollArea = document.getElementById('canvasScrollArea');
 
+    const btnFitPage = document.getElementById('btnFitPage');
+    const btnFitWidth = document.getElementById('btnFitWidth');
     const btnZoom100 = document.getElementById('btnZoom100');
-    const btnZoom125 = document.getElementById('btnZoom125');
     const btnZoom150 = document.getElementById('btnZoom150');
 
     const pdfCanvas = document.getElementById('pdfCanvas');
@@ -269,29 +273,93 @@
         targetPanel.classList.remove('hidden');
 
         // If switching to visual tab, guarantee instant repaint
-        if (btn.dataset.tab === 'tab-visual' && cleanPdfBitmap) {
-          drawCanvas(null);
+        if (btn.dataset.tab === 'tab-visual') {
+          if (cleanPdfBitmap) {
+            drawCanvas(null);
+          } else if (currentPdfDoc) {
+            renderCurrentPage();
+          }
         }
       });
     });
 
-    // Zoom Buttons
+    // Zoom Buttons Styling
     function updateZoomButtons() {
-      [btnZoom100, btnZoom125, btnZoom150].forEach(b => {
+      [btnFitPage, btnFitWidth, btnZoom100, btnZoom150].forEach(b => {
         b.className = 'px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition';
       });
-      if (currentRenderScale === 1.0) {
+
+      if (activeZoomMode === 'fit-page') {
+        btnFitPage.className = 'px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold';
+      } else if (activeZoomMode === 'fit-width') {
+        btnFitWidth.className = 'px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold';
+      } else if (currentRenderScale === 1.0) {
         btnZoom100.className = 'px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold';
-      } else if (currentRenderScale === 1.25) {
-        btnZoom125.className = 'px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold';
       } else if (currentRenderScale === 1.5) {
         btnZoom150.className = 'px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold';
       }
     }
 
-    btnZoom100.addEventListener('click', () => { currentRenderScale = 1.0; updateZoomButtons(); renderCurrentPage(); });
-    btnZoom125.addEventListener('click', () => { currentRenderScale = 1.25; updateZoomButtons(); renderCurrentPage(); });
-    btnZoom150.addEventListener('click', () => { currentRenderScale = 1.5; updateZoomButtons(); renderCurrentPage(); });
+    async function calculateAutoZoom(mode = activeZoomMode) {
+      if (!currentPdfDoc) return 1.0;
+      const page = await currentPdfDoc.getPage(currentPageNum);
+      const vp1 = page.getViewport({ scale: 1.0 });
+
+      // Available container space
+      const availW = Math.max(canvasScrollArea.clientWidth - 40, 280);
+      const availH = Math.max(canvasScrollArea.clientHeight - 40, 320);
+
+      if (mode === 'fit-page') {
+        // Fits both width and height cleanly without clipping
+        const scaleW = availW / vp1.width;
+        const scaleH = availH / vp1.height;
+        return Math.min(scaleW, scaleH);
+      } else if (mode === 'fit-width') {
+        // Fits width of available area
+        return availW / vp1.width;
+      }
+      return currentRenderScale;
+    }
+
+    btnFitPage.addEventListener('click', async () => {
+      activeZoomMode = 'fit-page';
+      currentRenderScale = await calculateAutoZoom('fit-page');
+      updateZoomButtons();
+      renderCurrentPage();
+    });
+
+    btnFitWidth.addEventListener('click', async () => {
+      activeZoomMode = 'fit-width';
+      currentRenderScale = await calculateAutoZoom('fit-width');
+      updateZoomButtons();
+      renderCurrentPage();
+    });
+
+    btnZoom100.addEventListener('click', () => {
+      activeZoomMode = 'manual';
+      currentRenderScale = 1.0;
+      updateZoomButtons();
+      renderCurrentPage();
+    });
+
+    btnZoom150.addEventListener('click', () => {
+      activeZoomMode = 'manual';
+      currentRenderScale = 1.5;
+      updateZoomButtons();
+      renderCurrentPage();
+    });
+
+    // Window Resize Observer for Responsive Fit
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(async () => {
+        if (currentPdfDoc && (activeZoomMode === 'fit-page' || activeZoomMode === 'fit-width')) {
+          currentRenderScale = await calculateAutoZoom(activeZoomMode);
+          renderCurrentPage();
+        }
+      }, 200);
+    });
 
     // File selection
     dropzone.addEventListener('click', () => fileInput.click());
@@ -325,6 +393,16 @@
       pageSlider.max = currentPdfDoc.numPages;
       pageSlider.value = 1;
       currentPageNum = 1;
+
+      // On mobile devices, default to fit-width; on desktop, default to fit-page
+      if (window.innerWidth < 768) {
+        activeZoomMode = 'fit-width';
+      } else {
+        activeZoomMode = 'fit-page';
+      }
+
+      currentRenderScale = await calculateAutoZoom(activeZoomMode);
+      updateZoomButtons();
       await renderCurrentPage();
     }
 
@@ -430,11 +508,11 @@
         if (isHovered) {
           pdfCtx.fillStyle = 'rgba(6, 182, 212, 0.40)';
           pdfCtx.strokeStyle = 'rgba(34, 211, 238, 1.0)';
-          pdfCtx.lineWidth = 2.0;
+          pdfCtx.lineWidth = Math.max(1.5, 2.0 * (currentRenderScale / 1.5));
         } else {
           pdfCtx.fillStyle = 'rgba(6, 182, 212, 0.18)';
           pdfCtx.strokeStyle = 'rgba(6, 182, 212, 0.85)';
-          pdfCtx.lineWidth = 1.3;
+          pdfCtx.lineWidth = Math.max(1.0, 1.3 * (currentRenderScale / 1.5));
         }
 
         pdfCtx.fillRect(s.vx0, s.vy0, s.vw, s.vh);
