@@ -27,7 +27,7 @@
       <div>
         <div class="flex items-center gap-3">
           <span class="text-2xl font-black bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">⚡ RasgaPDF</span>
-          <span class="text-xs px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono font-bold">v0.1.2</span>
+          <span class="text-xs px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono font-bold">v0.1.3</span>
           <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">Client-Side Compute</span>
         </div>
         <p class="text-xs text-slate-400 mt-1">Extract exact physical coordinates [x0, y0, x1, y1] and 2D spatial layouts with native speed</p>
@@ -42,7 +42,7 @@
 
         <!-- Package Links -->
         <a href="https://pypi.org/project/rasgapdf/" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">PyPI v0.1.2</a>
-        <a href="https://crates.io/crates/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-orange-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">Crates.io v0.1.2</a>
+        <a href="https://crates.io/crates/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-orange-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">Crates.io v0.1.3</a>
         <a href="https://www.npmjs.com/package/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-red-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">npm v0.1.0</a>
         <a href="https://huggingface.co/martinsmessias/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">HF Hub</a>
       </div>
@@ -87,7 +87,7 @@
           <span class="text-xs font-semibold text-slate-300 block mb-2">Display Options</span>
           <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
             <input type="checkbox" id="chkShowBoxes" checked class="rounded accent-cyan-400">
-            Show 2D Bounding Boxes (Cyan Overlay)
+            Show 2D Bounding Boxes (Translucent Cyan)
           </label>
         </div>
       </div>
@@ -98,25 +98,25 @@
         <div class="grid grid-cols-2 gap-3 text-xs">
           <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
             <span class="text-slate-500 block text-[10px]">Parse Latency</span>
-            <span id="metricLatency" class="text-sm font-bold text-cyan-400 font-mono">0.00 ms</span>
+            <span id="metricLatency" class="font-mono text-cyan-400 font-bold text-sm">0.00 ms</span>
           </div>
           <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
             <span class="text-slate-500 block text-[10px]">Total Spans</span>
-            <span id="metricSpans" class="text-sm font-bold text-emerald-400 font-mono">0</span>
+            <span id="metricSpans" class="font-mono text-cyan-400 font-bold text-sm">0</span>
           </div>
           <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
             <span class="text-slate-500 block text-[10px]">Canvas Dimensions</span>
-            <span id="metricDims" class="text-xs font-semibold text-slate-300 font-mono">-</span>
+            <span id="metricDims" class="font-mono text-slate-300 text-xs">-</span>
           </div>
           <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
             <span class="text-slate-500 block text-[10px]">Compute Location</span>
-            <span class="text-xs font-semibold text-amber-400 font-mono">Your Browser</span>
+            <span class="font-mono text-amber-400 font-bold text-xs">Your Browser</span>
           </div>
         </div>
       </div>
     </aside>
 
-    <!-- Right Data Display Panel -->
+    <!-- Right Content Tabs -->
     <section class="lg:col-span-8 flex flex-col gap-4">
 
       <!-- Navigation Tabs -->
@@ -177,13 +177,22 @@
 
       <!-- Tab Content 3: 2D Visual Overlay -->
       <div id="tab-visual" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg h-[620px]">
-        <div class="p-3 bg-slate-950 border-b border-slate-800 text-xs text-slate-300 font-semibold">
-          Rendered Page Canvas with Translucent 2D Bounding Boxes
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="font-semibold text-slate-300 whitespace-nowrap">Rendered Canvas Overlay</span>
+            <span id="hoverInfo" class="hidden font-mono text-[11px] text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800 truncate max-w-[340px]"></span>
+          </div>
+          <!-- Zoom Controls -->
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400 text-[11px]">Zoom:</span>
+            <button id="btnZoom100" class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold">100%</button>
+            <button id="btnZoom125" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition">125%</button>
+            <button id="btnZoom150" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition">150%</button>
+          </div>
         </div>
-        <div class="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-950/80">
-          <div class="relative shadow-2xl border border-slate-800 rounded">
-            <canvas id="pdfCanvas" class="block max-w-full"></canvas>
-            <canvas id="overlayCanvas" class="absolute top-0 left-0 pointer-events-none"></canvas>
+        <div class="flex-1 overflow-auto p-6 flex flex-col items-center justify-start bg-slate-950/80">
+          <div class="shadow-2xl border border-slate-700 rounded bg-white overflow-hidden transition-all">
+            <canvas id="pdfCanvas" class="block cursor-crosshair"></canvas>
           </div>
         </div>
       </div>
@@ -209,7 +218,10 @@
     let currentPdfDoc = null;
     let currentPageNum = 1;
     let extractedSpans = [];
-    let currentRenderScale = 1.5;
+    let currentRenderScale = 1.0;
+    let currentViewport = null;
+    let cleanPdfBitmap = null;
+    let hoveredSpan = null;
 
     // Elements
     const fileInput = document.getElementById('pdfFileInput');
@@ -229,11 +241,14 @@
     const metricLatency = document.getElementById('metricLatency');
     const metricSpans = document.getElementById('metricSpans');
     const metricDims = document.getElementById('metricDims');
+    const hoverInfo = document.getElementById('hoverInfo');
+
+    const btnZoom100 = document.getElementById('btnZoom100');
+    const btnZoom125 = document.getElementById('btnZoom125');
+    const btnZoom150 = document.getElementById('btnZoom150');
 
     const pdfCanvas = document.getElementById('pdfCanvas');
-    const overlayCanvas = document.getElementById('overlayCanvas');
     const pdfCtx = pdfCanvas.getContext('2d');
-    const overlayCtx = overlayCanvas.getContext('2d');
 
     // Tabs logic
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -246,9 +261,33 @@
         btn.classList.remove('border-transparent', 'text-slate-400');
 
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
-        document.getElementById(btn.dataset.tab).classList.remove('hidden');
+        const targetPanel = document.getElementById(btn.dataset.tab);
+        targetPanel.classList.remove('hidden');
+
+        // If switching to visual tab, guarantee instant repaint
+        if (btn.dataset.tab === 'tab-visual' && cleanPdfBitmap) {
+          drawCanvas(null);
+        }
       });
     });
+
+    // Zoom Buttons
+    function updateZoomButtons() {
+      [btnZoom100, btnZoom125, btnZoom150].forEach(b => {
+        b.className = 'px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition';
+      });
+      if (currentRenderScale === 1.0) {
+        btnZoom100.className = 'px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold';
+      } else if (currentRenderScale === 1.25) {
+        btnZoom125.className = 'px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold';
+      } else if (currentRenderScale === 1.5) {
+        btnZoom150.className = 'px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold';
+      }
+    }
+
+    btnZoom100.addEventListener('click', () => { currentRenderScale = 1.0; updateZoomButtons(); renderCurrentPage(); });
+    btnZoom125.addEventListener('click', () => { currentRenderScale = 1.25; updateZoomButtons(); renderCurrentPage(); });
+    btnZoom150.addEventListener('click', () => { currentRenderScale = 1.5; updateZoomButtons(); renderCurrentPage(); });
 
     // File selection
     dropzone.addEventListener('click', () => fileInput.click());
@@ -282,7 +321,7 @@
       pageSlider.max = currentPdfDoc.numPages;
       pageSlider.value = 1;
       currentPageNum = 1;
-      renderCurrentPage();
+      await renderCurrentPage();
     }
 
     async function renderCurrentPage() {
@@ -296,18 +335,20 @@
 
       const page = await currentPdfDoc.getPage(currentPageNum);
       const viewport = page.getViewport({ scale: currentRenderScale });
+      currentViewport = viewport;
 
       pdfCanvas.width = viewport.width;
       pdfCanvas.height = viewport.height;
-      overlayCanvas.width = viewport.width;
-      overlayCanvas.height = viewport.height;
 
       metricDims.textContent = `${Math.round(viewport.width / currentRenderScale)}x${Math.round(viewport.height / currentRenderScale)} pt`;
 
-      // Render base PDF
+      // 1. Render base PDF page directly onto canvas
       await page.render({ canvasContext: pdfCtx, viewport }).promise;
 
-      // Extract text content and physical coordinates
+      // 2. Cache clean rasterized bitmap of PDF for zero-latency redrawing
+      cleanPdfBitmap = await createImageBitmap(pdfCanvas);
+
+      // 3. Extract text content & exact spatial bounding boxes
       const textContent = await page.getTextContent();
       const pageHeightPt = viewport.height / currentRenderScale;
 
@@ -319,12 +360,23 @@
         const ty = item.transform[5];
         const fontSize = Math.abs(item.transform[0]);
         const width = item.width;
-        const height = item.height || fontSize;
+        const ascent = fontSize * 0.85;
+        const descent = fontSize * 0.20;
 
+        // Physical coordinates in pt (top-down origin)
         const x0 = tx;
-        const y0 = pageHeightPt - ty - height;
-        const x1 = x0 + width;
-        const y1 = y0 + height;
+        const y0 = pageHeightPt - ty - ascent;
+        const x1 = tx + width;
+        const y1 = y0 + fontSize;
+
+        // Viewport canvas pixel bounding box
+        const rect = viewport.convertToViewportRectangle([
+          tx,
+          ty - descent,
+          tx + width,
+          ty + ascent
+        ]);
+        const norm = pdfjsLib.Util.normalizeRect(rect);
 
         extractedSpans.push({
           page: currentPageNum,
@@ -334,7 +386,11 @@
           y1: Number(y1.toFixed(2)),
           font_size: Number(fontSize.toFixed(1)),
           font_name: item.fontName || 'Helvetica',
-          text: item.str
+          text: item.str,
+          vx0: norm[0],
+          vy0: norm[1],
+          vw: norm[2] - norm[0],
+          vh: norm[3] - norm[1]
         });
       }
 
@@ -352,9 +408,72 @@
 
       updateTable();
       updateTextDump();
-      updateVisualOverlay(viewport);
+      drawCanvas(null);
       updateJsonViewer();
     }
+
+    function drawCanvas(highlightSpan = null) {
+      if (!cleanPdfBitmap) return;
+
+      // Draw clean base PDF
+      pdfCtx.drawImage(cleanPdfBitmap, 0, 0);
+
+      if (!chkShowBoxes.checked) return;
+
+      extractedSpans.forEach(s => {
+        const isHovered = (s === highlightSpan);
+
+        if (isHovered) {
+          pdfCtx.fillStyle = 'rgba(6, 182, 212, 0.40)';
+          pdfCtx.strokeStyle = 'rgba(34, 211, 238, 1.0)';
+          pdfCtx.lineWidth = 2.0;
+        } else {
+          pdfCtx.fillStyle = 'rgba(6, 182, 212, 0.18)';
+          pdfCtx.strokeStyle = 'rgba(6, 182, 212, 0.85)';
+          pdfCtx.lineWidth = 1.3;
+        }
+
+        pdfCtx.fillRect(s.vx0, s.vy0, s.vw, s.vh);
+        pdfCtx.strokeRect(s.vx0, s.vy0, s.vw, s.vh);
+      });
+    }
+
+    // Interactive Hover on Canvas
+    pdfCanvas.addEventListener('mousemove', (e) => {
+      if (!currentViewport || extractedSpans.length === 0) return;
+
+      const rect = pdfCanvas.getBoundingClientRect();
+      const scaleX = pdfCanvas.width / rect.width;
+      const scaleY = pdfCanvas.height / rect.height;
+      const mouseX = (e.clientX - rect.left) * scaleX;
+      const mouseY = (e.clientY - rect.top) * scaleY;
+
+      // Find span under cursor
+      const found = extractedSpans.find(s => 
+        mouseX >= s.vx0 && mouseX <= s.vx0 + s.vw &&
+        mouseY >= s.vy0 && mouseY <= s.vy0 + s.vh
+      );
+
+      if (found !== hoveredSpan) {
+        hoveredSpan = found;
+        drawCanvas(hoveredSpan);
+
+        if (hoveredSpan) {
+          hoverInfo.classList.remove('hidden');
+          hoverInfo.textContent = `[${hoveredSpan.x0.toFixed(1)}, ${hoveredSpan.y0.toFixed(1)}, ${hoveredSpan.x1.toFixed(1)}, ${hoveredSpan.y1.toFixed(1)}] "${hoveredSpan.text}"`;
+        } else {
+          hoverInfo.classList.add('hidden');
+        }
+      }
+    });
+
+    pdfCanvas.addEventListener('mouseleave', () => {
+      if (hoveredSpan) {
+        hoveredSpan = null;
+        drawCanvas(null);
+        hoverInfo.classList.add('hidden');
+      }
+    });
 
     function updateTable() {
       coordsTableBody.innerHTML = '';
@@ -395,33 +514,21 @@
       pureTextBox.value = flow;
     }
 
-    function updateVisualOverlay(viewport) {
-      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-      if (!chkShowBoxes.checked) return;
-
-      const scale = currentRenderScale;
-      overlayCtx.lineWidth = 1.5;
-
-      extractedSpans.forEach(s => {
-        const vx0 = s.x0 * scale;
-        const vy0 = s.y0 * scale;
-        const vWidth = (s.x1 - s.x0) * scale;
-        const vHeight = (s.y1 - s.y0) * scale;
-
-        // Semi-transparent Cyan fill & Cyan border
-        overlayCtx.fillStyle = 'rgba(6, 182, 212, 0.15)';
-        overlayCtx.strokeStyle = 'rgba(6, 182, 212, 0.85)';
-        overlayCtx.fillRect(vx0, vy0, vWidth, vHeight);
-        overlayCtx.strokeRect(vx0, vy0, vWidth, vHeight);
-      });
-    }
-
     function updateJsonViewer() {
       const doc = {
         total_pages: currentPdfDoc ? currentPdfDoc.numPages : 1,
         current_page: currentPageNum,
         total_spans: extractedSpans.length,
-        spans: extractedSpans
+        spans: extractedSpans.map(s => ({
+          page: s.page,
+          x0: s.x0,
+          y0: s.y0,
+          x1: s.x1,
+          y1: s.y1,
+          font_size: s.font_size,
+          font_name: s.font_name,
+          text: s.text
+        }))
       };
       jsonViewer.textContent = JSON.stringify(doc, null, 2);
     }
@@ -432,14 +539,12 @@
       return div.innerHTML;
     }
 
-    // Controls
+    // Navigation Controls
     btnPrevPage.addEventListener('click', () => { if (currentPageNum > 1) { currentPageNum--; renderCurrentPage(); } });
     btnNextPage.addEventListener('click', () => { if (currentPdfDoc && currentPageNum < currentPdfDoc.numPages) { currentPageNum++; renderCurrentPage(); } });
     pageSlider.addEventListener('input', (e) => { currentPageNum = parseInt(e.target.value); renderCurrentPage(); });
     chkShowBoxes.addEventListener('change', () => {
-      if (currentPdfDoc) {
-        currentPdfDoc.getPage(currentPageNum).then(p => updateVisualOverlay(p.getViewport({ scale: currentRenderScale })));
-      }
+      drawCanvas(hoveredSpan);
     });
 
     btnCopyText.addEventListener('click', () => {
