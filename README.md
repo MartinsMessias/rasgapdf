@@ -25,10 +25,11 @@ pipeline_tag: document-question-answering
 [![PyPI version](https://img.shields.io/pypi/v/rasgapdf.svg?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/rasgapdf/)
 [![Crates.io](https://img.shields.io/crates/v/rasgapdf.svg?color=orange&logo=rust)](https://crates.io/crates/rasgapdf)
 [![npm version](https://img.shields.io/npm/v/rasgapdf.svg?color=red&logo=npm)](https://www.npmjs.com/package/rasgapdf)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?logo=github)](https://github.com/MartinsMessias/rasgapdf)
 [![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hub-Model%20Repo-blue)](https://huggingface.co/martinsmessias/rasgapdf)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[**Live Web / Space Demo**](https://huggingface.co/spaces/martinsmessias/rasgapdf) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Quickstart**](#-polyglot-quickstart) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md)
+[**GitHub Repo**](https://github.com/MartinsMessias/rasgapdf) • [**Live Space Demo**](https://huggingface.co/spaces/martinsmessias/rasgapdf) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Quickstart**](#-polyglot-quickstart) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md)
 
 </div>
 
