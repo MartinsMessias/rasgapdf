@@ -1,14 +1,14 @@
 # 📐 RasgaPDF Spatial Schema Specification
 
-RasgaPDF provides **two distinct parsing modes**:
-1. **Modo 1: Raw Spatial X/Y Coordinates (`RawSpatialDocument`)** — Flat, zero-overhead physical coordinates list `[page, x0, y0, x1, y1, text]` for maximum speed (~3-8 ms).
-2. **Modo 2: Structured Hierarchy (`SpatialDocument`)** — Geometric tree containing visual blocks, lines, spans, and automatic table matrix detection.
+RasgaPDF provides **two distinct extraction modes**:
+1. **Mode 1: Raw Physical Coordinates (`RawSpatialDocument`)** — Flat, zero-overhead physical coordinates list `[page, x0, y0, x1, y1, text]` designed for maximum throughput (~3-8 ms).
+2. **Mode 2: Hierarchical Structured Document (`SpatialDocument`)** — Geometric tree containing visual blocks, lines, spans, and automatic matrix table detection.
 
 ---
 
-## Modo 1: Coordenadas Brutas (`RawSpatialDocument`)
+## Mode 1: Raw Physical Coordinates (`RawSpatialDocument`)
 
-Retorna a lista plana de cada elemento físico desenhado na página, sem criar hierarquias de parágrafos ou tabelas. Ideal para indexação vetorial, spatial visualizers, OCR alignment e pipelines de parsing customizados.
+Returns a flat, unnested list of every physical text element rendered on the PDF canvas, without paragraph clustering or table heuristics overhead. Ideal for spatial RAG pipelines, 2D visualizers, OCR alignment, and Unix pipelines (`awk`/`grep`).
 
 ```json
 {
@@ -25,27 +25,29 @@ Retorna a lista plana de cada elemento físico desenhado na página, sem criar h
       "y1": 83.0,
       "font_size": 12.0,
       "font_name": "Helvetica",
-      "text": "A Revolução da Inteligência Artificial"
+      "text": "The Revolution of Artificial Intelligence"
     }
   ]
 }
 ```
 
-### Campos do `RawCoordSpan`:
-| Campo | Tipo | Descrição |
+### `RawCoordSpan` Fields:
+| Field | Type | Description |
 | :--- | :--- | :--- |
-| `page` | `integer` | Número da página (iniciando em 1) |
-| `x0` | `float` | Posição horizontal esquerda (pontos tipográficos) |
-| `y0` | `float` | Posição vertical superior (pontos tipográficos) |
-| `x1` | `float` | Posição horizontal direita |
-| `y1` | `float` | Posição vertical inferior |
-| `font_size` | `float` | Tamanho da fonte em pontos |
-| `font_name` | `string` | Nome da fonte utilizada no PDF |
-| `text` | `string` | Texto bruto extraído |
+| `page` | `integer` | 1-based page index |
+| `x0` | `float` | Left horizontal boundary (typographical points, 1/72 inch) |
+| `y0` | `float` | Top vertical boundary (typographical points) |
+| `x1` | `float` | Right horizontal boundary |
+| `y1` | `float` | Bottom vertical boundary |
+| `font_size` | `float` | Font size in points |
+| `font_name` | `string` | Embedded PDF font name |
+| `text` | `string` | Raw extracted text |
 
 ---
 
-## Modo 2: Estruturado Hierárquico (`SpatialDocument`)
+## Mode 2: Hierarchical Structured Document (`SpatialDocument`)
+
+Reconstructs the visual hierarchy into visual paragraphs (`text_blocks`), text lines (`lines`), spans, and auto-detects matrix tables via column alignment.
 
 ```json
 {
@@ -56,16 +58,16 @@ Retorna a lista plana de cada elemento físico desenhado na página, sem criar h
 }
 ```
 
-| Campo | Tipo | Descrição |
+| Field | Type | Description |
 | :--- | :--- | :--- |
-| `file_name` | `string` | Nome base do arquivo PDF |
-| `total_pages` | `integer` | Total de páginas processadas |
-| `parse_time_ms` | `float` | Tempo nativo de execução em milissegundos |
-| `pages` | `array<SpatialPage>` | Lista de páginas do documento |
+| `file_name` | `string` | Base name of the processed PDF file |
+| `total_pages` | `integer` | Total number of pages processed |
+| `parse_time_ms` | `float` | Native execution time in milliseconds |
+| `pages` | `array<SpatialPage>` | List of processed page objects |
 
 ---
 
-### Nível de Página: `SpatialPage`
+### Page Level: `SpatialPage`
 
 ```json
 {
@@ -81,7 +83,7 @@ Retorna a lista plana de cada elemento físico desenhado na página, sem criar h
 
 ---
 
-### Nível de Bloco e Linha: `SpatialBlock` & `SpatialLine`
+### Block & Line Level: `SpatialBlock` & `SpatialLine`
 
 ```json
 {
@@ -108,7 +110,7 @@ Retorna a lista plana de cada elemento físico desenhado na página, sem criar h
 
 ---
 
-### Nível de Tabela: `SpatialTable` & `SpatialCell`
+### Table Level: `SpatialTable` & `SpatialCell`
 
 ```json
 {

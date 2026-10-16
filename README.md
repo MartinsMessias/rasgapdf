@@ -5,15 +5,13 @@
 **The Blazing-Fast 2D Spatial PDF Parser powered by Pure Rust.**  
 *Extract exact physical coordinates (Raw X/Y) or structured blocks & tables at native hardware speeds.*
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![PyPI](https://img.shields.io/pypi/v/rasgapdf.svg?logo=pypi&logoColor=white)](https://pypi.org/project/rasgapdf/)
-[![Rust](https://img.shields.io/badge/Rust-2021%2B-orange?logo=rust)](Cargo.toml)
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green?logo=node.js)](bindings/nodejs)
-[![Go](https://img.shields.io/badge/Go-1.20%2B-cyan?logo=go)](bindings/go)
-[![.NET](https://img.shields.io/badge/.NET-8.0%2B-purple?logo=dotnet)](bindings/csharp)
+[![PyPI version](https://img.shields.io/pypi/v/rasgapdf.svg?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/rasgapdf/)
+[![Crates.io](https://img.shields.io/crates/v/rasgapdf.svg?color=orange&logo=rust)](https://crates.io/crates/rasgapdf)
+[![npm version](https://img.shields.io/npm/v/rasgapdf.svg?color=red&logo=npm)](https://www.npmjs.com/package/rasgapdf)
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-martinsmessias%2Frasgapdf-blue)](https://huggingface.co/martinsmessias/rasgapdf)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[**Live Gradio Demo**](#-interactive-gradio-demo) • [**Quickstart**](#-quickstart) • [**Two Modes**](#-two-parsing-modes) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md) • [**Contributing**](CONTRIBUTING.md)
+[**Live Gradio Demo**](#-interactive-gradio-demo) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Quickstart**](#-polyglot-quickstart) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md)
 
 </div>
 
@@ -21,37 +19,37 @@
 
 ## 🎯 The Philosophy: Pure Spatial Parsing
 
-Most PDF libraries make fragile guesses: they convert multi-column documents into flat, corrupted text streams, mangle tables, and strip away spatial geometry. 
+Most PDF extraction tools make fragile guesses: they flatten multi-column layouts into corrupted text streams, mangle tables, and strip away 2D positional geometry.
 
 **RasgaPDF does one thing with uncompromising precision:**  
 It returns the **exact 2D physical spatial geometry** of the PDF.
 
 - **Bounding Boxes Everywhere:** Every character, word span, line, block, and table has exact coordinates `[x0, y0, x1, y1]`.
-- **Zero Lossy Guesswork:** No broken heuristics pretending to be Markdown. Your downstream LLMs, RAG pipelines, or OCR validators receive the true physical layout.
+- **Zero Lossy Heuristics:** No broken markdown assumptions. Downstream LLMs, RAG pipelines, or vision-language models receive the true physical layout.
 - **Microsecond Rayon Parallelism:** Multi-threaded page processing in pure Rust utilizing AVX2/AVX-512 SIMD.
 - **Polyglot First:** Native C-ABI FFI bindings for **Python**, **Node.js**, **Go**, and **C# (.NET)**.
 
 ---
 
-## ⚡ Two Parsing Modes
+## ⚡ Two Extraction Modes
 
 RasgaPDF offers two distinct modes for different engineering needs:
 
-### ⚡ Modo 1: Coordenadas Brutas (Raw X/Y Puro)
-O retorno mais direto, bruto e rápido possível. Retorna exclusivamente a lista plana de coordenadas físicas de cada elemento desenhado na página, sem criar hierarquias de blocos ou overhead de tabelas:
-- **Latência:** ~3 a 8 ms por página
-- **Saídas suportadas:** JSON plano, Text formatado, TSV ou CSV
-- **Uso ideal:** RAG espacial, visualizadores 2D, indexação vetorial, pipelines Unix com `awk`/`grep`.
+### ⚡ Mode 1: Flat Physical Coordinates (Raw X/Y)
+The fastest, most direct extraction possible. Returns an unnested list of physical 2D coordinates for every text span on the page, with zero block or table overhead:
+- **Latency:** ~3 to 8 ms per page
+- **Supported Formats:** Flat JSON, Formatted Text, TSV, or CSV
+- **Best For:** Spatial RAG, 2D visualizers, vector indexing, OCR alignment, Unix pipelines with `awk`/`grep`.
 
 ```
-[Pág. 1] (X0:  50.00, Y0:  67.00, X1: 244.00, Y1:  83.00) [12.0pt] A Revolução da Inteligência Artificial
-[Pág. 1] (X0:  50.00, Y0: 103.00, X1: 478.00, Y1: 119.00) [12.0pt] A Inteligência Artificial (IA) tem transformado...
+[Page 1] (X0:  50.00, Y0:  67.00, X1: 244.00, Y1:  83.00) [12.0pt] The Revolution of Artificial Intelligence
+[Page 1] (X0:  50.00, Y0: 103.00, X1: 478.00, Y1: 119.00) [12.0pt] Artificial Intelligence (AI) has transformed...
 ```
 
-### 🎯 Modo 2: Estruturado Hierárquico
-Processa a geometria e agrupa elementos em parágrafos visuais (`blocks`), linhas (`lines`), spans de fonte e detecta matrizes de tabelas automaticamente via projeção horizontal de colunas:
-- **Latência:** ~8 a 15 ms por página
-- **Saída:** Árvore hierárquica `SpatialDocument` -> `pages` -> `text_blocks` -> `lines` -> `tables`.
+### 🎯 Mode 2: Hierarchical Structured Document
+Reconstructs the visual hierarchy into visual paragraphs (`text_blocks`), text lines (`lines`), spans, and auto-detects matrix tables via horizontal column projection:
+- **Latency:** ~8 to 15 ms per page
+- **Output:** Hierarchical tree `SpatialDocument` -> `pages` -> `text_blocks` -> `lines` -> `tables`.
 
 ---
 
@@ -72,56 +70,94 @@ Measured on Intel Core i7-1365U (10 Cores / 12 Threads, AVX2):
 
 ## 💻 Standalone CLI Tool
 
+Install or build the standalone CLI binary:
 ```bash
 cargo build --release
 ./target/release/rasgapdf --help
 
-# ⚡ MODO 1: Coordenadas Brutas (Raw X/Y)
+# ⚡ MODE 1: Raw Physical Coordinates (Raw X/Y)
 ./target/release/rasgapdf sample.pdf --raw
 ./target/release/rasgapdf sample.pdf --raw --format text
-./target/release/rasgapdf sample.pdf --raw --format csv
-./target/release/rasgapdf sample.pdf --raw --format tsv
+./target/release/rasgapdf sample.pdf --raw --format tsv | awk -F'\t' '$1 == 1 {print $2, $3, $8}'
+./target/release/rasgapdf sample.pdf --raw --format csv -o coordinates.csv
 
-# 🎯 MODO 2: Estruturado (Hierárquico com Blocos e Tabelas)
+# 🎯 MODE 2: Hierarchical Structured Document
 ./target/release/rasgapdf sample.pdf --pretty
-./target/release/rasgapdf sample.pdf -o output.json
+./target/release/rasgapdf sample.pdf -o structured.json
 ```
 
 ---
 
 ## 🚀 Polyglot Quickstart
 
+### 🦀 Rust
+Add to your `Cargo.toml`:
+```toml
+[dependencies]
+rasgapdf = "0.1.1"
+```
+```rust
+use rasgapdf::{parse_raw_file, parse_file, ParserOptions};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // ⚡ Mode 1: Raw Physical Coordinates
+    let raw = parse_raw_file("sample.pdf")?;
+    println!("Extracted {} spans in {:.2} ms", raw.total_spans, raw.parse_time_ms);
+
+    // 🎯 Mode 2: Hierarchical Structured Document
+    let options = ParserOptions::default();
+    let doc = parse_file("sample.pdf", &options)?;
+    println!("Processed {} pages", doc.total_pages);
+    Ok(())
+}
+```
+
+---
+
 ### 🐍 Python
+```bash
+pip install --upgrade rasgapdf
+```
 ```python
 import rasgapdf
 
-# ⚡ Modo 1: Coordenadas Brutas (Raw X/Y)
+# ⚡ Mode 1: Raw Physical Coordinates
 raw = rasgapdf.parse_raw("document.pdf")
-print(f"Extraídos {raw['total_spans']} spans em {raw['parse_time_ms']:.2f} ms")
-for s in raw["spans"]:
-    print(f"Pág {s['page']} | ({s['x0']}, {s['y0']}) -> {s['text']}")
+print(f"Extracted {raw['total_spans']} spans in {raw['parse_time_ms']:.2f} ms")
+for s in raw["spans"][:5]:
+    print(f"[Page {s['page']}] ({s['x0']:.2f}, {s['y0']:.2f}) -> {s['text']}")
 
-# 🎯 Modo 2: Estruturado (Hierárquico)
+# 🎯 Mode 2: Hierarchical Structured Document
 doc = rasgapdf.parse_pdf("document.pdf", detect_tables=True)
 for page in doc["pages"]:
     for table in page["tables"]:
-        print("Tabela detectada:", table["rows"])
+        print("Detected Table:", table["headers"], table["rows"])
 ```
+
+---
 
 ### 🟢 Node.js
+```bash
+npm install rasgapdf
+```
 ```javascript
-const rasgapdf = require('rasgapdf');
+const { parseRaw, parsePdf } = require('rasgapdf');
 
-// ⚡ Modo 1: Coordenadas Brutas
-const raw = rasgapdf.parseRaw('document.pdf');
-console.log(`Raw: ${raw.total_spans} spans em ${raw.parse_time_ms} ms`);
+// ⚡ Mode 1: Raw Physical Coordinates
+const raw = parseRaw('document.pdf');
+console.log(`Raw: ${raw.total_spans} spans in ${raw.parse_time_ms.toFixed(2)} ms`);
 
-// 🎯 Modo 2: Estruturado
-const doc = rasgapdf.parsePdf('document.pdf');
-console.log(`Blocos de texto: ${doc.pages[0].text_blocks.length}`);
+// 🎯 Mode 2: Hierarchical Structured Document
+const doc = parsePdf('document.pdf');
+console.log(`Text Blocks: ${doc.pages[0].text_blocks.length}`);
 ```
 
+---
+
 ### 🔵 Go
+```bash
+go get github.com/messiasmartins/rasgapdf/bindings/go
+```
 ```go
 package main
 
@@ -131,28 +167,30 @@ import (
 )
 
 func main() {
-    // ⚡ Modo 1: Coordenadas Brutas
+    // ⚡ Mode 1: Raw Physical Coordinates
     raw, _ := rasgapdf.ParseRaw("document.pdf")
-    fmt.Printf("Raw: %d spans em %.2f ms\n", raw.TotalSpans, raw.ParseTimeMs)
+    fmt.Printf("Raw: %d spans in %.2f ms\n", raw.TotalSpans, raw.ParseTimeMs)
 
-    // 🎯 Modo 2: Estruturado
+    // 🎯 Mode 2: Hierarchical Structured Document
     opts := rasgapdf.DefaultOptions()
     doc, _ := rasgapdf.ParseFile("document.pdf", &opts)
-    fmt.Printf("Estruturado: %d páginas\n", doc.TotalPages)
+    fmt.Printf("Structured: %d pages\n", doc.TotalPages)
 }
 ```
+
+---
 
 ### 🟣 C# / .NET 8
 ```csharp
 using RasgaPdf;
 
-// ⚡ Modo 1: Coordenadas Brutas
+// ⚡ Mode 1: Raw Physical Coordinates
 var raw = SpatialPdf.ParseRaw("document.pdf");
-Console.WriteLine($"Raw: {raw.TotalSpans} spans em {raw.ParseTimeMs} ms");
+Console.WriteLine($"Raw: {raw.TotalSpans} spans in {raw.ParseTimeMs:F2} ms");
 
-// 🎯 Modo 2: Estruturado
+// 🎯 Mode 2: Hierarchical Structured Document
 var doc = SpatialPdf.Parse("document.pdf");
-Console.WriteLine($"Estruturado: {doc.TotalPages} páginas");
+Console.WriteLine($"Structured: {doc.TotalPages} pages");
 ```
 
 ---
@@ -166,11 +204,12 @@ cd demo_gradio
 pip install -r requirements.txt
 python app.py
 ```
-Acesse `http://localhost:7860` para:
-- Inspecionar a **tabela interativa de Coordenadas Físicas (Raw X/Y)**.
-- Visualizar os **bounding boxes translúcidos** sobrepostos à página do PDF.
-- Analisar **tabelas detectadas** renderizadas em DataFrames.
-- Exportar JSONs brutos ou estruturados.
+Open `http://localhost:7860` to:
+- Inspect the **Responsive Physical Coordinates Table (Raw X/Y)**.
+- Read and instantly copy the **Pure Plain Text Stream & Coordinates Dump**.
+- Visualize **translucent 2D bounding boxes** overlaid onto the PDF page.
+- Analyze **detected tables** rendered in interactive DataFrames.
+- Export raw or structured JSON geometries.
 
 ---
 
