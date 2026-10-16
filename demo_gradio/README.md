@@ -21,4 +21,4 @@ Interactive 2D Spatial PDF Layout & Geometry visualizer powered by **RasgaPDF** 
 - **Polyglot Bindings:** Python, Node.js, Go, and C# (.NET).
 - **Sub-millisecond Latencies:** Multi-threaded parallel processing using `rayon`.
 
-Visit the GitHub Repository: [https://github.com/messiasmartins/rasgapdf](https://github.com/messiasmartins/rasgapdf)
+Visit the Official Repository on Hugging Face: [https://huggingface.co/martinsmessias/rasgapdf](https://huggingface.co/martinsmessias/rasgapdf)

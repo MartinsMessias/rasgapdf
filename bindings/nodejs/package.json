@@ -13,8 +13,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/messiasmartins/rasgapdf.git"
+    "url": "https://huggingface.co/martinsmessias/rasgapdf.git"
   },
+  "homepage": "https://huggingface.co/martinsmessias/rasgapdf",
   "keywords": [
     "pdf",
     "spatial",

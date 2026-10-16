@@ -1,12 +1,12 @@
 [package]
 name = "rasgapdf"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Messias Martins"]
 description = "Blazing-fast spatial 2D PDF parser in pure Rust with multi-language bindings (Python, Node.js, Go, C#)"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/messiasmartins/rasgapdf"
+repository = "https://huggingface.co/martinsmessias/rasgapdf"
 keywords = ["pdf", "spatial", "parser", "layout-analysis", "bounding-box"]
 categories = ["text-processing", "parsing"]
 exclude = [

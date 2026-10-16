@@ -9,7 +9,7 @@
     <Authors>Messias Martins</Authors>
     <Description>Ultra-fast 2D spatial PDF parser powered by Rust for .NET</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/messiasmartins/rasgapdf</RepositoryUrl>
+    <RepositoryUrl>https://huggingface.co/martinsmessias/rasgapdf</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>

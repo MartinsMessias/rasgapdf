@@ -36,7 +36,7 @@ This project and everyone participating in it is governed by the [Code of Conduc
 ### Building the Project
 ```bash
 # Clone the repository
-git clone https://github.com/messiasmartins/rasgapdf.git
+git clone https://huggingface.co/martinsmessias/rasgapdf
 cd rasgapdf
 
 # Build Rust library and CLI in release mode
