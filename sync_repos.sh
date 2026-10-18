@@ -10,7 +10,7 @@ echo "=========================================================="
 
 # 1. GitHub (Git SSH)
 echo ""
-echo "🚀 [1/3] Sincronizando com GitHub (git@github.com:MartinsMessias/rasgapdf.git)..."
+echo "🚀 [1/3] Sincronizando com GitHub (origin main)..."
 git push origin main
 echo "✅ GitHub sincronizado com sucesso!"
 
