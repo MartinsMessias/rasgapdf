@@ -49,6 +49,11 @@ if _lib:
     _lib.rasgapdf_version.argtypes = []
     _lib.rasgapdf_version.restype = ctypes.c_char_p
 
+    # Disponível a partir da 0.1.4 (extração de imagens embutidas em disco).
+    if hasattr(_lib, "rasgapdf_extract_images"):
+        _lib.rasgapdf_extract_images.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+        _lib.rasgapdf_extract_images.restype = ctypes.c_void_p
+
 def version() -> str:
     if not _lib:
         return "0.1.0 (unlinked)"
@@ -108,20 +113,27 @@ def parse_pdf(
     min_table_cols: int = 3,
     col_tolerance: float = 16.0,
     row_tolerance: float = 6.0,
+    extract_images: bool = False,
+    extract_drawings: bool = False,
+    keep_background_fills: bool = False,
 ) -> Dict[str, Any]:
     """
     🎯 Modo 2 (Estruturado): Processa o PDF e retorna o layout espacial hierárquico
     com blocos de texto, linhas, spans e tabelas detectadas.
-    
+
     Args:
         file_path: Caminho do arquivo PDF.
         detect_tables: Se deve detectar matrizes de tabelas automaticamente.
         min_table_cols: Quantidade mínima de colunas para agrupar em tabela.
         col_tolerance: Tolerância horizontal de alinhamento em pontos.
         row_tolerance: Tolerância vertical de linha em pontos.
+        extract_images: Preenche `page["images"]` com os metadados das imagens embutidas.
+        extract_drawings: Preenche `page["drawings"]` com os caminhos vetoriais.
+        keep_background_fills: Mantém preenchimentos que cobrem a página inteira (fundos).
 
     Returns:
-        dict: SpatialDocument contendo páginas, blocos, linhas e tabelas.
+        dict: SpatialDocument contendo páginas, blocos, linhas, tabelas,
+              imagens (opcional) e vetores (opcional).
     """
     if not _lib:
         raise RuntimeError(f"RasgaPDF native library ({_lib_path}) not loaded.")
@@ -135,6 +147,9 @@ def parse_pdf(
         "min_table_columns": min_table_cols,
         "column_tolerance": col_tolerance,
         "row_tolerance": row_tolerance,
+        "extract_images": extract_images,
+        "extract_drawings": extract_drawings,
+        "filter_background_fills": not keep_background_fills,
     }
 
     path_bytes = os.path.abspath(file_path).encode("utf-8")
@@ -153,4 +168,53 @@ def parse_pdf(
     finally:
         _lib.rasgapdf_free_string(res_ptr)
 
-__all__ = ["parse_raw", "parse_pdf", "version"]
+def extract_images(file_path: str, output_dir: str) -> Dict[str, Any]:
+    """
+    🖼️ Extrai os streams originais das imagens embutidas para `output_dir`.
+
+    Nenhum pixel é decodificado: o stream codificado é copiado como está
+    (ex.: `DCTDecode` → `.jpg`). Um `manifest.json` é gravado junto.
+
+    Args:
+        file_path: Caminho do arquivo PDF.
+        output_dir: Pasta destino (criada se não existir).
+
+    Returns:
+        dict: {
+            "total_images": int,
+            "written": int,
+            "images": [
+                {"page": int, "image": {..., "file": str}},
+                ...
+            ]
+        }
+    """
+    if not _lib:
+        raise RuntimeError(f"RasgaPDF native library ({_lib_path}) not loaded.")
+
+    if not hasattr(_lib, "rasgapdf_extract_images"):
+        raise RuntimeError(
+            "A biblioteca nativa carregada não expõe `rasgapdf_extract_images`. "
+            "Recompile/atualize o RasgaPDF."
+        )
+
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"PDF file not found: {file_path}")
+
+    path_bytes = os.path.abspath(file_path).encode("utf-8")
+    dir_bytes = os.path.abspath(output_dir).encode("utf-8")
+
+    res_ptr = _lib.rasgapdf_extract_images(path_bytes, dir_bytes)
+    if not res_ptr:
+        raise RuntimeError("Null pointer returned from native rasgapdf library.")
+
+    try:
+        raw_json = ctypes.string_at(res_ptr).decode("utf-8")
+        parsed = json.loads(raw_json)
+        if isinstance(parsed, dict) and parsed.get("error"):
+            raise RuntimeError(f"RasgaPDF Error: {parsed.get('message')}")
+        return parsed
+    finally:
+        _lib.rasgapdf_free_string(res_ptr)
+
+__all__ = ["parse_raw", "parse_pdf", "extract_images", "version"]

@@ -1,11 +1,110 @@
 use std::path::Path;
 use std::time::Instant;
+
+use mupdf::pdf::{PdfDocument, PdfPage};
 use mupdf::{Document, TextPageFlags};
-use mupdf::page::StextPage;
 use rayon::prelude::*;
 
-use crate::types::*;
+use crate::drawing;
+use crate::image;
 use crate::table::{RawSpan, TableDetector};
+use crate::types::*;
+
+/// DTOs mínimos do JSON de texto estruturado produzido pelo MuPDF.
+///
+/// Substituem `mupdf::page::StextPage`: o `Block` daquele crate exige o campo `lines`,
+/// que **não existe** nos blocos de imagem (`{"type":"image","bbox":{...}}`) nem nos de
+/// estrutura. Com o tipo do crate, a desserialização falhava e a página inteira era
+/// descartada — apagando todo o texto de qualquer página que contivesse uma imagem.
+#[derive(serde::Deserialize)]
+struct RawStextPage {
+    #[serde(default)]
+    blocks: Vec<RawBlock>,
+}
+
+#[derive(serde::Deserialize)]
+struct RawBlock {
+    #[serde(rename = "type")]
+    block_type: String,
+    #[serde(default)]
+    bbox: Option<RawBBox>,
+    #[serde(default)]
+    lines: Vec<RawLine>,
+}
+
+#[derive(serde::Deserialize)]
+struct RawBBox {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+}
+
+impl RawBBox {
+    #[inline]
+    fn x0(&self) -> f32 {
+        self.x as f32
+    }
+
+    #[inline]
+    fn y0(&self) -> f32 {
+        self.y as f32
+    }
+
+    #[inline]
+    fn x1(&self) -> f32 {
+        (self.x + self.w) as f32
+    }
+
+    #[inline]
+    fn y1(&self) -> f32 {
+        (self.y + self.h) as f32
+    }
+
+    #[inline]
+    fn to_bounding_box(&self) -> BoundingBox {
+        BoundingBox::new(self.x0(), self.y0(), self.x1(), self.y1())
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct RawLine {
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    bbox: Option<RawBBox>,
+    #[serde(default)]
+    font: Option<RawFont>,
+}
+
+#[derive(serde::Deserialize)]
+struct RawFont {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    size: f64,
+}
+
+/// União dos bounding boxes das linhas, usada quando o bloco não traz `bbox`.
+fn lines_bounding_box(lines: &[SpatialLine]) -> BoundingBox {
+    let mut x0 = f32::MAX;
+    let mut y0 = f32::MAX;
+    let mut x1 = f32::MIN;
+    let mut y1 = f32::MIN;
+
+    for line in lines {
+        x0 = x0.min(line.bbox.x0);
+        y0 = y0.min(line.bbox.y0);
+        x1 = x1.max(line.bbox.x1);
+        y1 = y1.max(line.bbox.y1);
+    }
+
+    if x0 > x1 {
+        BoundingBox::new(0.0, 0.0, 0.0, 0.0)
+    } else {
+        BoundingBox::new(x0, y0, x1, y1)
+    }
+}
 
 /// Modo 1: Parse Bruto Espacial (Raw X/Y)
 /// Retorna exclusivamente a lista plana e direta de coordenadas físicas de cada elemento
@@ -42,32 +141,32 @@ pub fn parse_raw_file(pdf_path: &str) -> Result<RawSpatialDocument, Box<dyn std:
                 Ok(j) => j,
                 Err(_) => return Vec::new(),
             };
-            let stext: StextPage = match serde_json::from_str(&json_str) {
+            let stext: RawStextPage = match serde_json::from_str(&json_str) {
                 Ok(st) => st,
                 Err(_) => return Vec::new(),
             };
 
             let mut spans = Vec::new();
             for block in stext.blocks {
-                if block.r#type == "text" {
-                    for line in block.lines {
-                        let text = line.text.trim().to_string();
-                        if !text.is_empty() {
-                            let x0 = line.bbox.x as f32;
-                            let y0 = line.bbox.y as f32;
-                            let x1 = x0 + line.bbox.w as f32;
-                            let y1 = y0 + line.bbox.h as f32;
-                            spans.push(RawCoordSpan {
-                                page: page_idx + 1,
-                                x0,
-                                y0,
-                                x1,
-                                y1,
-                                font_size: line.font.size as f32,
-                                font_name: line.font.name,
-                                text,
-                            });
-                        }
+                if block.block_type != "text" {
+                    continue;
+                }
+                for line in block.lines {
+                    let text = line.text.trim().to_string();
+                    if !text.is_empty() {
+                        let Some(line_bbox) = line.bbox.as_ref() else {
+                            continue;
+                        };
+                        spans.push(RawCoordSpan {
+                            page: page_idx + 1,
+                            x0: line_bbox.x0(),
+                            y0: line_bbox.y0(),
+                            x1: line_bbox.x1(),
+                            y1: line_bbox.y1(),
+                            font_size: line.font.as_ref().map(|f| f.size as f32).unwrap_or(0.0),
+                            font_name: line.font.as_ref().map(|f| f.name.clone()).unwrap_or_default(),
+                            text,
+                        });
                     }
                 }
             }
@@ -143,7 +242,15 @@ pub fn parse_file(pdf_path: &str, options: &ParserOptions) -> Result<SpatialDocu
             let page_width = (bounds.x1 - bounds.x0).abs();
             let page_height = (bounds.y1 - bounds.y0).abs();
 
-            let text_page = match page.to_text_page(TextPageFlags::empty()) {
+            // `PRESERVE_IMAGES` faz o MuPDF emitir blocos `{"type":"image"}` no JSON de texto,
+            // permitindo correlacionar os metadados da imagem com seu retângulo de pintura.
+            let text_flags = if options.extract_images {
+                TextPageFlags::PRESERVE_IMAGES
+            } else {
+                TextPageFlags::empty()
+            };
+
+            let text_page = match page.to_text_page(text_flags) {
                 Ok(tp) => tp,
                 Err(_) => return fallback_empty_page(page_idx + 1),
             };
@@ -153,69 +260,84 @@ pub fn parse_file(pdf_path: &str, options: &ParserOptions) -> Result<SpatialDocu
                 Err(_) => return fallback_empty_page(page_idx + 1),
             };
 
-            let stext: StextPage = match serde_json::from_str(&json_str) {
+            let stext: RawStextPage = match serde_json::from_str(&json_str) {
                 Ok(st) => st,
                 Err(_) => return fallback_empty_page(page_idx + 1),
             };
 
             let mut raw_spans: Vec<RawSpan> = Vec::new();
             let mut text_blocks: Vec<SpatialBlock> = Vec::new();
+            let mut image_block_boxes: Vec<BoundingBox> = Vec::new();
             let mut block_counter = 1;
 
             for block in stext.blocks {
-                if block.r#type == "text" {
-                    let mut lines: Vec<SpatialLine> = Vec::new();
+                // Blocos de imagem: sem `lines`, apenas o retângulo de posicionamento.
+                // Usados como aproximação do bbox das imagens embutidas.
+                if block.block_type == "image" {
+                    if let Some(block_bbox) = block.bbox.as_ref() {
+                        image_block_boxes.push(block_bbox.to_bounding_box());
+                    }
+                    continue;
+                }
 
-                    for line in block.lines {
-                        let text = line.text.trim().to_string();
-                        if text.is_empty() {
-                            continue;
-                        }
+                if block.block_type != "text" {
+                    continue;
+                }
 
-                        let x0 = line.bbox.x as f32;
-                        let y0 = line.bbox.y as f32;
-                        let x1 = x0 + line.bbox.w as f32;
-                        let y1 = y0 + line.bbox.h as f32;
-                        let font_size = line.font.size as f32;
+                let block_bbox = block.bbox.as_ref().map(RawBBox::to_bounding_box);
+                let mut lines: Vec<SpatialLine> = Vec::new();
 
-                        raw_spans.push(RawSpan {
-                            x0,
-                            y0,
-                            x1,
-                            y1,
-                            font_size,
-                            text: text.clone(),
-                        });
+                for line in block.lines {
+                    let Some(line_bbox) = line.bbox.as_ref() else {
+                        continue;
+                    };
 
-                        let span = SpatialSpan {
-                            text: text.clone(),
-                            bbox: BoundingBox::new(x0, y0, x1, y1),
-                            font_name: line.font.name.clone(),
-                            font_size,
-                            char_count: text.chars().count(),
-                        };
-
-                        lines.push(SpatialLine {
-                            text,
-                            bbox: BoundingBox::new(x0, y0, x1, y1),
-                            spans: vec![span],
-                        });
+                    let text = line.text.trim().to_string();
+                    if text.is_empty() {
+                        continue;
                     }
 
-                    if !lines.is_empty() {
-                        let bx0 = block.bbox.x as f32;
-                        let by0 = block.bbox.y as f32;
-                        let bx1 = bx0 + block.bbox.w as f32;
-                        let by1 = by0 + block.bbox.h as f32;
+                    let x0 = line_bbox.x0();
+                    let y0 = line_bbox.y0();
+                    let x1 = line_bbox.x1();
+                    let y1 = line_bbox.y1();
+                    let font_size = line.font.as_ref().map(|f| f.size as f32).unwrap_or(0.0);
+                    let font_name = line.font.as_ref().map(|f| f.name.clone()).unwrap_or_default();
 
-                        text_blocks.push(SpatialBlock {
-                            block_id: block_counter,
-                            block_type: "text".to_string(),
-                            bbox: BoundingBox::new(bx0, by0, bx1, by1),
-                            lines,
-                        });
-                        block_counter += 1;
-                    }
+                    raw_spans.push(RawSpan {
+                        x0,
+                        y0,
+                        x1,
+                        y1,
+                        font_size,
+                        text: text.clone(),
+                    });
+
+                    let span = SpatialSpan {
+                        text: text.clone(),
+                        bbox: BoundingBox::new(x0, y0, x1, y1),
+                        font_name,
+                        font_size,
+                        char_count: text.chars().count(),
+                    };
+
+                    lines.push(SpatialLine {
+                        text,
+                        bbox: BoundingBox::new(x0, y0, x1, y1),
+                        spans: vec![span],
+                    });
+                }
+
+                if !lines.is_empty() {
+                    let bbox = block_bbox.unwrap_or_else(|| lines_bounding_box(&lines));
+
+                    text_blocks.push(SpatialBlock {
+                        block_id: block_counter,
+                        block_type: "text".to_string(),
+                        bbox,
+                        lines,
+                    });
+                    block_counter += 1;
                 }
             }
 
@@ -237,14 +359,54 @@ pub fn parse_file(pdf_path: &str, options: &ParserOptions) -> Result<SpatialDocu
                 (Vec::new(), raw_spans.clone())
             };
 
+            // --- Gráficos (opcional): vetores e imagens embutidas ---
+            let mut drawings: Vec<SpatialDrawing> = Vec::new();
+            let mut images: Vec<SpatialImage> = Vec::new();
+            let mut rotation: i32 = 0;
+
+            if options.extract_drawings {
+                if let Ok(found) = page.drawings() {
+                    drawings = drawing::map_drawings(
+                        &found,
+                        page_width,
+                        page_height,
+                        options.filter_background_fills,
+                    );
+                }
+            }
+
+            // A conversão em `PdfPage` também dá acesso à rotação real da página.
+            if let Ok(pdf_page) = PdfPage::try_from(page) {
+                rotation = pdf_page.rotation().unwrap_or(0);
+
+                if options.extract_images {
+                    if let Ok(pdf_doc) = PdfDocument::try_from(local_doc) {
+                        if let Ok(infos) = pdf_page.images() {
+                            for (idx, info) in infos.iter().enumerate() {
+                                let bytes = image::extract_image_bytes(&pdf_doc, info.xref);
+                                let bbox = image_block_boxes.get(idx).cloned();
+                                images.push(image::build_spatial_image(
+                                    idx + 1,
+                                    info,
+                                    bbox,
+                                    bytes.as_deref(),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+
             SpatialPage {
                 page_number: page_idx + 1,
                 width: page_width,
                 height: page_height,
-                rotation: 0,
+                rotation,
                 text_blocks,
                 tables,
                 raw_span_count: raw_spans.len(),
+                images,
+                drawings,
             }
         })
         .collect();
@@ -268,5 +430,7 @@ fn fallback_empty_page(page_number: usize) -> SpatialPage {
         text_blocks: Vec::new(),
         tables: Vec::new(),
         raw_span_count: 0,
+        images: Vec::new(),
+        drawings: Vec::new(),
     }
 }

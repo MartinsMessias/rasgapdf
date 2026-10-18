@@ -86,10 +86,18 @@
           <button id="btnNextPage" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-semibold disabled:opacity-50 transition">Next</button>
         </div>
 
-        <div class="border-t border-slate-800/80 pt-2.5">
+        <div class="border-t border-slate-800/80 pt-2.5 flex flex-col gap-2">
           <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
             <input type="checkbox" id="chkShowBoxes" checked class="rounded accent-cyan-400">
             <span>Show 2D Bounding Boxes (Translucent Cyan)</span>
+          </label>
+          <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" id="chkShowImages" checked class="rounded accent-orange-400">
+            <span>Show Embedded Images (Translucent Orange)</span>
+          </label>
+          <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" id="chkShowVectors" checked class="rounded accent-fuchsia-400">
+            <span>Show Vector Paths (Translucent Magenta)</span>
           </label>
         </div>
       </div>
@@ -105,6 +113,14 @@
           <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
             <span class="text-slate-500 block text-[10px]">Total Spans</span>
             <span id="metricSpans" class="font-mono text-cyan-400 font-bold text-xs">0</span>
+          </div>
+          <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Embedded Images</span>
+            <span id="metricImages" class="font-mono text-orange-400 font-bold text-xs">0</span>
+          </div>
+          <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Vector Paths</span>
+            <span id="metricVectors" class="font-mono text-fuchsia-400 font-bold text-xs">0</span>
           </div>
           <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
             <span class="text-slate-500 block text-[10px]">Canvas Dimensions</span>
@@ -135,6 +151,9 @@
         <button data-tab="tab-json" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
           📄 4. Raw JSON Export
         </button>
+        <button data-tab="tab-images" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          🖼️ 5. Embedded Images
+        </button>
       </div>
 
       <!-- Tab Content 1: 2D Visual Overlay (Primary Tab, Full Height & Width) -->
@@ -142,7 +161,6 @@
         <div class="p-2.5 sm:p-3 bg-slate-950 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs shrink-0">
           <div class="flex items-center gap-2 min-w-0">
             <span class="font-semibold text-slate-200 whitespace-nowrap">Rendered Canvas Overlay</span>
-            <span id="hoverInfo" class="hidden font-mono text-[11px] text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800 truncate max-w-[360px]"></span>
           </div>
           <!-- Responsive Zoom Controls -->
           <div class="flex items-center gap-1 shrink-0">
@@ -155,9 +173,9 @@
         </div>
 
         <!-- Canvas Scroll Area: Starts from Top (y=0), Full Screen Scrollable -->
-        <div id="canvasScrollArea" class="flex-1 w-full h-full min-h-0 overflow-auto p-4 sm:p-6 flex flex-col items-center justify-start bg-slate-950/80">
-          <div id="canvasWrapper" class="shadow-2xl border border-slate-700/80 rounded bg-white overflow-hidden transition-all my-auto max-w-full">
-            <canvas id="pdfCanvas" class="block max-w-full h-auto cursor-crosshair"></canvas>
+        <div id="canvasScrollArea" class="flex-1 w-full h-full min-h-0 overflow-auto p-4 sm:p-6 bg-slate-950/80">
+          <div id="canvasWrapper" class="shadow-2xl border border-slate-700/80 rounded bg-white transition-all mx-auto w-max">
+            <canvas id="pdfCanvas" class="block cursor-crosshair"></canvas>
           </div>
         </div>
       </div>
@@ -213,8 +231,54 @@
         <pre id="jsonViewer" class="flex-1 w-full h-full bg-slate-950 p-4 text-xs font-mono text-cyan-300 overflow-auto"></pre>
       </div>
 
+      <!-- Tab Content 5: Embedded Images -->
+      <div id="tab-images" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs shrink-0">
+          <span class="font-semibold text-slate-300">Embedded Images (decoded client-side from the content stream)</span>
+          <span id="imagesCount" class="text-slate-500 font-mono">0 images on page 1</span>
+        </div>
+        <div id="imagesGrid" class="flex-1 overflow-auto w-full p-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 content-start">
+          <div class="col-span-full p-8 text-center text-slate-500 text-xs">No PDF loaded. Please upload a file or click "Load Built-in Sample PDF".</div>
+        </div>
+      </div>
+
     </section>
   </main>
+
+  <!-- Floating hover tooltip: follows the cursor over the overlay canvas -->
+  <div id="hoverInfo" class="hidden fixed z-40 pointer-events-none font-mono text-[11px] leading-snug text-cyan-200 bg-slate-950/95 px-2.5 py-1.5 rounded border border-cyan-700 shadow-xl truncate max-w-[420px]"></div>
+
+  <!-- File load error toast: without it a rejected PDF fails silently -->
+  <div id="loadError" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[92%] sm:w-auto sm:max-w-lg bg-rose-950/95 border border-rose-700 text-rose-100 rounded-xl px-4 py-3 shadow-2xl">
+    <div class="flex items-start gap-3">
+      <span class="text-base leading-none mt-0.5">⚠️</span>
+      <div class="min-w-0 flex-1">
+        <p id="loadErrorTitle" class="text-sm font-bold text-rose-200">Could not open this PDF</p>
+        <p id="loadErrorMessage" class="text-xs text-rose-200/80 mt-1 break-words"></p>
+      </div>
+      <button id="loadErrorClose" class="shrink-0 text-rose-300/70 hover:text-white text-sm leading-none px-1" title="Dismiss">✕</button>
+    </div>
+  </div>
+
+  <!-- Embedded image lightbox -->
+  <div id="imageLightbox" class="fixed inset-0 z-50 bg-slate-950/90 items-center justify-center p-6" style="display: none;">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col max-w-full max-h-full overflow-hidden">
+      <div class="flex items-start justify-between gap-6 px-4 py-2.5 bg-slate-950 border-b border-slate-800">
+        <div class="flex flex-col min-w-0">
+          <span id="lightboxTitle" class="text-sm font-bold text-orange-400 font-mono truncate">-</span>
+          <span id="lightboxMeta" class="text-[11px] text-slate-400 font-mono truncate">-</span>
+        </div>
+        <button id="lightboxClose" class="shrink-0 text-slate-400 hover:text-slate-100 text-base leading-none px-2 py-1 rounded hover:bg-slate-800 transition" title="Close (Esc)">✕</button>
+      </div>
+      <div class="overflow-auto bg-slate-950 flex items-center justify-center p-4">
+        <canvas id="lightboxCanvas" class="shadow-lg"></canvas>
+      </div>
+      <div class="px-4 py-2 bg-slate-950 border-t border-slate-800 text-[11px] text-slate-400 font-mono flex items-center justify-between gap-4">
+        <span id="lightboxSize">-</span>
+        <span class="text-slate-600">Esc to close · scroll to pan</span>
+      </div>
+    </div>
+  </div>
 
   <!-- Script logic with PDF.js client-side parser -->
   <script>
@@ -223,11 +287,15 @@
     let currentPdfDoc = null;
     let currentPageNum = 1;
     let extractedSpans = [];
+    let extractedImages = [];
+    let extractedDrawings = [];
     let currentRenderScale = 1.0;
     let activeZoomMode = 'fit-page'; // 'fit-page' | 'fit-width' | 'manual'
     let currentViewport = null;
     let cleanPdfBitmap = null;
     let hoveredSpan = null;
+    let hoveredImage = null;
+    let hoveredDrawing = null;
 
     // Elements
     const fileInput = document.getElementById('pdfFileInput');
@@ -238,14 +306,30 @@
     const btnPrevPage = document.getElementById('btnPrevPage');
     const btnNextPage = document.getElementById('btnNextPage');
     const chkShowBoxes = document.getElementById('chkShowBoxes');
+    const chkShowImages = document.getElementById('chkShowImages');
+    const chkShowVectors = document.getElementById('chkShowVectors');
     const coordsTableBody = document.getElementById('coordsTableBody');
     const tableCount = document.getElementById('tableCount');
     const pureTextBox = document.getElementById('pureTextBox');
     const btnCopyText = document.getElementById('btnCopyText');
     const btnDownloadJson = document.getElementById('btnDownloadJson');
     const jsonViewer = document.getElementById('jsonViewer');
+    const imagesGrid = document.getElementById('imagesGrid');
+    const imagesCount = document.getElementById('imagesCount');
+    const imageLightbox = document.getElementById('imageLightbox');
+    const lightboxCanvas = document.getElementById('lightboxCanvas');
+    const lightboxTitle = document.getElementById('lightboxTitle');
+    const lightboxMeta = document.getElementById('lightboxMeta');
+    const lightboxSize = document.getElementById('lightboxSize');
+    const lightboxClose = document.getElementById('lightboxClose');
     const metricLatency = document.getElementById('metricLatency');
     const metricSpans = document.getElementById('metricSpans');
+    const metricImages = document.getElementById('metricImages');
+    const metricVectors = document.getElementById('metricVectors');
+    const loadError = document.getElementById('loadError');
+    const loadErrorTitle = document.getElementById('loadErrorTitle');
+    const loadErrorMessage = document.getElementById('loadErrorMessage');
+    const loadErrorClose = document.getElementById('loadErrorClose');
     const metricDims = document.getElementById('metricDims');
     const hoverInfo = document.getElementById('hoverInfo');
     const canvasScrollArea = document.getElementById('canvasScrollArea');
@@ -306,8 +390,8 @@
       const vp1 = page.getViewport({ scale: 1.0 });
 
       // Available container space
-      const availW = Math.max(canvasScrollArea.clientWidth - 40, 280);
-      const availH = Math.max(canvasScrollArea.clientHeight - 40, 320);
+      const availW = Math.max(canvasScrollArea.clientWidth - 52, 280);
+      const availH = Math.max(canvasScrollArea.clientHeight - 52, 320);
 
       if (mode === 'fit-page') {
         // Fits both width and height cleanly without clipping
@@ -384,29 +468,91 @@
       }
     });
 
-    async function loadPdfFile(file, name = null) {
-      const fileName = name || file.name || 'document.pdf';
-      const arrayBuffer = await file.arrayBuffer();
-      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-      currentPdfDoc = await loadingTask.promise;
+    function showLoadError(err, fileName) {
+      const name = (err && err.name) || '';
+      const msg = (err && err.message) || String(err || 'Unknown error');
 
-      pageSlider.max = currentPdfDoc.numPages;
-      pageSlider.value = 1;
-      currentPageNum = 1;
+      let title = 'Could not open this PDF';
+      let text = msg;
 
-      // On mobile devices, default to fit-width; on desktop, default to fit-page
-      if (window.innerWidth < 768) {
-        activeZoomMode = 'fit-width';
-      } else {
-        activeZoomMode = 'fit-page';
+      if (name === 'PasswordException' || /password/i.test(msg)) {
+        title = 'Password-protected PDF';
+        text = 'This file is encrypted with a password. Remove the password (or export an unprotected copy) and try again.';
+      } else if (/encryption|EBX_HANDLER|ADEPT|encrypted/i.test(msg)) {
+        title = 'This PDF is DRM-protected';
+        text = "It uses Adobe ADEPT / EBX_HANDLER encryption (typical of e-books). The content is locked by the store's key, so no PDF library can read it without removing the DRM. Try an unprotected copy.";
+      } else if (name === 'InvalidPDFException' || /invalid pdf/i.test(msg)) {
+        title = 'This file is not a valid PDF';
+        text = 'The file looks corrupted or is not a PDF at all. Try re-exporting it.';
       }
 
-      currentRenderScale = await calculateAutoZoom(activeZoomMode);
-      updateZoomButtons();
-      await renderCurrentPage();
+      if (fileName) text = fileName + ' — ' + text;
+
+      loadErrorTitle.textContent = title;
+      loadErrorMessage.textContent = text;
+      loadError.classList.remove('hidden');
+      console.error('loadPdfFile failed:', err);
     }
 
+    loadErrorClose.addEventListener('click', () => loadError.classList.add('hidden'));
+
+    async function loadPdfFile(file, name = null) {
+      const fileName = name || file.name || 'document.pdf';
+
+      try {
+        loadError.classList.add('hidden');
+
+        const arrayBuffer = await file.arrayBuffer();
+        // Uint8Array lets pdf.js copy the bytes instead of adopting a detached buffer.
+        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+        currentPdfDoc = await loadingTask.promise;
+
+        pageSlider.max = currentPdfDoc.numPages;
+        pageSlider.value = 1;
+        currentPageNum = 1;
+
+        // On mobile devices, default to fit-width; on desktop, default to fit-page
+        if (window.innerWidth < 768) {
+          activeZoomMode = 'fit-width';
+        } else {
+          activeZoomMode = 'fit-page';
+        }
+
+        currentRenderScale = await calculateAutoZoom(activeZoomMode);
+        updateZoomButtons();
+        await renderCurrentPage();
+      } catch (e) {
+        showLoadError(e, fileName);
+      }
+    }
+
+    let renderInFlight = false;
+    let renderQueued = false;
+
     async function renderCurrentPage() {
+      if (!currentPdfDoc) return;
+
+      // Serialize renders: pdf.js refuses two render() calls on the same canvas,
+      // and zoom / resize / page-change events can fire while a page is still
+      // painting. Without this the later call dies silently and leaves the
+      // extracted arrays empty.
+      if (renderInFlight) {
+        renderQueued = true;
+        return;
+      }
+
+      renderInFlight = true;
+      try {
+        do {
+          renderQueued = false;
+          await renderPageOnce();
+        } while (renderQueued && currentPdfDoc);
+      } finally {
+        renderInFlight = false;
+      }
+    }
+
+    async function renderPageOnce() {
       if (!currentPdfDoc) return;
 
       const t0 = performance.now();
@@ -498,14 +644,379 @@
         return a.x0 - b.x0;
       });
 
+      await extractPageGraphics(page, viewport);
+
       const parseTime = (performance.now() - t0).toFixed(2);
       metricLatency.textContent = `${parseTime} ms`;
       metricSpans.textContent = extractedSpans.length;
+      metricImages.textContent = extractedImages.length;
+      metricVectors.textContent = extractedDrawings.length;
 
       updateTable();
       updateTextDump();
+      updateImageGallery();
       drawCanvas(null);
       updateJsonViewer();
+    }
+
+    // ---------------------------------------------------------------------------
+    // Embedded image extraction (client-side, from the content stream)
+    //
+    // pdf.js paints EVERY image into the unit square [0,1]x[0,1] transformed by the
+    // current CTM. In canvas.js: paintInlineImageXObject does
+    //     ctx.scale(1 / width, -1 / height);
+    //     drawImage(..., 0, -height, width, height);
+    // which maps the image onto exactly (0,0)-(1,1) in the current CTM space.
+    // paintImageXObjectRepeat uses [scaleX, 0, 0, scaleY, x, y] per position, and
+    // paintSolidColorImageMask fills the same unit square — same rule for all.
+    // So: replay save/restore/transform and take the unit square on image ops.
+    // ---------------------------------------------------------------------------
+    const MAT_IDENTITY = [1, 0, 0, 1, 0, 0];
+
+    function matMul(m, n) {
+      return [
+        m[0] * n[0] + m[2] * n[1],
+        m[1] * n[0] + m[3] * n[1],
+        m[0] * n[2] + m[2] * n[3],
+        m[1] * n[2] + m[3] * n[3],
+        m[0] * n[4] + m[2] * n[5] + m[4],
+        m[1] * n[4] + m[3] * n[5] + m[5]
+      ];
+    }
+
+    function unitSquareCorners(m) {
+      return [[0, 0], [1, 0], [0, 1], [1, 1]].map(p => pdfjsLib.Util.applyTransform(p, m));
+    }
+
+    function resolveImageData(page, objId) {
+      return new Promise(resolve => {
+        const maps = [page.objs, page.commonObjs].filter(Boolean);
+
+        for (const map of maps) {
+          let value = null;
+          try {
+            value = map.get(objId);
+          } catch (e) {
+            value = null;
+          }
+          if (value) {
+            resolve(value);
+            return;
+          }
+        }
+
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            resolve(null);
+          }
+        }, 2000);
+
+        for (const map of maps) {
+          try {
+            map.get(objId, v => {
+              if (!settled) {
+                settled = true;
+                clearTimeout(timer);
+                resolve(v);
+              }
+            });
+          } catch (e) {
+            /* ignore */
+          }
+        }
+      });
+    }
+
+    function decodedImageToCanvas(img) {
+      if (!img || !img.width || !img.height) return null;
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const cx = c.getContext('2d');
+
+        if (img.bitmap) {
+          cx.drawImage(img.bitmap, 0, 0);
+          return c;
+        }
+        if (img.data && img.data.length === img.width * img.height * 4) {
+          cx.putImageData(new ImageData(new Uint8ClampedArray(img.data), img.width, img.height), 0, 0);
+          return c;
+        }
+      } catch (e) {
+        console.warn('Falha ao decodificar imagem embutida:', e);
+      }
+      return null;
+    }
+
+    function cropFromPage(paint) {
+      if (!cleanPdfBitmap) return null;
+      try {
+        const x = Math.max(0, Math.round(paint.vx));
+        const y = Math.max(0, Math.round(paint.vy));
+        const w = Math.max(1, Math.round(paint.vw));
+        const h = Math.max(1, Math.round(paint.vh));
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        c.getContext('2d').drawImage(cleanPdfBitmap, x, y, w, h, 0, 0, w, h);
+        return c;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    async function extractPageGraphics(page, viewport) {
+      extractedImages = [];
+      extractedDrawings = [];
+
+      let opList;
+      try {
+        opList = await page.getOperatorList();
+      } catch (e) {
+        console.warn('getOperatorList falhou:', e);
+        return;
+      }
+
+      const ops = pdfjsLib.OPS;
+      const found = [];
+      const foundDrawings = [];
+      let ctm = MAT_IDENTITY.slice();
+      const stack = [];
+      let pendingPath = null;
+      let fillColor = null;
+      let strokeColor = null;
+
+      const rgbToHex = (a) => {
+        if (!a || a.length < 3 || typeof a[0] !== 'number') return null;
+        // pdf.js emits 0-255 ints; keep float support in case a build changes that.
+        const k = (a[0] > 1 || a[1] > 1 || a[2] > 1) ? 1 : 255;
+        const to = (v) => Math.max(0, Math.min(255, Math.round(v * k))).toString(16).padStart(2, '0');
+        return '#' + to(a[0]) + to(a[1]) + to(a[2]);
+      };
+
+      // pdf.js reports path bounds as [minX, maxX, minY, maxY]; stay defensive
+      // about the other ordering so a future version cannot silently break this.
+      const readMinMax = (mm) => {
+        let x0 = mm[0], x1 = mm[1], y0 = mm[2], y1 = mm[3];
+        if (x1 < x0 || y1 < y0) {
+          x0 = mm[0]; y0 = mm[1]; x1 = mm[2]; y1 = mm[3];
+        }
+        return [x0, y0, x1, y1];
+      };
+
+      for (let i = 0; i < opList.fnArray.length; i++) {
+        const fn = opList.fnArray[i];
+        const args = opList.argsArray[i];
+
+        if (fn === ops.save) {
+          stack.push(ctm.slice());
+        } else if (fn === ops.restore) {
+          ctm = stack.pop() || MAT_IDENTITY.slice();
+        } else if (fn === ops.transform) {
+          ctm = matMul(ctm, args);
+        } else if (fn === ops.paintFormXObjectBegin || fn === ops.beginGroup) {
+          stack.push(ctm.slice());
+          if (args && Array.isArray(args[0]) && args[0].length === 6) {
+            ctm = matMul(ctm, args[0]);
+          }
+        } else if (fn === ops.paintFormXObjectEnd || fn === ops.endGroup) {
+          ctm = stack.pop() || MAT_IDENTITY.slice();
+        } else if (fn === ops.paintImageXObject) {
+          found.push({ key: String(args[0]), objId: args[0], inline: null, matrix: ctm.slice() });
+        } else if (fn === ops.paintInlineImageXObject) {
+          found.push({ key: 'inline:' + i, objId: null, inline: args[0], matrix: ctm.slice() });
+        } else if (fn === ops.paintImageXObjectRepeat) {
+          // args: [objId, scaleX, scaleY, positions]
+          for (let p = 0; p < args[3].length; p += 2) {
+            found.push({
+              key: String(args[0]),
+              objId: args[0],
+              inline: null,
+              matrix: matMul(ctm, [args[1], 0, 0, args[2], args[3][p], args[3][p + 1]])
+            });
+          }
+        } else if (fn === ops.constructPath) {
+          // args: [pathOps, pathArgs, minMax]
+          const mm = args[2];
+          pendingPath = (mm && mm.length === 4)
+            ? { bounds: readMinMax(mm), matrix: ctm.slice() }
+            : null;
+        } else if (fn === ops.fill || fn === ops.eoFill || fn === ops.fillStroke ||
+                   fn === ops.eoFillStroke || fn === ops.closeFillStroke ||
+                   fn === ops.closeEOFillStroke || fn === ops.stroke || fn === ops.closeStroke) {
+          if (pendingPath) {
+            const doFill = (fn === ops.fill || fn === ops.eoFill || fn === ops.fillStroke ||
+                            fn === ops.eoFillStroke || fn === ops.closeFillStroke ||
+                            fn === ops.closeEOFillStroke);
+            const doStroke = (fn === ops.stroke || fn === ops.closeStroke || fn === ops.fillStroke ||
+                              fn === ops.eoFillStroke || fn === ops.closeFillStroke ||
+                              fn === ops.closeEOFillStroke);
+            foundDrawings.push({
+              type: (doFill && doStroke) ? 'fill+stroke' : (doFill ? 'fill' : 'stroke'),
+              bounds: pendingPath.bounds,
+              matrix: pendingPath.matrix,
+              fill: doFill ? fillColor : null,
+              stroke: doStroke ? strokeColor : null
+            });
+            pendingPath = null;
+          }
+        } else if (fn === ops.endPath || fn === ops.clip) {
+          pendingPath = null;
+        } else if (fn === ops.setFillRGBColor) {
+          fillColor = rgbToHex(args);
+        } else if (fn === ops.setStrokeRGBColor) {
+          strokeColor = rgbToHex(args);
+        }
+      }
+
+      // Vector paths -> canvas-space boxes (same conversion as text/images).
+      for (const d of foundDrawings) {
+        const b = d.bounds;
+        const corners = [
+          [b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]
+        ].map(p => pdfjsLib.Util.applyTransform(
+          pdfjsLib.Util.applyTransform(p, d.matrix),
+          viewport.transform
+        ));
+
+        const xs = corners.map(c => c[0]);
+        const ys = corners.map(c => c[1]);
+        const vx = Math.min.apply(null, xs);
+        const vy = Math.min.apply(null, ys);
+        const rawW = Math.max.apply(null, xs) - vx;
+        const rawH = Math.max.apply(null, ys) - vy;
+        // Degenerate paths (straight lines) get a 1px floor so the box is visible,
+        // but the reported points keep the true extent so they match the Rust side.
+        const vw = Math.max(rawW, 1);
+        const vh = Math.max(rawH, 1);
+
+        extractedDrawings.push({
+          type: d.type,
+          fill: d.fill,
+          stroke: d.stroke,
+          paint: { vx: vx, vy: vy, vw: vw, vh: vh },
+          pt: {
+            x0: Number((vx / currentRenderScale).toFixed(2)),
+            y0: Number((vy / currentRenderScale).toFixed(2)),
+            x1: Number(((vx + rawW) / currentRenderScale).toFixed(2)),
+            y1: Number(((vy + rawH) / currentRenderScale).toFixed(2))
+          }
+        });
+      }
+
+      // Dedupe by resource: an image painted N times is still one embedded image.
+      const byKey = new Map();
+      for (const item of found) {
+        const corners = unitSquareCorners(item.matrix).map(c =>
+          pdfjsLib.Util.applyTransform(c, viewport.transform)
+        );
+        const xs = corners.map(c => c[0]);
+        const ys = corners.map(c => c[1]);
+        const vx = Math.min.apply(null, xs);
+        const vy = Math.min.apply(null, ys);
+        const vw = Math.max(Math.max.apply(null, xs) - vx, 1);
+        const vh = Math.max(Math.max.apply(null, ys) - vy, 1);
+
+        let entry = byKey.get(item.key);
+        if (!entry) {
+          entry = {
+            objId: item.objId,
+            inline: item.inline,
+            count: 0,
+            paint: { vx: vx, vy: vy, vw: vw, vh: vh },
+            pt: {
+              x0: Number((vx / currentRenderScale).toFixed(2)),
+              y0: Number((vy / currentRenderScale).toFixed(2)),
+              x1: Number(((vx + vw) / currentRenderScale).toFixed(2)),
+              y1: Number(((vy + vh) / currentRenderScale).toFixed(2))
+            },
+            px: null,
+            thumb: null,
+            cropped: false
+          };
+          byKey.set(item.key, entry);
+        }
+        entry.count += 1;
+      }
+
+      for (const entry of byKey.values()) {
+        const img = entry.inline ? entry.inline : await resolveImageData(page, entry.objId);
+        if (img) {
+          entry.px = { width: img.width, height: img.height };
+          entry.thumb = decodedImageToCanvas(img);
+        }
+        if (!entry.thumb) {
+          entry.thumb = cropFromPage(entry.paint);
+          entry.cropped = true;
+        }
+        extractedImages.push(entry);
+      }
+
+      // Keep the reading order stable (top-to-bottom, left-to-right).
+      extractedImages.sort((a, b) => (Math.round(a.pt.y0 / 6) - Math.round(b.pt.y0 / 6)) || (a.pt.x0 - b.pt.x0));
+    }
+
+    function updateImageGallery() {
+      imagesGrid.innerHTML = '';
+      imagesCount.textContent = `${extractedImages.length} image(s) on page ${currentPageNum}`;
+
+      if (extractedImages.length === 0) {
+        imagesGrid.innerHTML = '<div class="col-span-full p-8 text-center text-slate-500 text-xs">No embedded images found on this page.</div>';
+        return;
+      }
+
+      extractedImages.forEach((im, idx) => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex flex-col cursor-pointer group hover:border-orange-500/70 transition focus:outline-none focus:ring-2 focus:ring-orange-500/60';
+        card.title = 'Click to view full size';
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label',
+          'Enlarge image ' + (idx + 1) +
+          (im.px ? ', ' + im.px.width + ' by ' + im.px.height + ' pixels' : ''));
+        card.addEventListener('click', () => openLightbox(im, idx));
+        card.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openLightbox(im, idx);
+          }
+        });
+
+        const frame = document.createElement('div');
+        frame.className = 'relative bg-slate-900/60 flex items-center justify-center p-2 h-44';
+        if (im.thumb) {
+          im.thumb.className = 'max-h-full max-w-full object-contain shadow';
+          frame.appendChild(im.thumb);
+        } else {
+          frame.innerHTML = '<span class="text-slate-500 text-xs">preview unavailable</span>';
+        }
+
+        const hint = document.createElement('span');
+        hint.className = 'absolute bottom-1.5 right-2 text-[10px] font-mono text-slate-300 bg-slate-950/85 border border-slate-700 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition';
+        hint.textContent = '🔍 enlarge';
+        frame.appendChild(hint);
+
+        const label = im.objId !== null && im.objId !== undefined
+          ? 'XObject ' + im.objId
+          : 'inline image';
+
+        const meta = document.createElement('div');
+        meta.className = 'p-2.5 text-[11px] font-mono text-slate-300 flex flex-col gap-1 border-t border-slate-800';
+        meta.innerHTML =
+          '<span class="text-orange-400 font-bold">#' + (idx + 1) + ' ' + escapeHtml(String(label)) + '</span>' +
+          '<span>pixels: <span class="coord-font">' + (im.px ? im.px.width + ' x ' + im.px.height : 'unknown') + '</span></span>' +
+          '<span>bbox pt: <span class="coord-font">[' + im.pt.x0 + ', ' + im.pt.y0 + ', ' + im.pt.x1 + ', ' + im.pt.y1 + ']</span></span>' +
+          '<span>painted: <span class="coord-font">' + im.count + 'x</span>' +
+          (im.cropped ? ' <span class="text-amber-400">(crop fallback)</span>' : '') + '</span>' +
+          '<span class="text-slate-500">🔍 click to enlarge</span>';
+
+        card.appendChild(frame);
+        card.appendChild(meta);
+        imagesGrid.appendChild(card);
+      });
     }
 
     function drawCanvas(highlightSpan = null) {
@@ -513,6 +1024,39 @@
 
       // Draw clean base PDF
       pdfCtx.drawImage(cleanPdfBitmap, 0, 0);
+
+      // Embedded image placement (orange); the hovered image gets a stronger tint
+      if (chkShowImages.checked) {
+        extractedImages.forEach(im => {
+          const isHovered = (im === hoveredImage);
+          pdfCtx.fillStyle = isHovered ? 'rgba(249, 115, 22, 0.40)' : 'rgba(249, 115, 22, 0.22)';
+          pdfCtx.strokeStyle = isHovered ? 'rgba(251, 146, 60, 1.0)' : 'rgba(249, 115, 22, 0.95)';
+          pdfCtx.lineWidth = isHovered
+            ? Math.max(2.5, 3.2 * (currentRenderScale / 1.5))
+            : Math.max(1.5, 2.0 * (currentRenderScale / 1.5));
+          pdfCtx.fillRect(im.paint.vx, im.paint.vy, im.paint.vw, im.paint.vh);
+          pdfCtx.strokeRect(im.paint.vx, im.paint.vy, im.paint.vw, im.paint.vh);
+        });
+      }
+
+      // Vector paths (magenta); the hovered path gets a stronger stroke
+      if (chkShowVectors.checked) {
+        extractedDrawings.forEach(d => {
+          const isHovered = (d === hoveredDrawing);
+          const px = d.paint;
+
+          if (px.vw > 1.5 && px.vh > 1.5) {
+            pdfCtx.fillStyle = isHovered ? 'rgba(217, 70, 239, 0.24)' : 'rgba(217, 70, 239, 0.10)';
+            pdfCtx.fillRect(px.vx, px.vy, px.vw, px.vh);
+          }
+
+          pdfCtx.strokeStyle = isHovered ? 'rgba(240, 171, 252, 1.0)' : 'rgba(217, 70, 239, 0.85)';
+          pdfCtx.lineWidth = isHovered
+            ? Math.max(2.0, 2.6 * (currentRenderScale / 1.5))
+            : Math.max(1.0, 1.2 * (currentRenderScale / 1.5));
+          pdfCtx.strokeRect(px.vx, px.vy, px.vw, px.vh);
+        });
+      }
 
       if (!chkShowBoxes.checked) return;
 
@@ -534,9 +1078,59 @@
       });
     }
 
-    // Interactive Hover on Canvas
+    // Interactive Hover on Canvas (text spans + embedded images).
+    // The tooltip is position:fixed and follows the cursor.
+    const TOOLTIP_MARGIN = 8;
+    const TOOLTIP_OFFSET = 14;
+
+    function positionTooltip(clientX, clientY) {
+      const box = hoverInfo.getBoundingClientRect();
+      let x = clientX + TOOLTIP_OFFSET;
+      let y = clientY + TOOLTIP_OFFSET;
+
+      if (x + box.width + TOOLTIP_MARGIN > window.innerWidth) {
+        x = clientX - TOOLTIP_OFFSET - box.width;
+      }
+      if (y + box.height + TOOLTIP_MARGIN > window.innerHeight) {
+        y = clientY - TOOLTIP_OFFSET - box.height;
+      }
+
+      hoverInfo.style.left = Math.max(TOOLTIP_MARGIN, Math.round(x)) + 'px';
+      hoverInfo.style.top = Math.max(TOOLTIP_MARGIN, Math.round(y)) + 'px';
+    }
+
+    function setTooltipKind(kind) {
+      hoverInfo.classList.remove(
+        'text-cyan-200', 'border-cyan-700',
+        'text-orange-200', 'border-orange-700',
+        'text-fuchsia-200', 'border-fuchsia-700'
+      );
+      if (kind === 'image') {
+        hoverInfo.classList.add('text-orange-200', 'border-orange-700');
+      } else if (kind === 'vector') {
+        hoverInfo.classList.add('text-fuchsia-200', 'border-fuchsia-700');
+      } else {
+        hoverInfo.classList.add('text-cyan-200', 'border-cyan-700');
+      }
+    }
+
+    function drawingTooltipText(d) {
+      const col = d.type === 'stroke' ? d.stroke : (d.fill || d.stroke);
+      return 'path · ' + d.type +
+        (col ? ' · ' + col : '') +
+        ' · bbox [' + d.pt.x0 + ', ' + d.pt.y0 + ', ' + d.pt.x1 + ', ' + d.pt.y1 + ']';
+    }
+
+    function imageTooltipText(im) {
+      const label = (im.objId !== null && im.objId !== undefined) ? 'XObject ' + im.objId : 'inline image';
+      const px = im.px ? (im.px.width + '×' + im.px.height + ' px') : 'unknown size';
+      return label + ' · ' + px +
+        ' · bbox [' + im.pt.x0 + ', ' + im.pt.y0 + ', ' + im.pt.x1 + ', ' + im.pt.y1 + ']' +
+        ' · painted ' + im.count + 'x';
+    }
+
     pdfCanvas.addEventListener('mousemove', (e) => {
-      if (!currentViewport || extractedSpans.length === 0) return;
+      if (!currentViewport) return;
 
       const rect = pdfCanvas.getBoundingClientRect();
       const scaleX = pdfCanvas.width / rect.width;
@@ -544,28 +1138,65 @@
       const mouseX = (e.clientX - rect.left) * scaleX;
       const mouseY = (e.clientY - rect.top) * scaleY;
 
-      // Find span under cursor
-      const found = extractedSpans.find(s => 
+      // Text spans are the smaller targets, so they win when they overlap an image.
+      const span = extractedSpans.find(s =>
         mouseX >= s.vx0 && mouseX <= s.vx0 + s.vw &&
         mouseY >= s.vy0 && mouseY <= s.vy0 + s.vh
-      );
+      ) || null;
 
-      if (found !== hoveredSpan) {
-        hoveredSpan = found;
+      const img = (span || !chkShowImages.checked) ? null : (extractedImages.find(im =>
+        mouseX >= im.paint.vx && mouseX <= im.paint.vx + im.paint.vw &&
+        mouseY >= im.paint.vy && mouseY <= im.paint.vy + im.paint.vh
+      ) || null);
+
+      // Smallest matching path wins: the table's outer rect would otherwise
+      // swallow its own grid lines, which are far more useful to inspect.
+      const drw = (span || img || !chkShowVectors.checked) ? null : (() => {
+        let best = null;
+        let bestArea = Infinity;
+        for (const d of extractedDrawings) {
+          const p = d.paint;
+          if (mouseX < p.vx || mouseX > p.vx + p.vw || mouseY < p.vy || mouseY > p.vy + p.vh) continue;
+          const area = p.vw * p.vh;
+          if (area < bestArea) {
+            bestArea = area;
+            best = d;
+          }
+        }
+        return best;
+      })();
+
+      if (span !== hoveredSpan || img !== hoveredImage || drw !== hoveredDrawing) {
+        hoveredSpan = span;
+        hoveredImage = img;
+        hoveredDrawing = drw;
         drawCanvas(hoveredSpan);
 
         if (hoveredSpan) {
-          hoverInfo.classList.remove('hidden');
+          setTooltipKind('text');
           hoverInfo.textContent = `[${hoveredSpan.x0.toFixed(1)}, ${hoveredSpan.y0.toFixed(1)}, ${hoveredSpan.x1.toFixed(1)}, ${hoveredSpan.y1.toFixed(1)}] "${hoveredSpan.text}"`;
+          hoverInfo.classList.remove('hidden');
+        } else if (hoveredImage) {
+          setTooltipKind('image');
+          hoverInfo.textContent = imageTooltipText(hoveredImage);
+          hoverInfo.classList.remove('hidden');
+        } else if (hoveredDrawing) {
+          setTooltipKind('vector');
+          hoverInfo.textContent = drawingTooltipText(hoveredDrawing);
+          hoverInfo.classList.remove('hidden');
         } else {
           hoverInfo.classList.add('hidden');
         }
       }
+
+      if (hoveredSpan || hoveredImage || hoveredDrawing) positionTooltip(e.clientX, e.clientY);
     });
 
     pdfCanvas.addEventListener('mouseleave', () => {
-      if (hoveredSpan) {
+      if (hoveredSpan || hoveredImage || hoveredDrawing) {
         hoveredSpan = null;
+        hoveredImage = null;
+        hoveredDrawing = null;
         drawCanvas(null);
         hoverInfo.classList.add('hidden');
       }
@@ -615,6 +1246,8 @@
         total_pages: currentPdfDoc ? currentPdfDoc.numPages : 1,
         current_page: currentPageNum,
         total_spans: extractedSpans.length,
+        total_images: extractedImages.length,
+        total_drawings: extractedDrawings.length,
         spans: extractedSpans.map(s => ({
           page: s.page,
           x0: s.x0,
@@ -624,6 +1257,27 @@
           font_size: s.font_size,
           font_name: s.font_name,
           text: s.text
+        })),
+        images: extractedImages.map(im => ({
+          page: currentPageNum,
+          name: (im.objId !== null && im.objId !== undefined) ? 'XObject ' + im.objId : 'inline image',
+          x0: im.pt.x0,
+          y0: im.pt.y0,
+          x1: im.pt.x1,
+          y1: im.pt.y1,
+          pixel_width: im.px ? im.px.width : null,
+          pixel_height: im.px ? im.px.height : null,
+          painted: im.count
+        })),
+        drawings: extractedDrawings.map(d => ({
+          page: currentPageNum,
+          type: d.type,
+          fill_color: d.fill,
+          stroke_color: d.stroke,
+          x0: d.pt.x0,
+          y0: d.pt.y0,
+          x1: d.pt.x1,
+          y1: d.pt.y1
         }))
       };
       jsonViewer.textContent = JSON.stringify(doc, null, 2);
@@ -635,11 +1289,64 @@
       return div.innerHTML;
     }
 
+    // ---------------------------------------------------------------------------
+    // Embedded image lightbox (click a gallery thumbnail to inspect it 1:1)
+    // ---------------------------------------------------------------------------
+    function openLightbox(im, index) {
+      if (!im || !im.thumb) return;
+
+      lightboxCanvas.width = im.thumb.width;
+      lightboxCanvas.height = im.thumb.height;
+      const lctx = lightboxCanvas.getContext('2d');
+      lctx.clearRect(0, 0, lightboxCanvas.width, lightboxCanvas.height);
+      lctx.drawImage(im.thumb, 0, 0);
+
+      const label = (im.objId !== null && im.objId !== undefined) ? 'XObject ' + im.objId : 'inline image';
+      lightboxTitle.textContent = '#' + (index + 1) + '  ' + label;
+      lightboxMeta.textContent =
+        'bbox pt [' + im.pt.x0 + ', ' + im.pt.y0 + ', ' + im.pt.x1 + ', ' + im.pt.y1 + ']' +
+        ' · painted ' + im.count + 'x' +
+        (im.cropped ? ' · crop fallback' : '');
+      lightboxSize.textContent = im.px
+        ? (im.px.width + ' x ' + im.px.height + ' px')
+        : (im.thumb.width + ' x ' + im.thumb.height + ' px');
+
+      // Enlarge small images so the embedded pixels are actually visible.
+      const maxW = Math.max(window.innerWidth * 0.85, 320);
+      const maxH = Math.max(window.innerHeight * 0.72, 240);
+      const k = Math.min(maxW / im.thumb.width, maxH / im.thumb.height);
+      const scale = k >= 1 ? Math.min(k, 8) : 1;
+
+      lightboxCanvas.style.width = Math.round(im.thumb.width * scale) + 'px';
+      lightboxCanvas.style.height = Math.round(im.thumb.height * scale) + 'px';
+      lightboxCanvas.style.imageRendering = scale >= 2 ? 'pixelated' : 'auto';
+
+      imageLightbox.style.display = 'flex';
+    }
+
+    function closeLightbox() {
+      imageLightbox.style.display = 'none';
+    }
+
+    lightboxClose.addEventListener('click', closeLightbox);
+    imageLightbox.addEventListener('click', (e) => {
+      if (e.target === imageLightbox) closeLightbox();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && imageLightbox.style.display !== 'none') closeLightbox();
+    });
+
     // Navigation Controls
     btnPrevPage.addEventListener('click', () => { if (currentPageNum > 1) { currentPageNum--; renderCurrentPage(); } });
     btnNextPage.addEventListener('click', () => { if (currentPdfDoc && currentPageNum < currentPdfDoc.numPages) { currentPageNum++; renderCurrentPage(); } });
     pageSlider.addEventListener('input', (e) => { currentPageNum = parseInt(e.target.value); renderCurrentPage(); });
     chkShowBoxes.addEventListener('change', () => {
+      drawCanvas(hoveredSpan);
+    });
+    chkShowImages.addEventListener('change', () => {
+      drawCanvas(hoveredSpan);
+    });
+    chkShowVectors.addEventListener('change', () => {
       drawCanvas(hoveredSpan);
     });
 

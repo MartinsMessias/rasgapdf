@@ -51,6 +51,7 @@ if (sharedLibPath) {
     ffiLib = {
       parseRaw: lib.func('char* rasgapdf_parse_raw(str)'),
       parseFile: lib.func('char* rasgapdf_parse_file_options(str, str)'),
+      extractImages: lib.func('char* rasgapdf_extract_images(str, str)'),
       freeString: lib.func('void rasgapdf_free_string(char*)'),
       version: lib.func('str rasgapdf_version()')
     };
@@ -95,7 +96,10 @@ function parseRaw(filePath) {
 /**
  * 🎯 Modo 2 (Estruturado): Processa o PDF e retorna a árvore geométrica hierárquica
  * com blocos de texto, linhas, spans e tabelas detectadas.
- * 
+ *
+ * Passe `extract_images: true` para preencher `page.images` e
+ * `extract_drawings: true` para preencher `page.drawings` (ambos desligados por padrão).
+ *
  * @param {string} filePath Caminho do arquivo PDF
  * @param {object} options Opções de detecção espacial
  * @returns {object} SpatialDocument
@@ -112,6 +116,9 @@ function parsePdf(filePath, options = {}) {
     min_table_columns: 3,
     column_tolerance: 16.0,
     row_tolerance: 6.0,
+    extract_images: false,
+    extract_drawings: false,
+    filter_background_fills: true,
     ...options
   };
 
@@ -133,11 +140,58 @@ function parsePdf(filePath, options = {}) {
   const binPath = findBinary();
   const args = [absPath];
   if (!defaultOptions.detect_tables) args.push('--no-tables');
+  args.push('--min-table-cols', String(defaultOptions.min_table_columns));
   args.push('--col-tolerance', String(defaultOptions.column_tolerance));
   args.push('--row-tolerance', String(defaultOptions.row_tolerance));
+  if (defaultOptions.extract_images) args.push('--images');
+  if (defaultOptions.extract_drawings) args.push('--drawings');
+  if (defaultOptions.filter_background_fills === false) args.push('--keep-backgrounds');
 
   const stdout = execFileSync(binPath, args, { encoding: 'utf-8', maxBuffer: 100 * 1024 * 1024 });
   return JSON.parse(stdout);
+}
+
+/**
+ * 🖼️ Extrai os streams originais das imagens embutidas para `outputDir`.
+ *
+ * Nenhum pixel é decodificado: o stream codificado é copiado como está
+ * (ex.: `DCTDecode` → `.jpg`). Um `manifest.json` é gravado junto.
+ *
+ * @param {string} filePath Caminho do arquivo PDF
+ * @param {string} outputDir Pasta destino (criada se não existir)
+ * @returns {object} { file_name, total_images, written, images: [{ page, image }] }
+ */
+function extractImages(filePath, outputDir) {
+  const absPath = path.resolve(filePath);
+  if (!fs.existsSync(absPath)) {
+    throw new Error(`PDF file not found: ${absPath}`);
+  }
+  if (!outputDir) {
+    throw new Error('outputDir is required');
+  }
+
+  const absOut = path.resolve(outputDir);
+
+  if (ffiLib && ffiLib.extractImages) {
+    const ptr = ffiLib.extractImages(absPath, absOut);
+    if (!ptr) throw new Error('Null pointer returned from native rasgapdf library');
+    try {
+      const parsed = JSON.parse(ptr);
+      if (parsed.error) throw new Error(parsed.message || 'Error extracting images');
+      return parsed;
+    } finally {
+      ffiLib.freeString(ptr);
+    }
+  }
+
+  // Fallback via binary CLI: o manifesto é gravado em disco.
+  const binPath = findBinary();
+  execFileSync(binPath, [absPath, '--extract-images', absOut], {
+    encoding: 'utf-8',
+    maxBuffer: 100 * 1024 * 1024
+  });
+
+  return JSON.parse(fs.readFileSync(path.join(absOut, 'manifest.json'), 'utf-8'));
 }
 
 function version() {
@@ -148,5 +202,6 @@ function version() {
 module.exports = {
   parseRaw,
   parsePdf,
+  extractImages,
   version
 };

@@ -38,11 +38,18 @@ type RawSpatialDocument struct {
 
 // Options defines the parser configurations for structured mode
 type Options struct {
-	Mode             string  `json:"mode,omitempty"`
-	DetectTables     bool    `json:"detect_tables"`
-	MinTableColumns  int     `json:"min_table_columns"`
-	ColumnTolerance  float32 `json:"column_tolerance"`
-	RowTolerance     float32 `json:"row_tolerance"`
+	Mode            string  `json:"mode,omitempty"`
+	DetectTables    bool    `json:"detect_tables"`
+	MinTableColumns int     `json:"min_table_columns"`
+	ColumnTolerance float32 `json:"column_tolerance"`
+	RowTolerance    float32 `json:"row_tolerance"`
+	// ExtractImages fills page.images with embedded image metadata.
+	ExtractImages bool `json:"extract_images"`
+	// ExtractDrawings fills page.drawings with vector paths.
+	ExtractDrawings bool `json:"extract_drawings"`
+	// FilterBackgroundFills drops fills covering the whole page. nil keeps the
+	// native default (true); set to a pointer to false to keep backgrounds.
+	FilterBackgroundFills *bool `json:"filter_background_fills,omitempty"`
 }
 
 // DefaultOptions returns standard parsing options
@@ -100,15 +107,83 @@ type SpatialTable struct {
 	Rows     [][]string  `json:"rows"`
 }
 
+// SpatialImage represents an embedded image (/Subtype /Image) referenced by a page.
+// Image bytes are never inlined: use ExtractImages to write the original streams.
+type SpatialImage struct {
+	ImageID          int          `json:"image_id"`
+	Name             string       `json:"name"`
+	Xref             int          `json:"xref"`
+	BBox             *BoundingBox `json:"bbox"`
+	PixelWidth       uint32       `json:"pixel_width"`
+	PixelHeight      uint32       `json:"pixel_height"`
+	BitsPerComponent *int         `json:"bits_per_component"`
+	ColorSpace       *string      `json:"color_space"`
+	Filter           *string      `json:"filter"`
+	MimeType         *string      `json:"mime_type"`
+	ByteLength       *int         `json:"byte_length"`
+	Sha256           *string      `json:"sha256"`
+	File             *string      `json:"file"`
+}
+
+// SpatialDrawingItem is one geometric item of a vector path, discriminated by Kind
+// ("line", "curve", "rect" or "quad"). Unused fields are nil.
+type SpatialDrawingItem struct {
+	Kind        string       `json:"kind"`
+	P1          []float32    `json:"p1,omitempty"`
+	P2          []float32    `json:"p2,omitempty"`
+	P3          []float32    `json:"p3,omitempty"`
+	P4          []float32    `json:"p4,omitempty"`
+	BBox        *BoundingBox `json:"bbox,omitempty"`
+	Orientation *int         `json:"orientation,omitempty"`
+	Points      [][]float32  `json:"points,omitempty"`
+}
+
+// SpatialDrawing represents a painted vector path (fill, stroke or both)
+type SpatialDrawing struct {
+	DrawingID     int                  `json:"drawing_id"`
+	BBox          BoundingBox          `json:"bbox"`
+	DrawingType   string               `json:"drawing_type"`
+	ItemCount     int                  `json:"item_count"`
+	Items         []SpatialDrawingItem `json:"items"`
+	StrokeColor   []float32            `json:"stroke_color"`
+	FillColor     []float32            `json:"fill_color"`
+	Width         *float32             `json:"width"`
+	FillOpacity   *float32             `json:"fill_opacity"`
+	StrokeOpacity *float32             `json:"stroke_opacity"`
+	EvenOdd       *bool                `json:"even_odd"`
+	DashPattern   []float32            `json:"dash_pattern"`
+	DashPhase     *float32             `json:"dash_phase"`
+	LineJoin      *string              `json:"line_join"`
+	LineCap       *string              `json:"line_cap"`
+	Layer         *string              `json:"layer"`
+	Seqno         int                  `json:"seqno"`
+}
+
+// ExtractedImageRecord pairs an extracted image with its 1-based page number
+type ExtractedImageRecord struct {
+	Page  int          `json:"page"`
+	Image SpatialImage `json:"image"`
+}
+
+// ImageManifest is returned by ExtractImages
+type ImageManifest struct {
+	FileName    string                 `json:"file_name"`
+	TotalImages int                    `json:"total_images"`
+	Written     int                    `json:"written"`
+	Images      []ExtractedImageRecord `json:"images"`
+}
+
 // SpatialPage holds elements for a single page
 type SpatialPage struct {
-	PageNumber   int            `json:"page_number"`
-	Width        float32        `json:"width"`
-	Height       float32        `json:"height"`
-	Rotation     int            `json:"rotation"`
-	TextBlocks   []SpatialBlock `json:"text_blocks"`
-	Tables       []SpatialTable `json:"tables"`
-	RawSpanCount int            `json:"raw_span_count"`
+	PageNumber   int              `json:"page_number"`
+	Width        float32          `json:"width"`
+	Height       float32          `json:"height"`
+	Rotation     int              `json:"rotation"`
+	TextBlocks   []SpatialBlock   `json:"text_blocks"`
+	Tables       []SpatialTable   `json:"tables"`
+	RawSpanCount int              `json:"raw_span_count"`
+	Images       []SpatialImage   `json:"images"`
+	Drawings     []SpatialDrawing `json:"drawings"`
 }
 
 // SpatialDocument represents the entire parsed PDF document
@@ -189,4 +264,42 @@ func ParseFile(path string, opts *Options) (*SpatialDocument, error) {
 // Version returns the native RasgaPDF library version
 func Version() string {
 	return C.GoString(C.rasgapdf_version())
+}
+
+// ExtractImages writes the original encoded streams of every embedded image to
+// outputDir and returns the generated manifest. The streams are copied verbatim
+// (e.g. a DCTDecode image becomes a .jpg), so no pixels are decoded.
+func ExtractImages(path string, outputDir string) (*ImageManifest, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		return nil, errors.New("file not found: " + absPath)
+	}
+
+	absOut, err := filepath.Abs(outputDir)
+	if err != nil {
+		return nil, err
+	}
+
+	cPath := C.CString(absPath)
+	defer C.free(unsafe.Pointer(cPath))
+
+	cOut := C.CString(absOut)
+	defer C.free(unsafe.Pointer(cOut))
+
+	cRes := C.rasgapdf_extract_images(cPath, cOut)
+	if cRes == nil {
+		return nil, errors.New("rasgapdf native parser returned null")
+	}
+	defer C.rasgapdf_free_string(cRes)
+
+	var manifest ImageManifest
+	if err := json.Unmarshal([]byte(C.GoString(cRes)), &manifest); err != nil {
+		return nil, err
+	}
+
+	return &manifest, nil
 }

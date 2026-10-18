@@ -1,7 +1,7 @@
 ---
 language:
 - en
-license: mit
+license: agpl-3.0
 tags:
 - pdf
 - spatial
@@ -27,7 +27,7 @@ pipeline_tag: document-question-answering
 [![npm version](https://img.shields.io/npm/v/rasgapdf.svg?color=red&logo=npm)](https://www.npmjs.com/package/rasgapdf)
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?logo=github)](https://github.com/MartinsMessias/rasgapdf)
 [![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hub-Model%20Repo-blue)](https://huggingface.co/martinsmessias/rasgapdf)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 
 [**GitHub Repo**](https://github.com/MartinsMessias/rasgapdf) • [**Live Space Demo**](https://huggingface.co/spaces/martinsmessias/rasgapdf) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Quickstart**](#-polyglot-quickstart) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md)
 
@@ -102,6 +102,10 @@ cargo build --release
 # 🎯 MODE 2: Hierarchical Structured Document
 ./target/release/rasgapdf sample.pdf --pretty
 ./target/release/rasgapdf sample.pdf -o structured.json
+
+# 🖼️ GRAPHICS (opt-in): embedded images and vector paths
+./target/release/rasgapdf sample.pdf --images --drawings --pretty
+./target/release/rasgapdf sample.pdf --extract-images ./out   # writes ./out/*.jpg + manifest.json
 ```
 
 ---
@@ -145,8 +149,8 @@ use rasgapdf::{parse_file, ParserOptions};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let options = ParserOptions {
         detect_tables: true,
-        min_table_cols: 3,
-        col_tolerance: 16.0,
+        min_table_columns: 3,
+        column_tolerance: 16.0,
         row_tolerance: 6.0,
         ..Default::default()
     };
@@ -177,6 +181,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+---
+
+### 🖼️ Embedded Images & Vector Graphics (opt-in)
+
+Both extras are **off by default**, so the JSON shape is byte-for-byte unchanged unless you ask for them. Image *bytes* are never embedded in the JSON: metadata (dimensions, colour space, filter, SHA-256) stays in the tree, while the original encoded stream can be written to disk.
+
+```rust
+use rasgapdf::{extract_images, parse_file, write_images_to_dir, ParserOptions};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let options = ParserOptions {
+        extract_images: true,
+        extract_drawings: true,
+        ..Default::default()
+    };
+
+    let doc = parse_file("document.pdf", &options)?;
+
+    for page in &doc.pages {
+        for image in &page.images {
+            println!(
+                "image {} on page {}: {}x{} px, filter={:?}, bbox={:?}",
+                image.name, page.page_number, image.pixel_width, image.pixel_height,
+                image.filter, image.bbox
+            );
+        }
+
+        for drawing in &page.drawings {
+            println!(
+                "path {} on page {}: {} ({} items, stroke={:?})",
+                drawing.drawing_id, page.page_number, drawing.drawing_type,
+                drawing.item_count, drawing.stroke_color
+            );
+        }
+    }
+
+    // Original encoded streams (e.g. `.jpg` for DCTDecode) plus a `manifest.json`.
+    let mut images = extract_images("document.pdf")?;
+    let written = write_images_to_dir(&mut images, std::path::Path::new("./out"))?;
+    println!("wrote {written} image files");
+
+    Ok(())
+}
+```
+
+Equivalent CLI flags: `--images`, `--drawings`, `--extract-images DIR`, and `--keep-backgrounds` (keeps full-page background fills, which are dropped by default). See [`docs/SCHEMA.md`](docs/SCHEMA.md) for the full field reference.
 
 ---
 
@@ -213,5 +264,10 @@ Contributions are what make the open-source community thrive!
 
 ## 📄 License
 
-RasgaPDF is licensed under the [MIT License](LICENSE).  
+RasgaPDF is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).  
 Copyright (c) 2026 Messias Martins.
+
+RasgaPDF links against [MuPDF](https://mupdf.com/) (Artifex Software), which is
+distributed under the AGPL-3.0. As a derivative work, the whole project is licensed
+under the same terms: if you distribute RasgaPDF — or expose it as a network service —
+you must make the complete corresponding source available under the AGPL-3.0.

@@ -81,11 +81,60 @@ pub extern "C" fn rasgapdf_free_string(ptr: *mut c_char) {
     }
 }
 
+/// Extrai as imagens embutidas e grava os streams originais em `dir_ptr`.
+///
+/// Retorna um manifesto JSON:
+/// `{"total_images": n, "written": m, "images": [{"page": 1, "image": {...}}]}`.
+/// O chamador deve liberar a memória chamando `rasgapdf_free_string`.
+#[no_mangle]
+pub extern "C" fn rasgapdf_extract_images(path_ptr: *const c_char, dir_ptr: *const c_char) -> *mut c_char {
+    if path_ptr.is_null() || dir_ptr.is_null() {
+        return create_error_json("Path/Dir pointer is null");
+    }
+
+    let path_str = match unsafe { CStr::from_ptr(path_ptr) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return create_error_json("Invalid UTF-8 in path"),
+    };
+
+    let dir_str = match unsafe { CStr::from_ptr(dir_ptr) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return create_error_json("Invalid UTF-8 in dir"),
+    };
+
+    let mut found = match crate::image::extract_images(path_str) {
+        Ok(found) => found,
+        Err(e) => return create_error_json(&format!("Extract error: {}", e)),
+    };
+
+    let dir = std::path::Path::new(dir_str);
+    let file_name = std::path::Path::new(path_str)
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "document.pdf".to_string());
+
+    let written = match crate::image::write_images_to_dir(&mut found, dir) {
+        Ok(written) => written,
+        Err(e) => return create_error_json(&format!("Write error: {}", e)),
+    };
+
+    if let Err(e) = crate::image::write_manifest(&found, written, &file_name, dir) {
+        return create_error_json(&format!("Manifest error: {}", e));
+    }
+
+    match serde_json::to_string(&crate::image::build_manifest(&found, written, &file_name)) {
+        Ok(json_str) => match CString::new(json_str) {
+            Ok(c_str) => c_str.into_raw(),
+            Err(_) => create_error_json("Failed to create CString"),
+        },
+        Err(e) => create_error_json(&format!("JSON serialization error: {}", e)),
+    }
+}
+
 /// Retorna a versão da biblioteca
 #[no_mangle]
 pub extern "C" fn rasgapdf_version() -> *const c_char {
-    static VERSION: &[u8] = b"0.1.0\0";
-    VERSION.as_ptr() as *const c_char
+    concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr() as *const c_char
 }
 
 fn create_error_json(err_msg: &str) -> *mut c_char {

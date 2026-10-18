@@ -5,7 +5,7 @@ colorFrom: blue
 colorTo: indigo
 sdk: static
 pinned: false
-license: mit
+license: agpl-3.0
 tags:
 - pdf
 - spatial
@@ -30,3 +30,8 @@ tags:
 ### 🚀 Client-Side Compute & Duplicate Option
 - **Zero Host Costs:** This visualizer runs directly inside **your browser using your own client CPU** via PDF.js.
 - **Want to run on your own Hugging Face hardware quota?** Click the **[Duplicate this Space](https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true)** button to clone this Space to your personal Hugging Face account and allocate your own CPU/GPU hardware quota.
+
+### ⚠️ Known limitation: protected PDFs
+- **DRM (Adobe ADEPT / `EBX_HANDLER`)**: typical of e-books. The content is locked by the store's key, so no PDF library can read it without removing the DRM. The visualizer now reports this explicitly instead of failing silently.
+- **Password-protected**: detected and reported; remove the password (export an unprotected copy) and try again.
+- **Large files** are fine — everything runs in your browser, and the file is never uploaded. A 64 MB / 60-page PDF opens normally.

@@ -1,7 +1,9 @@
 use std::fs::File;
 use std::io::Write;
 use clap::{Parser, ValueEnum};
-use rasgapdf::{parse_file, parse_raw_file, ParserOptions};
+use rasgapdf::{
+    extract_images, parse_file, parse_raw_file, write_images_to_dir, write_manifest, ParserOptions,
+};
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutputFormat {
@@ -55,6 +57,37 @@ struct Cli {
     /// Quantidade mínima de colunas para considerar uma tabela
     #[arg(long, default_value_t = 3)]
     min_table_cols: usize,
+
+    /// Extrair metadados das imagens embutidas (XObjects de imagem)
+    #[arg(long, default_value_t = false)]
+    images: bool,
+
+    /// Extrair caminhos vetoriais (fill/stroke) da página
+    #[arg(long, default_value_t = false)]
+    drawings: bool,
+
+    /// Manter preenchimentos que cobrem a página inteira (fundos)
+    #[arg(long, default_value_t = false)]
+    keep_backgrounds: bool,
+
+    /// Gravar os streams de imagem originais nesta pasta (sidecar) e listar o manifesto
+    #[arg(long, value_name = "DIR")]
+    extract_images: Option<String>,
+}
+
+/// Prints a parse failure and adds a hint for the common "locked PDF" cases.
+fn exit_with_parse_error(context: &str, err: &dyn std::fmt::Display) -> ! {
+    eprintln!("{}: {}", context, err);
+
+    let msg = err.to_string().to_lowercase();
+    if msg.contains("encrypt") || msg.contains("password") {
+        eprintln!(
+            "💡 Este PDF está criptografado ou protegido por DRM \
+             (ex.: Adobe ADEPT / EBX_HANDLER). Remova a proteção e tente novamente."
+        );
+    }
+
+    std::process::exit(1);
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -64,10 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // --- MODO 1: COORDENADAS BRUTAS (RAW X/Y) ---
         let raw_doc = match parse_raw_file(&args.input) {
             Ok(d) => d,
-            Err(e) => {
-                eprintln!("❌ Erro ao processar PDF (modo raw): {}", e);
-                std::process::exit(1);
-            }
+            Err(e) => exit_with_parse_error("❌ Erro ao processar PDF (modo raw)", &e),
         };
 
         let result_string = match args.format {
@@ -138,15 +168,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             min_table_columns: args.min_table_cols,
             column_tolerance: args.col_tolerance,
             row_tolerance: args.row_tolerance,
+            extract_images: args.images || args.extract_images.is_some(),
+            extract_drawings: args.drawings,
+            filter_background_fills: !args.keep_backgrounds,
         };
 
         let doc = match parse_file(&args.input, &options) {
             Ok(d) => d,
-            Err(e) => {
-                eprintln!("❌ Erro ao processar PDF: {}", e);
-                std::process::exit(1);
-            }
+            Err(e) => exit_with_parse_error("❌ Erro ao processar PDF", &e),
         };
+
+        // --- Sidecar: grava os streams de imagem originais em disco ---
+        if let Some(dir) = args.extract_images.as_deref() {
+            let dir_path = std::path::PathBuf::from(dir);
+            match extract_images(&args.input) {
+                Ok(mut found) => match write_images_to_dir(&mut found, &dir_path) {
+                    Ok(written) => match write_manifest(
+                        &found,
+                        written,
+                        &doc.file_name,
+                        &dir_path,
+                    ) {
+                        Ok(manifest_path) => eprintln!(
+                            "🖼️  {} de {} imagens gravadas em {} (manifesto: {})",
+                            written,
+                            found.len(),
+                            dir,
+                            manifest_path.display()
+                        ),
+                        Err(e) => eprintln!("⚠️  Falha ao gravar o manifesto: {}", e),
+                    },
+                    Err(e) => eprintln!("⚠️  Falha ao gravar imagens em {}: {}", dir, e),
+                },
+                Err(e) => eprintln!("⚠️  Falha ao extrair imagens: {}", e),
+            }
+        }
 
         let result_string = match args.format {
             OutputFormat::Json => {
@@ -175,6 +231,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         out.push_str(&format!("    Bloco #{}: {:?}\n", block.block_id, block.bbox));
                         for line in &block.lines {
                             out.push_str(&format!("      Linha: {:?} -> \"{}\"\n", line.bbox, line.text));
+                        }
+                    }
+                    if !page.images.is_empty() {
+                        out.push_str(&format!("  [Imagens: {}]\n", page.images.len()));
+                        for img in &page.images {
+                            out.push_str(&format!(
+                                "    Imagem #{}: {} | {}x{} px | filter={:?} | bbox={:?}\n",
+                                img.image_id, img.name, img.pixel_width, img.pixel_height, img.filter, img.bbox
+                            ));
+                        }
+                    }
+                    if !page.drawings.is_empty() {
+                        out.push_str(&format!("  [Vetores: {}]\n", page.drawings.len()));
+                        for d in &page.drawings {
+                            out.push_str(&format!(
+                                "    Desenho #{}: {} | {} itens | bbox={:?}\n",
+                                d.drawing_id, d.drawing_type, d.item_count, d.bbox
+                            ));
                         }
                     }
                 }

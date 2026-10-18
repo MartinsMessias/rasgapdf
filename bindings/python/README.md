@@ -7,7 +7,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/rasgapdf.svg?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/rasgapdf/)
 [![Python versions](https://img.shields.io/pypi/pyversions/rasgapdf.svg?logo=python&logoColor=white)](https://pypi.org/project/rasgapdf/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 </div>
 
@@ -133,9 +133,40 @@ for page in doc["pages"]:
 | `min_table_cols` | `int` | `3` | Minimum number of columns required to classify as a table |
 | `col_tolerance` | `float` | `16.0` | Horizontal alignment threshold in typographical points |
 | `row_tolerance` | `float` | `6.0` | Vertical line clustering threshold in points |
+| `extract_images` | `bool` | `False` | Fill `page["images"]` with embedded image metadata (dimensions, colour space, filter, SHA-256, placement `bbox`) |
+| `extract_drawings` | `bool` | `False` | Fill `page["drawings"]` with vector paths (`line`/`curve`/`rect`/`quad` items, colours, dash, opacity) |
+| `keep_background_fills` | `bool` | `False` | Keep fills that cover the whole page (backgrounds are dropped by default) |
+
+---
+
+### 🖼️ Embedded Images & Vector Graphics
+
+Opt-in extraction of the graphics layer. Pixels are never decoded — metadata stays in the JSON and the original encoded stream is written to disk as-is:
+
+```python
+import rasgapdf
+
+doc = rasgapdf.parse_pdf("report.pdf", extract_images=True, extract_drawings=True)
+
+page = doc["pages"][0]
+for image in page["images"]:
+    print(image["name"], image["pixel_width"], "x", image["pixel_height"],
+          image["filter"], image["bbox"])
+
+for drawing in page["drawings"]:
+    print(drawing["drawing_id"], drawing["drawing_type"], drawing["stroke_color"])
+
+# Writes report JPEGs (e.g. page_001_img_001_xref7.jpg) plus manifest.json
+manifest = rasgapdf.extract_images("report.pdf", "./out")
+print(manifest["written"], "files written")
+```
 
 ---
 
 ## 📄 License
 
-MIT License. Copyright (c) 2026 Messias Martins.
+GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). Copyright (c) 2026 Messias Martins.
+
+RasgaPDF embeds and links against [MuPDF](https://mupdf.com/) (Artifex Software),
+which is distributed under the AGPL-3.0. That is why this project is licensed
+under the same terms.

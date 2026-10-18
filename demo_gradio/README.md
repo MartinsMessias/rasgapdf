@@ -7,7 +7,7 @@ sdk: gradio
 sdk_version: 6.30.0
 app_file: app.py
 pinned: false
-license: mit
+license: agpl-3.0
 short_description: Sub-millisecond physical 2D PDF layout & table extraction in Rust
 ---
 

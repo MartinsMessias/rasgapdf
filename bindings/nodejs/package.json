@@ -25,7 +25,7 @@
     "rust"
   ],
   "author": "Messias Martins",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "optionalDependencies": {
     "koffi": "^2.8.0"
   }
