@@ -1,6 +1,6 @@
 {
   "name": "rasgapdf",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Ultra-fast 2D spatial PDF parser powered by pure Rust",
   "main": "index.js",
   "files": [

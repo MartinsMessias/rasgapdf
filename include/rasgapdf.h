@@ -85,7 +85,7 @@ void rasgapdf_free_string(char* ptr);
 /**
  * Retorna a versão da biblioteca.
  * 
- * @return String estática terminada em null (ex: "0.1.3")
+ * @return String estática terminada em null (ex: "0.2.0")
  */
 const char* rasgapdf_version(void);
 
