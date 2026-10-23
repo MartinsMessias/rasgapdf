@@ -3,7 +3,8 @@ title: RasgaPDF 2D Spatial PDF Parser
 emoji: ⚡
 colorFrom: blue
 colorTo: indigo
-sdk: static
+sdk: docker
+app_port: 7860
 pinned: false
 license: agpl-3.0
 tags:
@@ -27,11 +28,11 @@ tags:
 
 </div>
 
-### 🚀 Client-Side Compute & Duplicate Option
-- **Zero Host Costs:** This visualizer runs directly inside **your browser using your own client CPU** via PDF.js.
+### 🚀 Dual-Engine Architecture: Native Rust + Client-Side Fallback
+- **⚡ Native Rust Engine (`librasgapdf.so`):** Powered by the official Rust spatial PDF parser backend running in a dedicated Docker container. Provides microsecond-level extraction of text spans, tables, bounding boxes, drawings, and images.
+- **🛡️ Client-Side Fallback:** If the backend is unreachable or under heavy load, the visualizer automatically falls back to client-side compute directly inside your browser via PDF.js.
 - **Want to run on your own Hugging Face hardware quota?** Click the **[Duplicate this Space](https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true)** button to clone this Space to your personal Hugging Face account and allocate your own CPU/GPU hardware quota.
 
 ### ⚠️ Known limitation: protected PDFs
-- **DRM (Adobe ADEPT / `EBX_HANDLER`)**: typical of e-books. The content is locked by the store's key, so no PDF library can read it without removing the DRM. The visualizer now reports this explicitly instead of failing silently.
+- **DRM (Adobe ADEPT / `EBX_HANDLER`)**: typical of e-books. The content is locked by the store's key, so no PDF library can read it without removing the DRM. The visualizer reports this explicitly instead of failing silently.
 - **Password-protected**: detected and reported; remove the password (export an unprotected copy) and try again.
-- **Large files** are fine — everything runs in your browser, and the file is never uploaded. A 64 MB / 60-page PDF opens normally.
