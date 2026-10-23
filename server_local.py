@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""Local development server for RasgaPDF.
+
+Serves the exact same frontend as space_hf/index.html, but connected directly
+to the native Rust library (librasgapdf.so) for real-time parsing, image
+extraction, and 2D spatial layout analysis.
+"""
+import os
+import sys
+import tempfile
+import time
+import base64
+from pathlib import Path
+
+import fitz
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+
+# Ensure rasgapdf python package is importable
+REPO_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(REPO_ROOT / "bindings" / "python"))
+import rasgapdf
+
+app = FastAPI(title="RasgaPDF Native Local Server", version=rasgapdf.version())
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+SPACE_DIR = REPO_ROOT / "space_hf"
+
+@app.get("/", response_class=HTMLResponse)
+def get_index():
+    index_path = SPACE_DIR / "index.html"
+    return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
+
+@app.get("/sample.pdf")
+def get_sample():
+    sample_path = SPACE_DIR / "sample.pdf"
+    if sample_path.exists():
+        return FileResponse(str(sample_path), media_type="application/pdf")
+    return JSONResponse(status_code=404, content={"error": "sample.pdf not found"})
+
+@app.get("/api/status")
+def get_status():
+    return {
+        "status": "ok",
+        "engine": "rust",
+        "version": rasgapdf.version(),
+        "lib_loaded": bool(rasgapdf._lib),
+    }
+
+@app.post("/api/parse")
+async def parse_pdf_endpoint(file: UploadFile = File(...)):
+    start_time = time.perf_counter()
+    
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
+        tmp_path = tmp_file.name
+        content = await file.read()
+        tmp_file.write(content)
+
+    img_tmp_dir = tempfile.mkdtemp(prefix="rasga_imgs_")
+
+    try:
+        # Run Rust native parsers
+        raw_res = rasgapdf.parse_raw(tmp_path)
+        struct_res = rasgapdf.parse_pdf(
+            tmp_path,
+            detect_tables=True,
+            extract_images=True,
+            extract_drawings=True,
+            keep_background_fills=False,
+        )
+        
+        # Extract embedded image files to get their real original streams
+        images_manifest = rasgapdf.extract_images(tmp_path, img_tmp_dir)
+        
+        # Build universal, browser-compatible PNG data URIs for instant preview
+        data_uris = {}
+        pdf_doc = None
+        try:
+            pdf_doc = fitz.open(tmp_path)
+        except Exception:
+            pass
+
+        for entry in images_manifest.get("images", []):
+            page_num = entry.get("page")
+            img_data = entry.get("image", {})
+            img_id = img_data.get("image_id")
+            xref = img_data.get("xref")
+
+            uri = None
+            if pdf_doc and xref:
+                try:
+                    pix = fitz.Pixmap(pdf_doc, xref)
+                    if pix.n >= 5 or pix.colorspace == fitz.csCMYK:
+                        pix = fitz.Pixmap(fitz.csRGB, pix)
+                    png_bytes = pix.tobytes("png")
+                    b64 = base64.b64encode(png_bytes).decode("ascii")
+                    uri = f"data:image/png;base64,{b64}"
+                except Exception:
+                    pass
+
+            if not uri:
+                rel_file = img_data.get("file")
+                if rel_file:
+                    abs_file = os.path.join(img_tmp_dir, rel_file)
+                    if os.path.exists(abs_file):
+                        mime = img_data.get("mime_type") or "image/jpeg"
+                        with open(abs_file, "rb") as f:
+                            b64 = base64.b64encode(f.read()).decode("ascii")
+                            uri = f"data:{mime};base64,{b64}"
+
+            if uri:
+                if img_id is not None:
+                    data_uris[str(img_id)] = uri
+                    data_uris[img_id] = uri
+                if xref is not None:
+                    data_uris[f"xref_{xref}"] = uri
+                if page_num is not None and img_id is not None:
+                    data_uris[f"{page_num}_{img_id}"] = uri
+
+        total_elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+        rust_time_ms = struct_res.get("parse_time_ms") or raw_res.get("parse_time_ms") or total_elapsed_ms
+
+        return {
+            "status": "ok",
+            "engine": "Native Rust (librasgapdf.so)",
+            "version": rasgapdf.version(),
+            "parse_time_ms": rust_time_ms,
+            "total_server_time_ms": total_elapsed_ms,
+            "raw": raw_res,
+            "structured": struct_res,
+            "images_manifest": images_manifest,
+            "image_data_uris": data_uris,
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
+    finally:
+        # Cleanup temp files
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+        try:
+            import shutil
+            if os.path.exists(img_tmp_dir):
+                shutil.rmtree(img_tmp_dir)
+        except Exception:
+            pass
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 7860))
+    print(f"⚡ Starting RasgaPDF Native Server at http://localhost:{port}")
+    uvicorn.run("server_local:app", host="0.0.0.0", port=port, reload=False)
