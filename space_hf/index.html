@@ -27,7 +27,7 @@
       <div class="flex items-center gap-3">
         <span class="text-xl sm:text-2xl font-black bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">⚡ RasgaPDF</span>
         <span class="text-xs px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono font-bold">v0.2.0</span>
-        <span class="hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">Client-Side Compute</span>
+        <span id="headerComputeBadge" class="hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">Client-Side Compute</span>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
@@ -128,7 +128,7 @@
           </div>
           <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
             <span class="text-slate-500 block text-[10px]">Compute Mode</span>
-            <span class="font-mono text-amber-400 font-bold text-[11px]">Client Browser</span>
+            <span id="metricComputeMode" class="font-mono text-amber-400 font-bold text-[11px]">Client Browser</span>
           </div>
         </div>
       </div>
@@ -326,6 +326,9 @@
     const metricSpans = document.getElementById('metricSpans');
     const metricImages = document.getElementById('metricImages');
     const metricVectors = document.getElementById('metricVectors');
+    const metricComputeMode = document.getElementById('metricComputeMode');
+    const headerComputeBadge = document.getElementById('headerComputeBadge');
+    let currentRustDoc = null;
     const loadError = document.getElementById('loadError');
     const loadErrorTitle = document.getElementById('loadErrorTitle');
     const loadErrorMessage = document.getElementById('loadErrorMessage');
@@ -507,6 +510,20 @@
         const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
         currentPdfDoc = await loadingTask.promise;
 
+        // Check if local Rust backend is available and parse with native engine
+        currentRustDoc = null;
+        try {
+          const formData = new FormData();
+          formData.append('file', file, fileName);
+          const apiRes = await fetch('/api/parse', { method: 'POST', body: formData });
+          if (apiRes.ok) {
+            currentRustDoc = await apiRes.json();
+            console.log('⚡ Parsed with Native Rust Engine in', currentRustDoc.parse_time_ms, 'ms');
+          }
+        } catch (e) {
+          console.log('Running in client-side compute mode:', e);
+        }
+
         pageSlider.max = currentPdfDoc.numPages;
         pageSlider.value = 1;
         currentPageNum = 1;
@@ -576,7 +593,106 @@
       // 2. Cache clean rasterized bitmap of PDF for zero-latency redrawing
       cleanPdfBitmap = await createImageBitmap(pdfCanvas);
 
-      // 3. Extract text content & exact spatial bounding boxes (rotation & matrix aware)
+      // If Native Rust Engine processed this document, use its 100% native Rust data!
+      if (currentRustDoc && currentRustDoc.structured && currentRustDoc.structured.pages) {
+        const pageData = currentRustDoc.structured.pages[currentPageNum - 1] || {};
+
+        // 1. Spans from Rust
+        const pageSpans = (currentRustDoc.raw && currentRustDoc.raw.spans
+          ? currentRustDoc.raw.spans.filter(s => s.page === currentPageNum)
+          : []);
+
+        extractedSpans = pageSpans.map(s => {
+          const vx0 = s.x0 * currentRenderScale;
+          const vy0 = s.y0 * currentRenderScale;
+          const vx1 = s.x1 * currentRenderScale;
+          const vy1 = s.y1 * currentRenderScale;
+          return {
+            page: s.page,
+            x0: s.x0,
+            y0: s.y0,
+            x1: s.x1,
+            y1: s.y1,
+            font_size: s.font_size,
+            font_name: s.font_name || 'Helvetica',
+            text: s.text,
+            vx0,
+            vy0,
+            vw: Math.max(vx1 - vx0, 1.0),
+            vh: Math.max(vy1 - vy0, 1.0)
+          };
+        });
+
+        // 2. Images from Rust
+        extractedImages = (pageData.images || []).map(im => {
+          const b = im.bbox || { x0: 0, y0: 0, x1: 0, y1: 0, width: 0, height: 0 };
+          const vx = b.x0 * currentRenderScale;
+          const vy = b.y0 * currentRenderScale;
+          const vw = b.width * currentRenderScale;
+          const vh = b.height * currentRenderScale;
+          let thumb = null;
+          const uriKey = im.xref ? `xref_${im.xref}` : `${currentPageNum}_${im.image_id}`;
+          const uri = currentRustDoc.image_data_uris
+            ? (currentRustDoc.image_data_uris[uriKey] || currentRustDoc.image_data_uris[im.image_id] || currentRustDoc.image_data_uris[String(im.image_id)])
+            : null;
+          if (uri) {
+            thumb = new Image();
+            thumb.src = uri;
+          } else if (b.width > 0 && b.height > 0) {
+            thumb = cropFromPage({ vx, vy, vw, vh });
+          }
+          return {
+            objId: im.name || '#' + im.image_id,
+            px: { width: im.pixel_width, height: im.pixel_height },
+            pt: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 },
+            paint: { vx, vy, vw, vh },
+            count: 1,
+            thumb: thumb,
+            cropped: !uri,
+            mime: im.mime_type,
+            sha256: im.sha256
+          };
+        });
+
+        // 3. Vector drawings from Rust
+        extractedDrawings = (pageData.drawings || []).map(d => {
+          const b = d.bbox || { x0: 0, y0: 0, x1: 0, y1: 0, width: 0, height: 0 };
+          const vx = b.x0 * currentRenderScale;
+          const vy = b.y0 * currentRenderScale;
+          const vw = b.width * currentRenderScale;
+          const vh = b.height * currentRenderScale;
+          return {
+            paint: { vx, vy, vw, vh },
+            pt: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }
+          };
+        });
+
+        // 4. Update metrics with real Rust values
+        const rustLatency = (currentRustDoc.parse_time_ms !== undefined)
+          ? Number(currentRustDoc.parse_time_ms).toFixed(2)
+          : (performance.now() - t0).toFixed(2);
+        metricLatency.textContent = `${rustLatency} ms`;
+        metricSpans.textContent = extractedSpans.length;
+        metricImages.textContent = extractedImages.length;
+        metricVectors.textContent = extractedDrawings.length;
+        if (metricComputeMode) {
+          metricComputeMode.textContent = 'Native Rust Engine (librasgapdf.so)';
+          metricComputeMode.className = 'font-mono text-emerald-400 font-bold text-[11px]';
+        }
+        if (headerComputeBadge) {
+          headerComputeBadge.textContent = '⚡ Native Rust Engine';
+          headerComputeBadge.className = 'hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700 font-mono font-bold';
+        }
+
+        updateTable();
+        updateTextDump();
+        updateImageGallery();
+        drawCanvas(null);
+        updateJsonViewer();
+        return;
+      }
+
+      // 3. Fallback: Client-side extraction via browser
       const textContent = await page.getTextContent();
 
       extractedSpans = [];
@@ -1242,6 +1358,10 @@
     }
 
     function updateJsonViewer() {
+      if (currentRustDoc && currentRustDoc.structured) {
+        jsonViewer.textContent = JSON.stringify(currentRustDoc.structured, null, 2);
+        return;
+      }
       const doc = {
         total_pages: currentPdfDoc ? currentPdfDoc.numPages : 1,
         current_page: currentPageNum,
@@ -1295,11 +1415,14 @@
     function openLightbox(im, index) {
       if (!im || !im.thumb) return;
 
-      lightboxCanvas.width = im.thumb.width;
-      lightboxCanvas.height = im.thumb.height;
+      const imgW = im.thumb.naturalWidth || im.thumb.width || (im.px ? im.px.width : 300);
+      const imgH = im.thumb.naturalHeight || im.thumb.height || (im.px ? im.px.height : 200);
+
+      lightboxCanvas.width = imgW;
+      lightboxCanvas.height = imgH;
       const lctx = lightboxCanvas.getContext('2d');
       lctx.clearRect(0, 0, lightboxCanvas.width, lightboxCanvas.height);
-      lctx.drawImage(im.thumb, 0, 0);
+      lctx.drawImage(im.thumb, 0, 0, imgW, imgH);
 
       const label = (im.objId !== null && im.objId !== undefined) ? 'XObject ' + im.objId : 'inline image';
       lightboxTitle.textContent = '#' + (index + 1) + '  ' + label;
@@ -1309,16 +1432,16 @@
         (im.cropped ? ' · crop fallback' : '');
       lightboxSize.textContent = im.px
         ? (im.px.width + ' x ' + im.px.height + ' px')
-        : (im.thumb.width + ' x ' + im.thumb.height + ' px');
+        : (imgW + ' x ' + imgH + ' px');
 
       // Enlarge small images so the embedded pixels are actually visible.
       const maxW = Math.max(window.innerWidth * 0.85, 320);
       const maxH = Math.max(window.innerHeight * 0.72, 240);
-      const k = Math.min(maxW / im.thumb.width, maxH / im.thumb.height);
+      const k = Math.min(maxW / imgW, maxH / imgH);
       const scale = k >= 1 ? Math.min(k, 8) : 1;
 
-      lightboxCanvas.style.width = Math.round(im.thumb.width * scale) + 'px';
-      lightboxCanvas.style.height = Math.round(im.thumb.height * scale) + 'px';
+      lightboxCanvas.style.width = Math.round(imgW * scale) + 'px';
+      lightboxCanvas.style.height = Math.round(imgH * scale) + 'px';
       lightboxCanvas.style.imageRendering = scale >= 2 ? 'pixelated' : 'auto';
 
       imageLightbox.style.display = 'flex';
