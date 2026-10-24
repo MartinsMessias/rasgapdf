@@ -224,9 +224,14 @@
       <div id="tab-json" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
         <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs shrink-0">
           <span class="font-semibold text-slate-300">Raw Spatial Document JSON</span>
-          <button id="btnDownloadJson" class="px-3 py-1 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 rounded text-xs font-semibold flex items-center gap-1 transition">
-            💾 Download JSON
-          </button>
+          <div class="flex items-center gap-2">
+            <button id="btnCopyJson" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-xs font-semibold flex items-center gap-1 transition">
+              📋 Copy JSON
+            </button>
+            <button id="btnDownloadJson" class="px-3 py-1 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 rounded text-xs font-semibold flex items-center gap-1 transition">
+              💾 Download JSON
+            </button>
+          </div>
         </div>
         <pre id="jsonViewer" class="flex-1 w-full h-full bg-slate-950 p-4 text-xs font-mono text-cyan-300 overflow-auto"></pre>
       </div>
@@ -297,6 +302,16 @@
     let hoveredImage = null;
     let hoveredDrawing = null;
 
+    // Document-wide extraction cache. Each entry mirrors the Rust JSON schema
+    // (coordinates in PDF points, top-down) so the visualizer can rebuild any
+    // page from it and export a `pages[]` document exactly like the native engine.
+    let pageCache = [];
+    let docModel = null;
+    let docFileName = 'document.pdf';
+    let docParseMs = 0;
+    let docParseStart = 0;
+    let parseGeneration = 0;
+
     // Elements
     const fileInput = document.getElementById('pdfFileInput');
     const dropzone = document.getElementById('dropzone');
@@ -313,6 +328,7 @@
     const pureTextBox = document.getElementById('pureTextBox');
     const btnCopyText = document.getElementById('btnCopyText');
     const btnDownloadJson = document.getElementById('btnDownloadJson');
+    const btnCopyJson = document.getElementById('btnCopyJson');
     const jsonViewer = document.getElementById('jsonViewer');
     const imagesGrid = document.getElementById('imagesGrid');
     const imagesCount = document.getElementById('imagesCount');
@@ -527,6 +543,13 @@
         pageSlider.max = currentPdfDoc.numPages;
         pageSlider.value = 1;
         currentPageNum = 1;
+        docFileName = fileName;
+
+        // Reset the document model for the new file.
+        parseGeneration += 1;
+        pageCache = new Array(currentPdfDoc.numPages);
+        docModel = null;
+        docParseMs = 0;
 
         // On mobile devices, default to fit-width; on desktop, default to fit-page
         if (window.innerWidth < 768) {
@@ -535,9 +558,21 @@
           activeZoomMode = 'fit-page';
         }
 
+        // Parse page 1 first so the canvas shows up immediately; the remaining
+        // pages keep being extracted in the background to complete the JSON.
+        if (!currentRustDoc) {
+          docParseStart = performance.now();
+          await parsePageToCache(1, parseGeneration);
+          docParseMs = performance.now() - docParseStart;
+        }
+
         currentRenderScale = await calculateAutoZoom(activeZoomMode);
         updateZoomButtons();
         await renderCurrentPage();
+
+        if (!currentRustDoc) {
+          parseRemainingPages(parseGeneration);
+        }
       } catch (e) {
         showLoadError(e, fileName);
       }
@@ -692,81 +727,99 @@
         return;
       }
 
-      // 3. Fallback: Client-side extraction via browser
-      const textContent = await page.getTextContent();
+      // 3. Fallback: rebuild this page from the document-wide client-side model.
+      //    The model is extracted once per page (in PDF points) and cached, so the
+      //    canvas, the overlays and the JSON export always agree with each other.
+      const entry = pageCache[currentPageNum - 1];
 
-      extractedSpans = [];
-      for (const item of textContent.items) {
-        if (!item.str || item.str.trim() === '') continue;
+      if (!entry) {
+        extractedSpans = [];
+        extractedImages = [];
+        extractedDrawings = [];
+        metricLatency.textContent = `${(performance.now() - t0).toFixed(2)} ms`;
+        metricSpans.textContent = 0;
+        metricImages.textContent = 0;
+        metricVectors.textContent = 0;
+        updateTable();
+        updateTextDump();
+        updateImageGallery();
+        drawCanvas(null);
+        updateJsonViewer();
+        return;
+      }
 
-        // Compose viewport transform with item text matrix to handle any page rotation (0, 90, 180, 270)
-        const m = pdfjsLib.Util.transform(viewport.transform, item.transform);
-        const fontHeightPx = Math.hypot(m[2], m[3]);
-        const fontScaleX = Math.hypot(m[0], m[1]);
-        if (fontHeightPx === 0 || fontScaleX === 0) continue;
+      const scale = currentRenderScale;
 
-        // Unit vector along the text baseline in canvas space
-        const ux = m[0] / fontScaleX;
-        const uy = m[1] / fontScaleX;
-        const advancePx = item.width * currentRenderScale;
+      extractedSpans = entry.spans.map(s => ({
+        page: s.page,
+        x0: s.x0,
+        y0: s.y0,
+        x1: s.x1,
+        y1: s.y1,
+        font_size: s.font_size,
+        font_name: s.font_name || 'Helvetica',
+        text: s.text,
+        vx0: s.x0 * scale,
+        vy0: s.y0 * scale,
+        vw: Math.max((s.x1 - s.x0) * scale, 1.0),
+        vh: Math.max((s.y1 - s.y0) * scale, 1.0)
+      }));
 
-        // Ascent and descent vectors in canvas space (m[2], m[3] points from baseline to glyph top)
-        const ascX = m[2] * 0.85;
-        const ascY = m[3] * 0.85;
-        const descX = -m[2] * 0.20;
-        const descY = -m[3] * 0.20;
+      // Image previews are resolved lazily from the pdf.js object store; the
+      // model keeps only metadata, exactly like the Rust JSON.
+      extractedImages = [];
+      for (const im of entry.images) {
+        const b = im.bbox || { x0: 0, y0: 0, x1: 0, y1: 0, width: 0, height: 0 };
+        const vx = b.x0 * scale;
+        const vy = b.y0 * scale;
+        const vw = Math.max(b.width * scale, 1.0);
+        const vh = Math.max(b.height * scale, 1.0);
 
-        // Project all 4 corners of the glyph bounding box in canvas pixels
-        const c1x = m[4] + ascX,                 c1y = m[5] + ascY;
-        const c2x = m[4] + ascX + ux * advancePx, c2y = m[5] + ascY + uy * advancePx;
-        const c3x = m[4] + descX,                c3y = m[5] + descY;
-        const c4x = m[4] + descX + ux * advancePx, c4y = m[5] + descY + uy * advancePx;
+        let thumb = null;
+        const decoded = im.inline ? im.inline : await resolveImageData(page, im.objId);
+        if (decoded) thumb = decodedImageToCanvas(decoded);
+        if (!thumb && cleanPdfBitmap) thumb = cropFromPage({ vx, vy, vw, vh });
 
-        const vx0 = Math.min(c1x, c2x, c3x, c4x);
-        const vy0 = Math.min(c1y, c2y, c3y, c4y);
-        const vx1 = Math.max(c1x, c2x, c3x, c4x);
-        const vy1 = Math.max(c1y, c2y, c3y, c4y);
-        const vw = Math.max(vx1 - vx0, 1.0);
-        const vh = Math.max(vy1 - vy0, 1.0);
-
-        // Normalize back to unscaled typographical points (pt) in visual top-down page coordinates
-        const x0 = vx0 / currentRenderScale;
-        const y0 = vy0 / currentRenderScale;
-        const x1 = vx1 / currentRenderScale;
-        const y1 = vy1 / currentRenderScale;
-        const fontSizePt = fontHeightPx / currentRenderScale;
-
-        extractedSpans.push({
-          page: currentPageNum,
-          x0: Number(x0.toFixed(2)),
-          y0: Number(y0.toFixed(2)),
-          x1: Number(x1.toFixed(2)),
-          y1: Number(y1.toFixed(2)),
-          font_size: Number(fontSizePt.toFixed(1)),
-          font_name: item.fontName || 'Helvetica',
-          text: item.str,
-          vx0,
-          vy0,
-          vw,
-          vh
+        extractedImages.push({
+          objId: im.name,
+          px: { width: im.pixel_width, height: im.pixel_height },
+          pt: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 },
+          paint: { vx, vy, vw, vh },
+          count: im.count,
+          thumb,
+          cropped: !decoded,
+          mime: im.mime_type,
+          sha256: im.sha256
         });
       }
 
-      // Sort Top-to-Bottom, Left-to-Right
-      extractedSpans.sort((a, b) => {
-        const bucketA = Math.round(a.y0 / 6);
-        const bucketB = Math.round(b.y0 / 6);
-        if (bucketA !== bucketB) return bucketA - bucketB;
-        return a.x0 - b.x0;
+      extractedDrawings = entry.drawings.map(d => {
+        const b = d.bbox || { x0: 0, y0: 0, x1: 0, y1: 0, width: 0, height: 0 };
+        const vx = b.x0 * scale;
+        const vy = b.y0 * scale;
+        return {
+          type: d.drawing_type,
+          fill: rgb01ToHex(d.fill_color),
+          stroke: rgb01ToHex(d.stroke_color),
+          // Degenerate paths (straight lines) get a 1px floor so the box stays
+          // visible; `pt` keeps the true extent so it matches the Rust output.
+          paint: { vx, vy, vw: Math.max(b.width * scale, 1.0), vh: Math.max(b.height * scale, 1.0) },
+          pt: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }
+        };
       });
 
-      await extractPageGraphics(page, viewport);
-
-      const parseTime = (performance.now() - t0).toFixed(2);
-      metricLatency.textContent = `${parseTime} ms`;
+      metricLatency.textContent = `${entry.parse_time_ms.toFixed(2)} ms`;
       metricSpans.textContent = extractedSpans.length;
       metricImages.textContent = extractedImages.length;
       metricVectors.textContent = extractedDrawings.length;
+      if (metricComputeMode) {
+        metricComputeMode.textContent = 'Client Browser (pdf.js)';
+        metricComputeMode.className = 'font-mono text-amber-400 font-bold text-[11px]';
+      }
+      if (headerComputeBadge) {
+        headerComputeBadge.textContent = 'Client-Side Compute';
+        headerComputeBadge.className = 'hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono font-bold';
+      }
 
       updateTable();
       updateTextDump();
@@ -884,44 +937,409 @@
       }
     }
 
-    async function extractPageGraphics(page, viewport) {
-      extractedImages = [];
-      extractedDrawings = [];
+    // -------------------------------------------------------------------------
+    // Document model extraction (client-side parity with the Rust JSON schema)
+    //
+    // Everything below works in PDF points, top-down, exactly like the native
+    // engine output: `{ file_name, total_pages, parse_time_ms, pages: [...] }`.
+    // The canvas only rescales those points at render time.
+    // -------------------------------------------------------------------------
+
+    const round2 = (v) => Number((Number.isFinite(v) ? v : 0).toFixed(2));
+
+    function makeBBox(x0, y0, x1, y1) {
+      const ax = Math.min(x0, x1);
+      const ay = Math.min(y0, y1);
+      const bx = Math.max(x0, x1);
+      const by = Math.max(y0, y1);
+      return {
+        x0: round2(ax), y0: round2(ay),
+        x1: round2(bx), y1: round2(by),
+        width: round2(bx - ax), height: round2(by - ay)
+      };
+    }
+
+    function rgbToHex255(a) {
+      if (!a || a.length < 3 || typeof a[0] !== 'number') return null;
+      // pdf.js emits 0-255 ints; keep float support in case a build changes that.
+      const k = (a[0] > 1 || a[1] > 1 || a[2] > 1) ? 1 : 255;
+      const to = (v) => Math.max(0, Math.min(255, Math.round(v * k))).toString(16).padStart(2, '0');
+      return '#' + to(a[0]) + to(a[1]) + to(a[2]);
+    }
+
+    function rgb01ToHex(rgb) {
+      if (!rgb || rgb.length < 3) return null;
+      const to = (v) => Math.max(0, Math.min(255, Math.round(v * 255))).toString(16).padStart(2, '0');
+      return '#' + to(rgb[0]) + to(rgb[1]) + to(rgb[2]);
+    }
+
+    function hexToRgb01(hex) {
+      if (!hex || hex[0] !== '#') return null;
+      return [
+        round2(parseInt(hex.slice(1, 3), 16) / 255),
+        round2(parseInt(hex.slice(3, 5), 16) / 255),
+        round2(parseInt(hex.slice(5, 7), 16) / 255)
+      ];
+    }
+
+    async function sha256Hex(bytes) {
+      try {
+        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // Text spans in PDF points. `viewport` must be built with scale = 1 so the
+    // matrix math yields points directly (page rotation already included).
+    async function extractPageSpans(page, viewport, pageNum) {
+      const textContent = await page.getTextContent();
+      const spans = [];
+
+      for (const item of textContent.items) {
+        if (!item.str || item.str.trim() === '') continue;
+
+        const m = pdfjsLib.Util.transform(viewport.transform, item.transform);
+        const fontHeight = Math.hypot(m[2], m[3]);
+        const fontScaleX = Math.hypot(m[0], m[1]);
+        if (fontHeight === 0 || fontScaleX === 0) continue;
+
+        const ux = m[0] / fontScaleX;
+        const uy = m[1] / fontScaleX;
+        const advance = item.width;
+
+        // Ascent/descent vectors in page space (m[2], m[3] run baseline -> glyph top).
+        const ascX = m[2] * 0.85;
+        const ascY = m[3] * 0.85;
+        const descX = -m[2] * 0.20;
+        const descY = -m[3] * 0.20;
+
+        const c1x = m[4] + ascX,                  c1y = m[5] + ascY;
+        const c2x = m[4] + ascX + ux * advance,   c2y = m[5] + ascY + uy * advance;
+        const c3x = m[4] + descX,                 c3y = m[5] + descY;
+        const c4x = m[4] + descX + ux * advance,  c4y = m[5] + descY + uy * advance;
+
+        spans.push({
+          page: pageNum,
+          x0: round2(Math.min(c1x, c2x, c3x, c4x)),
+          y0: round2(Math.min(c1y, c2y, c3y, c4y)),
+          x1: round2(Math.max(c1x, c2x, c3x, c4x)),
+          y1: round2(Math.max(c1y, c2y, c3y, c4y)),
+          font_size: round2(fontHeight),
+          font_name: item.fontName || 'Helvetica',
+          text: item.str
+        });
+      }
+
+      // Spatial order: top-to-bottom in 6pt buckets, then left-to-right —
+      // the same ordering the Rust parser applies before table detection.
+      spans.sort((a, b) => {
+        const bucketA = Math.round(a.y0 / 6);
+        const bucketB = Math.round(b.y0 / 6);
+        if (bucketA !== bucketB) return bucketA - bucketB;
+        return a.x0 - b.x0;
+      });
+
+      return spans;
+    }
+
+    // Port of src/table.rs (TableDetector) with the same thresholds used by the
+    // Space backend: min 3 columns, 16pt column tolerance, 6pt row tolerance.
+    function detectTables(spans, tableIdStart = 1) {
+      const MIN_COLS = 3;
+      const COL_TOLERANCE = 16;
+      const ROW_TOLERANCE = 6;
+
+      if (!spans.length) return [];
+
+      const lines = [];
+      let currentLine = [];
+      let currentY = spans[0].y0;
+
+      for (const span of spans) {
+        if (Math.abs(span.y0 - currentY) <= ROW_TOLERANCE) {
+          currentLine.push(span);
+        } else {
+          if (currentLine.length) {
+            currentLine.sort((a, b) => a.x0 - b.x0);
+            lines.push(currentLine);
+          }
+          currentLine = [span];
+          currentY = span.y0;
+        }
+      }
+      if (currentLine.length) {
+        currentLine.sort((a, b) => a.x0 - b.x0);
+        lines.push(currentLine);
+      }
+
+      const buildTable = (rowsRaw, colsX, tableId) => {
+        const numCols = colsX.length;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        const structuredRows = [];
+        const cells = [];
+
+        rowsRaw.forEach((rowSpans, rowIdx) => {
+          const rowStrings = new Array(numCols).fill('');
+
+          for (const span of rowSpans) {
+            minX = Math.min(minX, span.x0);
+            minY = Math.min(minY, span.y0);
+            maxX = Math.max(maxX, span.x1);
+            maxY = Math.max(maxY, span.y1);
+
+            let bestCol = 0;
+            let minDist = Infinity;
+            colsX.forEach((cx, cIdx) => {
+              const d = Math.abs(cx - span.x0);
+              if (d < minDist) {
+                minDist = d;
+                bestCol = cIdx;
+              }
+            });
+
+            if (rowStrings[bestCol]) rowStrings[bestCol] += ' ';
+            rowStrings[bestCol] += span.text.trim();
+
+            cells.push({
+              row: rowIdx,
+              col: bestCol,
+              text: span.text.trim(),
+              bbox: makeBBox(span.x0, span.y0, span.x1, span.y1)
+            });
+          }
+
+          structuredRows.push(rowStrings);
+        });
+
+        return {
+          table_id: tableId,
+          bbox: makeBBox(minX, minY, maxX, maxY),
+          col_count: numCols,
+          row_count: rowsRaw.length,
+          headers: structuredRows.length ? structuredRows[0].slice() : [],
+          rows: structuredRows,
+          cells
+        };
+      };
+
+      const tables = [];
+      let activeRows = [];
+      let activeCols = [];
+      let tableCounter = tableIdStart;
+
+      for (const line of lines) {
+        if (line.length >= MIN_COLS) {
+          if (!activeCols.length) {
+            activeCols = line.map(s => s.x0);
+            activeRows.push(line);
+          } else {
+            const aligns = line.some(s => activeCols.some(c => Math.abs(c - s.x0) <= COL_TOLERANCE));
+            if (aligns) {
+              activeRows.push(line);
+            } else {
+              if (activeRows.length >= 2) {
+                tables.push(buildTable(activeRows, activeCols, tableCounter++));
+              }
+              activeRows = [line];
+              activeCols = line.map(s => s.x0);
+            }
+          }
+        } else {
+          if (activeRows.length) {
+            if (activeRows.length >= 2) {
+              tables.push(buildTable(activeRows, activeCols, tableCounter++));
+            }
+            activeRows = [];
+            activeCols = [];
+          }
+        }
+      }
+
+      if (activeRows.length >= 2) {
+        tables.push(buildTable(activeRows, activeCols, tableCounter++));
+      }
+
+      return tables;
+    }
+
+    // Groups spans into lines and paragraphs. MuPDF gives the native engine real
+    // blocks; here the grouping is geometric (vertical gap + horizontal overlap).
+    function buildTextBlocks(spans) {
+      if (!spans.length) return [];
+
+      const ordered = spans.slice().sort((a, b) => {
+        const bucketA = Math.round(a.y0 / 3);
+        const bucketB = Math.round(b.y0 / 3);
+        if (bucketA !== bucketB) return bucketA - bucketB;
+        return a.x0 - b.x0;
+      });
+
+      const lines = [];
+      for (const span of ordered) {
+        const line = lines[lines.length - 1];
+        if (line) {
+          const ref = line.spans[line.spans.length - 1];
+          const tolerance = Math.max(2.0, Math.min(ref.font_size || 0, span.font_size || 0) * 0.4);
+          const gapX = span.x0 - ref.x1;
+          // Same baseline AND horizontally adjacent: words of one line. Table
+          // cells share the baseline but are far apart, so they stay separate
+          // lines (MuPDF emits one line per cell).
+          const closeX = gapX <= Math.max(1.5, Math.min(ref.font_size || 0, span.font_size || 0) * 0.8);
+          if (Math.abs(span.y0 - ref.y0) <= tolerance && closeX) {
+            line.spans.push(span);
+            continue;
+          }
+        }
+        lines.push({ spans: [span] });
+      }
+
+      const unionBox = (boxes) => {
+        let x0 = Infinity;
+        let y0 = Infinity;
+        let x1 = -Infinity;
+        let y1 = -Infinity;
+        for (const b of boxes) {
+          x0 = Math.min(x0, b.x0);
+          y0 = Math.min(y0, b.y0);
+          x1 = Math.max(x1, b.x1);
+          y1 = Math.max(y1, b.y1);
+        }
+        return makeBBox(x0, y0, x1, y1);
+      };
+
+      for (const line of lines) {
+        line.spans.sort((a, b) => a.x0 - b.x0);
+        line.bbox = unionBox(line.spans);
+        line.blockSpans = line.spans.map(s => ({
+          text: s.text,
+          bbox: makeBBox(s.x0, s.y0, s.x1, s.y1),
+          font_name: s.font_name || 'Helvetica',
+          font_size: s.font_size,
+          char_count: [...s.text].length
+        }));
+        line.text = line.spans.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
+      }
+
+      const blocks = [];
+      let current = null;
+
+      for (const line of lines) {
+        const lineSize = Math.max(1, ...line.spans.map(s => s.font_size || 0));
+
+        if (current) {
+          const prevLine = current.lines[current.lines.length - 1];
+          const gap = line.bbox.y0 - current.bbox.y1;
+          const overlap = Math.min(current.bbox.x1, line.bbox.x1) - Math.max(current.bbox.x0, line.bbox.x0);
+          const minWidth = Math.min(current.bbox.width, line.bbox.width);
+
+          // A different type size means a different block (title vs body), which is
+          // how MuPDF splits them in the native output.
+          const prevSize = Math.max(1, ...prevLine.spans.map(s => s.font_size || 0));
+          const similarSize = Math.max(lineSize, prevSize) / Math.min(lineSize, prevSize) <= 1.5;
+
+          // Cells on the same baseline belong to the same row/block even when
+          // their boxes do not overlap horizontally.
+          const sameRowTolerance = Math.max(2, lineSize * 0.3);
+          const sameRow =
+            Math.abs(line.bbox.y0 - prevLine.bbox.y0) <= sameRowTolerance &&
+            Math.abs(line.bbox.y1 - prevLine.bbox.y1) <= sameRowTolerance;
+
+          // Tight vertical gap = same paragraph. MuPDF keeps table rows apart
+          // because their leading is much larger than their type size.
+          if (similarSize && (sameRow || (gap <= Math.max(lineSize * 0.6, 3) && overlap > Math.max(minWidth * 0.15, 0)))) {
+            current.lines.push(line);
+            current.bbox = unionBox([current.bbox, line.bbox]);
+            continue;
+          }
+        }
+
+        current = { block_id: blocks.length + 1, bbox: line.bbox, lines: [line] };
+        blocks.push(current);
+      }
+
+      return blocks.map(block => ({
+        block_id: block.block_id,
+        block_type: 'text',
+        bbox: block.bbox,
+        lines: block.lines.map(line => ({
+          text: line.text,
+          bbox: line.bbox,
+          spans: line.blockSpans
+        }))
+      }));
+    }
+
+    // Operator-list walk: images keep metadata + sha256 (of the normalized PNG),
+    // paths become SpatialDrawing objects with items, colours and stroke style.
+    async function extractPageGraphicsModel(page, viewport) {
+      const images = [];
+      const drawings = [];
 
       let opList;
       try {
         opList = await page.getOperatorList();
       } catch (e) {
-        console.warn('getOperatorList falhou:', e);
-        return;
+        console.warn('getOperatorList failed:', e);
+        return { images, drawings };
       }
 
       const ops = pdfjsLib.OPS;
-      const found = [];
-      const foundDrawings = [];
+
+      const toPage = (p, matrix) => {
+        const a = pdfjsLib.Util.applyTransform(p, matrix);
+        const b = pdfjsLib.Util.applyTransform(a, viewport.transform);
+        return [round2(b[0]), round2(b[1])];
+      };
+
+      const cornersToBBox = (matrix) => {
+        const pts = [[0, 0], [1, 0], [0, 1], [1, 1]].map(p => toPage(p, matrix));
+        const xs = pts.map(p => p[0]);
+        const ys = pts.map(p => p[1]);
+        return makeBBox(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys));
+      };
+
+      const pathBBox = (bounds, matrix) => {
+        // pdf.js reports path bounds as [minX, maxX, minY, maxY].
+        const [minX, maxX, minY, maxY] = bounds;
+        const pts = [
+          toPage([minX, minY], matrix),
+          toPage([maxX, minY], matrix),
+          toPage([minX, maxY], matrix),
+          toPage([maxX, maxY], matrix)
+        ];
+        const xs = pts.map(p => p[0]);
+        const ys = pts.map(p => p[1]);
+        return makeBBox(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys));
+      };
+
+      const pageArea = Math.abs(viewport.width * viewport.height);
+
       let ctm = MAT_IDENTITY.slice();
       const stack = [];
+      let fillHex = null;
+      let strokeHex = null;
+      let lineWidth = null;
+      let lineCap = null;
+      let lineJoin = null;
+      let dashPattern = null;
+      let dashPhase = null;
+      let fillOpacity = null;
+      let strokeOpacity = null;
+      let seqno = 0;
+
+      const foundImages = [];
       let pendingPath = null;
-      let fillColor = null;
-      let strokeColor = null;
 
-      const rgbToHex = (a) => {
-        if (!a || a.length < 3 || typeof a[0] !== 'number') return null;
-        // pdf.js emits 0-255 ints; keep float support in case a build changes that.
-        const k = (a[0] > 1 || a[1] > 1 || a[2] > 1) ? 1 : 255;
-        const to = (v) => Math.max(0, Math.min(255, Math.round(v * k))).toString(16).padStart(2, '0');
-        return '#' + to(a[0]) + to(a[1]) + to(a[2]);
-      };
-
-      // pdf.js reports path bounds as [minX, maxX, minY, maxY]; stay defensive
-      // about the other ordering so a future version cannot silently break this.
-      const readMinMax = (mm) => {
-        let x0 = mm[0], x1 = mm[1], y0 = mm[2], y1 = mm[3];
-        if (x1 < x0 || y1 < y0) {
-          x0 = mm[0]; y0 = mm[1]; x1 = mm[2]; y1 = mm[3];
-        }
-        return [x0, y0, x1, y1];
-      };
+      const cmykToRgb = (c, m, y, k) => [
+        255 * (1 - c) * (1 - k),
+        255 * (1 - m) * (1 - k),
+        255 * (1 - y) * (1 - k)
+      ];
 
       for (let i = 0; i < opList.fnArray.length; i++) {
         const fn = opList.fnArray[i];
@@ -940,140 +1358,395 @@
           }
         } else if (fn === ops.paintFormXObjectEnd || fn === ops.endGroup) {
           ctm = stack.pop() || MAT_IDENTITY.slice();
-        } else if (fn === ops.paintImageXObject) {
-          found.push({ key: String(args[0]), objId: args[0], inline: null, matrix: ctm.slice() });
-        } else if (fn === ops.paintInlineImageXObject) {
-          found.push({ key: 'inline:' + i, objId: null, inline: args[0], matrix: ctm.slice() });
-        } else if (fn === ops.paintImageXObjectRepeat) {
-          // args: [objId, scaleX, scaleY, positions]
-          for (let p = 0; p < args[3].length; p += 2) {
-            found.push({
-              key: String(args[0]),
-              objId: args[0],
-              inline: null,
-              matrix: matMul(ctm, [args[1], 0, 0, args[2], args[3][p], args[3][p + 1]])
-            });
+        } else if (fn === ops.setLineWidth) {
+          lineWidth = round2(args[0]);
+        } else if (fn === ops.setLineCap) {
+          lineCap = ['butt', 'round', 'square'][args[0]] || null;
+        } else if (fn === ops.setLineJoin) {
+          lineJoin = ['miter', 'round', 'bevel'][args[0]] || null;
+        } else if (fn === ops.setDash) {
+          const pattern = Array.isArray(args[0]) ? args[0].map(round2) : [];
+          dashPattern = pattern.length ? pattern : null;
+          dashPhase = dashPattern ? round2(args[1] || 0) : null;
+        } else if (fn === ops.setFillAlpha) {
+          fillOpacity = round2(args[0]);
+        } else if (fn === ops.setStrokeAlpha) {
+          strokeOpacity = round2(args[0]);
+        } else if (fn === ops.setGState) {
+          const state = args && args[0];
+          if (state) {
+            if (typeof state.ca === 'number') fillOpacity = round2(state.ca);
+            if (typeof state.CA === 'number') strokeOpacity = round2(state.CA);
+            if (typeof state.lineWidth === 'number') lineWidth = round2(state.lineWidth);
+            if (state.dash && Array.isArray(state.dash) && state.dash.length) {
+              dashPattern = state.dash.map(round2);
+              dashPhase = 0;
+            }
           }
+        } else if (fn === ops.setFillRGBColor) {
+          fillHex = rgbToHex255(args);
+        } else if (fn === ops.setStrokeRGBColor) {
+          strokeHex = rgbToHex255(args);
+        } else if (fn === ops.setFillGray) {
+          fillHex = rgbToHex255([args[0] * 255, args[0] * 255, args[0] * 255]);
+        } else if (fn === ops.setStrokeGray) {
+          strokeHex = rgbToHex255([args[0] * 255, args[0] * 255, args[0] * 255]);
+        } else if (fn === ops.setFillCMYKColor) {
+          fillHex = rgbToHex255(cmykToRgb(args[0], args[1], args[2], args[3]));
+        } else if (fn === ops.setStrokeCMYKColor) {
+          strokeHex = rgbToHex255(cmykToRgb(args[0], args[1], args[2], args[3]));
         } else if (fn === ops.constructPath) {
-          // args: [pathOps, pathArgs, minMax]
-          const mm = args[2];
-          pendingPath = (mm && mm.length === 4)
-            ? { bounds: readMinMax(mm), matrix: ctm.slice() }
-            : null;
+          // pdf.js may emit one path in several constructPath calls (e.g. a
+          // rectangle followed by closePath). Merge them until a paint op.
+          const pathOps = args && args[0];
+          const pathArgs = args && args[1];
+          const minMax = args && args[2];
+
+          if (pathOps && pathArgs) {
+            if (!pendingPath) {
+              pendingPath = { pathOps: [], pathArgs: [], minMax: null, matrix: ctm.slice() };
+            }
+            pendingPath.pathOps = pendingPath.pathOps.concat(Array.from(pathOps));
+            pendingPath.pathArgs = pendingPath.pathArgs.concat(Array.from(pathArgs));
+
+            if (minMax && minMax.length === 4 && Array.from(minMax).every(v => typeof v === 'number' && Number.isFinite(v))) {
+              if (!pendingPath.minMax) {
+                pendingPath.minMax = Array.from(minMax);
+              } else {
+                pendingPath.minMax = [
+                  Math.min(pendingPath.minMax[0], minMax[0]),
+                  Math.max(pendingPath.minMax[1], minMax[1]),
+                  Math.min(pendingPath.minMax[2], minMax[2]),
+                  Math.max(pendingPath.minMax[3], minMax[3])
+                ];
+              }
+            }
+          }
         } else if (fn === ops.fill || fn === ops.eoFill || fn === ops.fillStroke ||
-                   fn === ops.eoFillStroke || fn === ops.closeFillStroke ||
-                   fn === ops.closeEOFillStroke || fn === ops.stroke || fn === ops.closeStroke) {
+                   fn === ops.eoFillStroke || fn === ops.closePathFillStroke ||
+                   fn === ops.closePathEOFillStroke || fn === ops.stroke || fn === ops.closePathStroke) {
+          if (pendingPath && !pendingPath.minMax) pendingPath = null;
           if (pendingPath) {
             const doFill = (fn === ops.fill || fn === ops.eoFill || fn === ops.fillStroke ||
-                            fn === ops.eoFillStroke || fn === ops.closeFillStroke ||
-                            fn === ops.closeEOFillStroke);
-            const doStroke = (fn === ops.stroke || fn === ops.closeStroke || fn === ops.fillStroke ||
-                              fn === ops.eoFillStroke || fn === ops.closeFillStroke ||
-                              fn === ops.closeEOFillStroke);
-            foundDrawings.push({
-              type: (doFill && doStroke) ? 'fill+stroke' : (doFill ? 'fill' : 'stroke'),
-              bounds: pendingPath.bounds,
-              matrix: pendingPath.matrix,
-              fill: doFill ? fillColor : null,
-              stroke: doStroke ? strokeColor : null
-            });
+                            fn === ops.eoFillStroke || fn === ops.closePathFillStroke ||
+                            fn === ops.closePathEOFillStroke);
+            const doStroke = (fn === ops.stroke || fn === ops.closePathStroke ||
+                              fn === ops.fillStroke || fn === ops.eoFillStroke ||
+                              fn === ops.closePathFillStroke || fn === ops.closePathEOFillStroke);
+            const isEvenOdd = (fn === ops.eoFill || fn === ops.eoFillStroke || fn === ops.closePathEOFillStroke);
+
+            const bbox = pathBBox(pendingPath.minMax, pendingPath.matrix);
+
+            // Background fills (>= 95% of the page) are noise — same filter as Rust.
+            const isBackground = doFill && !doStroke && pageArea > 0 &&
+              (bbox.width * bbox.height) >= 0.95 * pageArea;
+
+            if (!isBackground) {
+              const matrix = pendingPath.matrix;
+              const items = [];
+              let ai = 0;
+              let cur = null;
+              let start = null;
+
+              for (const op of pendingPath.pathOps) {
+                if (op === ops.moveTo) {
+                  cur = [pendingPath.pathArgs[ai++], pendingPath.pathArgs[ai++]];
+                  start = cur;
+                } else if (op === ops.lineTo) {
+                  const p = [pendingPath.pathArgs[ai++], pendingPath.pathArgs[ai++]];
+                  if (cur) items.push({ kind: 'line', p1: toPage(cur, matrix), p2: toPage(p, matrix) });
+                  cur = p;
+                } else if (op === ops.curveTo) {
+                  const c1 = [pendingPath.pathArgs[ai++], pendingPath.pathArgs[ai++]];
+                  const c2 = [pendingPath.pathArgs[ai++], pendingPath.pathArgs[ai++]];
+                  const p = [pendingPath.pathArgs[ai++], pendingPath.pathArgs[ai++]];
+                  if (cur) {
+                    items.push({
+                      kind: 'curve',
+                      p1: toPage(cur, matrix),
+                      p2: toPage(c1, matrix),
+                      p3: toPage(c2, matrix),
+                      p4: toPage(p, matrix)
+                    });
+                  }
+                  cur = p;
+                } else if (op === ops.closePath) {
+                  if (cur && start) {
+                    const dx = start[0] - cur[0];
+                    const dy = start[1] - cur[1];
+                    // Rectangles are already closed; skip degenerate segments.
+                    if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
+                      items.push({ kind: 'line', p1: toPage(cur, matrix), p2: toPage(start, matrix) });
+                    }
+                    cur = start;
+                  }
+                } else if (op === ops.rectangle) {
+                  const x = pendingPath.pathArgs[ai++];
+                  const y = pendingPath.pathArgs[ai++];
+                  const w = pendingPath.pathArgs[ai++];
+                  const h = pendingPath.pathArgs[ai++];
+                  const pts = [
+                    toPage([x, y], matrix),
+                    toPage([x + w, y], matrix),
+                    toPage([x, y + h], matrix),
+                    toPage([x + w, y + h], matrix)
+                  ];
+                  const xs = pts.map(p => p[0]);
+                  const ys = pts.map(p => p[1]);
+                  items.push({
+                    kind: 'rect',
+                    bbox: makeBBox(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)),
+                    orientation: 1
+                  });
+                  cur = [x, y];
+                  start = cur;
+                }
+              }
+
+              drawings.push({
+                drawing_id: drawings.length + 1,
+                bbox,
+                drawing_type: (doFill && doStroke) ? 'fill_stroke' : (doFill ? 'fill' : 'stroke'),
+                item_count: items.length,
+                items,
+                stroke_color: doStroke ? hexToRgb01(strokeHex) : null,
+                fill_color: doFill ? hexToRgb01(fillHex) : null,
+                width: doStroke ? lineWidth : null,
+                fill_opacity: doFill ? (fillOpacity === null ? 1 : fillOpacity) : null,
+                stroke_opacity: doStroke ? (strokeOpacity === null ? 1 : strokeOpacity) : null,
+                even_odd: doFill ? isEvenOdd : null,
+                dash_pattern: doStroke ? (dashPattern || []) : null,
+                dash_phase: doStroke ? (dashPhase === null ? 0 : dashPhase) : null,
+                line_join: doStroke ? (lineJoin || 'miter') : null,
+                line_cap: doStroke ? (lineCap || 'butt') : null,
+                layer: null,
+                seqno: ++seqno
+              });
+            }
+
             pendingPath = null;
           }
         } else if (fn === ops.endPath || fn === ops.clip) {
           pendingPath = null;
-        } else if (fn === ops.setFillRGBColor) {
-          fillColor = rgbToHex(args);
-        } else if (fn === ops.setStrokeRGBColor) {
-          strokeColor = rgbToHex(args);
-        }
-      }
-
-      // Vector paths -> canvas-space boxes (same conversion as text/images).
-      for (const d of foundDrawings) {
-        const b = d.bounds;
-        const corners = [
-          [b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]
-        ].map(p => pdfjsLib.Util.applyTransform(
-          pdfjsLib.Util.applyTransform(p, d.matrix),
-          viewport.transform
-        ));
-
-        const xs = corners.map(c => c[0]);
-        const ys = corners.map(c => c[1]);
-        const vx = Math.min.apply(null, xs);
-        const vy = Math.min.apply(null, ys);
-        const rawW = Math.max.apply(null, xs) - vx;
-        const rawH = Math.max.apply(null, ys) - vy;
-        // Degenerate paths (straight lines) get a 1px floor so the box is visible,
-        // but the reported points keep the true extent so they match the Rust side.
-        const vw = Math.max(rawW, 1);
-        const vh = Math.max(rawH, 1);
-
-        extractedDrawings.push({
-          type: d.type,
-          fill: d.fill,
-          stroke: d.stroke,
-          paint: { vx: vx, vy: vy, vw: vw, vh: vh },
-          pt: {
-            x0: Number((vx / currentRenderScale).toFixed(2)),
-            y0: Number((vy / currentRenderScale).toFixed(2)),
-            x1: Number(((vx + rawW) / currentRenderScale).toFixed(2)),
-            y1: Number(((vy + rawH) / currentRenderScale).toFixed(2))
+        } else if (fn === ops.paintImageXObject) {
+          foundImages.push({ objId: String(args[0]), inline: null, matrix: ctm.slice() });
+        } else if (fn === ops.paintInlineImageXObject) {
+          foundImages.push({ objId: null, inline: args[0], matrix: ctm.slice() });
+        } else if (fn === ops.paintImageXObjectRepeat) {
+          for (let p = 0; p < args[3].length; p += 2) {
+            foundImages.push({
+              objId: String(args[0]),
+              inline: null,
+              matrix: matMul(ctm, [args[1], 0, 0, args[2], args[3][p], args[3][p + 1]])
+            });
           }
-        });
+        }
       }
 
       // Dedupe by resource: an image painted N times is still one embedded image.
       const byKey = new Map();
-      for (const item of found) {
-        const corners = unitSquareCorners(item.matrix).map(c =>
-          pdfjsLib.Util.applyTransform(c, viewport.transform)
-        );
-        const xs = corners.map(c => c[0]);
-        const ys = corners.map(c => c[1]);
-        const vx = Math.min.apply(null, xs);
-        const vy = Math.min.apply(null, ys);
-        const vw = Math.max(Math.max.apply(null, xs) - vx, 1);
-        const vh = Math.max(Math.max.apply(null, ys) - vy, 1);
-
-        let entry = byKey.get(item.key);
-        if (!entry) {
-          entry = {
-            objId: item.objId,
-            inline: item.inline,
-            count: 0,
-            paint: { vx: vx, vy: vy, vw: vw, vh: vh },
-            pt: {
-              x0: Number((vx / currentRenderScale).toFixed(2)),
-              y0: Number((vy / currentRenderScale).toFixed(2)),
-              x1: Number(((vx + vw) / currentRenderScale).toFixed(2)),
-              y1: Number(((vy + vh) / currentRenderScale).toFixed(2))
-            },
-            px: null,
-            thumb: null,
-            cropped: false
-          };
-          byKey.set(item.key, entry);
+      for (const item of foundImages) {
+        const key = item.objId !== null ? 'x:' + item.objId : 'inline:' + images.length + ':' + foundImages.indexOf(item);
+        const bbox = cornersToBBox(item.matrix);
+        const existing = byKey.get(key);
+        if (existing) {
+          existing.count += 1;
+          continue;
         }
-        entry.count += 1;
+        byKey.set(key, {
+          objId: item.objId,
+          inline: item.inline,
+          matrix: item.matrix,
+          bbox,
+          count: 1
+        });
       }
 
+      let imageId = 1;
       for (const entry of byKey.values()) {
-        const img = entry.inline ? entry.inline : await resolveImageData(page, entry.objId);
-        if (img) {
-          entry.px = { width: img.width, height: img.height };
-          entry.thumb = decodedImageToCanvas(img);
+        const decoded = entry.inline ? entry.inline : await resolveImageData(page, entry.objId);
+
+        let pixelWidth = decoded && decoded.width ? decoded.width : Math.round(entry.bbox.width);
+        let pixelHeight = decoded && decoded.height ? decoded.height : Math.round(entry.bbox.height);
+        let bitsPerComponent = null;
+        let colorSpace = null;
+
+        // pdf.js does not expose the original PDF colour space; infer it from the
+        // decoded buffer (1bpp masks are 1 byte per 8 pixels, grey is 1 B/px).
+        if (decoded) {
+          if (decoded.bitmap) {
+            bitsPerComponent = 8;
+            colorSpace = '/DeviceRGB';
+          } else if (decoded.data && decoded.width && decoded.height) {
+            const bytesPerPixel = decoded.data.length / (decoded.width * decoded.height);
+            if (bytesPerPixel < 1) {
+              bitsPerComponent = 1;
+              colorSpace = '/DeviceGray';
+            } else if (bytesPerPixel < 3) {
+              bitsPerComponent = 8;
+              colorSpace = '/DeviceGray';
+            } else {
+              bitsPerComponent = 8;
+              colorSpace = '/DeviceRGB';
+            }
+          }
         }
-        if (!entry.thumb) {
-          entry.thumb = cropFromPage(entry.paint);
-          entry.cropped = true;
+
+        // The browser only exposes decoded pixels, so the digest/file size below
+        // refer to the normalized PNG (documented in the Space README).
+        let sha256 = null;
+        let byteLength = null;
+        const canvas = decodedImageToCanvas(decoded);
+        if (canvas) {
+          try {
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            if (blob) {
+              const buffer = await blob.arrayBuffer();
+              byteLength = buffer.byteLength;
+              sha256 = await sha256Hex(buffer);
+            }
+          } catch (e) {
+            /* hashing is best-effort */
+          }
         }
-        extractedImages.push(entry);
+
+        images.push({
+          image_id: imageId++,
+          name: entry.objId !== null ? entry.objId : 'inline',
+          xref: 0,
+          bbox: entry.bbox,
+          pixel_width: pixelWidth,
+          pixel_height: pixelHeight,
+          bits_per_component: bitsPerComponent,
+          color_space: colorSpace,
+          filter: null,
+          mime_type: 'image/png',
+          byte_length: byteLength,
+          sha256,
+          file: null,
+          count: entry.count,
+          objId: entry.objId,
+          inline: entry.inline
+        });
       }
 
-      // Keep the reading order stable (top-to-bottom, left-to-right).
-      extractedImages.sort((a, b) => (Math.round(a.pt.y0 / 6) - Math.round(b.pt.y0 / 6)) || (a.pt.x0 - b.pt.x0));
+      return { images, drawings };
     }
+
+    async function parsePageToCache(pageNum, generation = parseGeneration) {
+      const doc = currentPdfDoc;
+      if (!doc || pageNum < 1 || pageNum > doc.numPages) return null;
+      if (pageCache[pageNum - 1]) return pageCache[pageNum - 1];
+
+      const t0 = performance.now();
+      const page = await doc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1 });
+
+      const spans = await extractPageSpans(page, viewport, pageNum);
+      const graphics = await extractPageGraphicsModel(page, viewport);
+
+      const entry = {
+        page_number: pageNum,
+        width: round2(viewport.width),
+        height: round2(viewport.height),
+        rotation: page.rotate || 0,
+        text_blocks: buildTextBlocks(spans),
+        tables: detectTables(spans, 1),
+        raw_span_count: spans.length,
+        images: graphics.images,
+        drawings: graphics.drawings,
+        spans,
+        parse_time_ms: performance.now() - t0
+      };
+
+      // A new file may have been dropped while this page was being extracted.
+      // In that case the result belongs to a stale document: drop it instead of
+      // overwriting the fresh page cache.
+      if (generation !== parseGeneration || doc !== currentPdfDoc) return null;
+
+      pageCache[pageNum - 1] = entry;
+      return entry;
+    }
+
+    async function parseRemainingPages(generation) {
+      if (!currentPdfDoc) return;
+      const total = currentPdfDoc.numPages;
+
+      for (let p = 2; p <= total; p++) {
+        if (generation !== parseGeneration) return;
+        try {
+          await parsePageToCache(p, generation);
+        } catch (e) {
+          console.warn('page ' + p + ' extraction failed:', e);
+        }
+        if (generation !== parseGeneration) return;
+        pageIndicator.textContent = `Page ${currentPageNum} of ${total} · extracted ${p}/${total}`;
+      }
+
+      if (generation !== parseGeneration) return;
+      docParseMs = performance.now() - docParseStart;
+      pageIndicator.textContent = `Page ${currentPageNum} of ${total}`;
+      updateJsonViewer();
+      console.log(`⚡ Client-side document model ready: ${pageCache.filter(Boolean).length}/${total} pages in ${docParseMs.toFixed(0)} ms`);
+    }
+
+    async function ensureFullDocument() {
+      if (!currentPdfDoc) return;
+      const total = currentPdfDoc.numPages;
+
+      for (let p = 1; p <= total; p++) {
+        if (!pageCache[p - 1]) {
+          try {
+            await parsePageToCache(p, parseGeneration);
+          } catch (e) {
+            console.warn('page ' + p + ' extraction failed:', e);
+          }
+        }
+      }
+
+      if (!docParseMs && docParseStart) {
+        docParseMs = performance.now() - docParseStart;
+      }
+      updateJsonViewer();
+    }
+
+    function buildDocumentJson() {
+      if (!currentPdfDoc) return null;
+
+      const pages = pageCache.filter(Boolean).map(p => ({
+        page_number: p.page_number,
+        width: p.width,
+        height: p.height,
+        rotation: p.rotation,
+        text_blocks: p.text_blocks,
+        tables: p.tables,
+        raw_span_count: p.raw_span_count,
+        images: p.images.map(im => ({
+          image_id: im.image_id,
+          name: im.name,
+          xref: im.xref,
+          bbox: im.bbox,
+          pixel_width: im.pixel_width,
+          pixel_height: im.pixel_height,
+          bits_per_component: im.bits_per_component,
+          color_space: im.color_space,
+          filter: im.filter,
+          mime_type: im.mime_type,
+          byte_length: im.byte_length,
+          sha256: im.sha256,
+          file: null
+        })),
+        drawings: p.drawings
+      }));
+
+      return {
+        file_name: docFileName,
+        total_pages: currentPdfDoc.numPages,
+        parse_time_ms: round2(docParseMs),
+        pages
+      };
+    }
+
 
     function updateImageGallery() {
       imagesGrid.innerHTML = '';
@@ -1362,43 +2035,13 @@
         jsonViewer.textContent = JSON.stringify(currentRustDoc.structured, null, 2);
         return;
       }
-      const doc = {
-        total_pages: currentPdfDoc ? currentPdfDoc.numPages : 1,
-        current_page: currentPageNum,
-        total_spans: extractedSpans.length,
-        total_images: extractedImages.length,
-        total_drawings: extractedDrawings.length,
-        spans: extractedSpans.map(s => ({
-          page: s.page,
-          x0: s.x0,
-          y0: s.y0,
-          x1: s.x1,
-          y1: s.y1,
-          font_size: s.font_size,
-          font_name: s.font_name,
-          text: s.text
-        })),
-        images: extractedImages.map(im => ({
-          page: currentPageNum,
-          name: (im.objId !== null && im.objId !== undefined) ? 'XObject ' + im.objId : 'inline image',
-          x0: im.pt.x0,
-          y0: im.pt.y0,
-          x1: im.pt.x1,
-          y1: im.pt.y1,
-          pixel_width: im.px ? im.px.width : null,
-          pixel_height: im.px ? im.px.height : null,
-          painted: im.count
-        })),
-        drawings: extractedDrawings.map(d => ({
-          page: currentPageNum,
-          type: d.type,
-          fill_color: d.fill,
-          stroke_color: d.stroke,
-          x0: d.pt.x0,
-          y0: d.pt.y0,
-          x1: d.pt.x1,
-          y1: d.pt.y1
-        }))
+      // Client-side model: same schema the native engine emits (pages[], tables,
+      // text_blocks, images with sha256, drawings with items/colours).
+      const doc = buildDocumentJson() || {
+        file_name: docFileName,
+        total_pages: 0,
+        parse_time_ms: 0,
+        pages: []
       };
       jsonViewer.textContent = JSON.stringify(doc, null, 2);
     }
@@ -1479,15 +2122,49 @@
       setTimeout(() => btnCopyText.textContent = '📋 Copy to Clipboard', 2000);
     });
 
-    btnDownloadJson.addEventListener('click', () => {
+    btnDownloadJson.addEventListener('click', async () => {
+      const original = btnDownloadJson.textContent;
+      btnDownloadJson.textContent = '⏳ Preparing…';
+      btnDownloadJson.disabled = true;
+      await ensureFullDocument();
+      btnDownloadJson.textContent = original;
+      btnDownloadJson.disabled = false;
+
       const blob = new Blob([jsonViewer.textContent], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `rasgapdf_page_${currentPageNum}.json`;
+      a.download = 'rasgapdf_document.json';
       a.click();
       URL.revokeObjectURL(url);
     });
+
+    if (btnCopyJson) {
+      btnCopyJson.addEventListener('click', async () => {
+        btnCopyJson.textContent = '⏳ Preparing…';
+        btnCopyJson.disabled = true;
+        await ensureFullDocument();
+        btnCopyJson.disabled = false;
+
+        const text = jsonViewer.textContent || '';
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (e) {
+          // Clipboard API needs a secure context (https/localhost); fall back to a
+          // hidden textarea so the button still works on plain http.
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch (err) { /* ignore */ }
+          document.body.removeChild(ta);
+        }
+        btnCopyJson.textContent = '✅ Copied!';
+        setTimeout(() => btnCopyJson.textContent = '📋 Copy JSON', 2000);
+      });
+    }
 
     // Auto-load sample PDF on startup
     window.addEventListener('DOMContentLoaded', () => {
