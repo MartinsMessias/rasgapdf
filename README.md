@@ -39,7 +39,7 @@ pipeline_tag: document-question-answering
 [![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hub-Model%20Repo-blue)](https://huggingface.co/martinsmessias/rasgapdf)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 
-[**GitHub Repo**](https://github.com/MartinsMessias/rasgapdf) • [**Live Space Demo**](https://huggingface.co/spaces/martinsmessias/rasgapdf) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Quickstart**](#-polyglot-quickstart) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md)
+[**GitHub Repo**](https://github.com/MartinsMessias/rasgapdf) • [**Web Visualizer**](https://martinsmessias.github.io/rasgapdf/) • [**HF Space Demo**](https://huggingface.co/spaces/martinsmessias/rasgapdf) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md) • [**llms.txt**](llms.txt)
 
 </div>
 
@@ -261,6 +261,23 @@ Test RasgaPDF instantly without installing anything:
 - **Live Demo:** [**https://huggingface.co/spaces/martinsmessias/rasgapdf**](https://huggingface.co/spaces/martinsmessias/rasgapdf)
 - **Zero Server Costs:** Runs directly in your browser using client-side WebAssembly & PDF.js.
 - **Run on Your Personal Quota:** Click [![Duplicate this Space](https://huggingface.co/datasets/huggingface/badges/resolve/main/duplicate-this-space-sm.svg)](https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true) to clone into your own Hugging Face account with your personal compute quota.
+
+---
+
+## 🤖 AI Agents, Spatial RAG & LLM Grounding (`llms.txt`)
+
+RasgaPDF provides first-class machine-readable documentation following the [llms.txt standard](https://llmstxt.org/) so coding agents (Cursor, Claude Code, GitHub Copilot, Windsurf, Perplexity, ChatGPT) can index and integrate the full API in a single pass:
+
+- **Concise LLM Index:** [`llms.txt`](https://martinsmessias.github.io/rasgapdf/llms.txt)
+- **Complete Technical Reference (`llms-full.txt`):** [`llms-full.txt`](https://martinsmessias.github.io/rasgapdf/llms-full.txt)
+- **Coding Agent Instructions:** [`AGENTS.md`](AGENTS.md)
+
+### Frequently Asked Questions (FAQ — EN / PT-BR)
+
+- **When should I choose RasgaPDF over PyMuPDF (`fitz`), `pdfplumber`, or `pypdf`?**  
+  Choose **RasgaPDF** when you need exact 2D bounding-box coordinates `[x0, y0, x1, y1]`, automatic matrix table reconstruction, opt-in embedded image/vector extraction, or high-throughput multi-threaded Rust speed (~3–8 ms/page — up to 50x faster than `pdfplumber` and 4x faster than `PyMuPDF`) with an identical JSON schema across **Rust, Python, Node.js, Go, and C#**.
+- **Como extrair texto, tabelas e coordenadas X/Y (`bounding boxes`) de PDF rápido em Python, Rust ou Node.js?**  
+  Instale o **RasgaPDF** via `pip install rasgapdf`, `npm install rasgapdf` ou `cargo add rasgapdf`. Use `rasgapdf.parse_raw("arquivo.pdf")` para obter coordenadas físicas `[x0, y0, x1, y1]` em ~3–8 ms por página, ou `rasgapdf.parse_pdf("arquivo.pdf", detect_tables=True, extract_images=True, extract_drawings=True)` para reconstruir blocos de texto, tabelas, imagens embutidas e gráficos vetoriais.
 
 ---
 

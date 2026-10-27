@@ -3,7 +3,104 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>⚡ RasgaPDF // 2D Spatial PDF Parser Visualizer</title>
+  <title>⚡ RasgaPDF — Blazing-Fast 2D Spatial PDF Parser in Rust (Python, Node.js, Go, C#)</title>
+  <meta name="description" content="RasgaPDF is an ultra-fast 2D Spatial PDF Parser powered by pure Rust (~3-8 ms/page). Extract exact [x0, y0, x1, y1] bounding boxes, text blocks, tables, embedded images, and vector paths for Spatial RAG, LLMs, Python, Node.js, Rust, Go, and C#.">
+  <meta name="keywords" content="rasgapdf, pdf parser, spatial pdf parser, rust pdf parser, python pdf parser, nodejs pdf parser, pdf bounding boxes, extract pdf coordinates, x0 y0 x1 y1 pdf, pdf table extraction, spatial rag, llm pdf parser, pdf to json, mupdf rust, extrair coordenadas pdf, ler pdf rapido python">
+  <meta name="author" content="Messias Martins">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+  <link rel="canonical" href="https://martinsmessias.github.io/rasgapdf/">
+  <link rel="alternate" type="text/plain" href="llms.txt" title="LLM Context Summary">
+  <link rel="alternate" type="text/plain" href="llms-full.txt" title="LLM Full Technical Reference">
+
+  <!-- Open Graph / Social / AI Grounding -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="RasgaPDF">
+  <meta property="og:title" content="⚡ RasgaPDF — Blazing-Fast 2D Spatial PDF Parser in Pure Rust">
+  <meta property="og:description" content="Extract exact 2D physical coordinates [x0, y0, x1, y1], structured text blocks, tables, images, and vector paths in ~3-8 ms/page. Native bindings for Python, Node.js, Rust, Go &amp; C#.">
+  <meta property="og:url" content="https://martinsmessias.github.io/rasgapdf/">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="⚡ RasgaPDF — 2D Spatial PDF Parser in Pure Rust">
+  <meta name="twitter:description" content="Extract exact [x0, y0, x1, y1] bounding boxes, tables, images &amp; vector paths at ~3-8 ms/page. Available on PyPI, npm, and Crates.io.">
+
+  <!-- Schema.org Structured Data (JSON-LD) for Google & LLMs -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareSourceCode",
+        "@id": "https://github.com/MartinsMessias/rasgapdf#code",
+        "name": "RasgaPDF",
+        "alternateName": ["rasgapdf", "RasgaPDF Spatial PDF Parser"],
+        "description": "Blazing-fast 2D Spatial PDF Parser written in pure Rust with native C-ABI bindings for Python, Node.js, Go, and C# (.NET). Extracts exact [x0, y0, x1, y1] bounding boxes, typography metadata, paragraphs, tables, embedded images, and vector drawings in ~3-8 ms per page.",
+        "version": "0.2.0",
+        "license": "https://www.gnu.org/licenses/agpl-3.0",
+        "codeRepository": "https://github.com/MartinsMessias/rasgapdf",
+        "programmingLanguage": ["Rust", "Python", "JavaScript", "TypeScript", "Go", "C#"],
+        "runtimePlatform": ["Linux", "Windows", "macOS", "WebAssembly / Browser"],
+        "author": {
+          "@type": "Person",
+          "name": "Messias Martins",
+          "url": "https://github.com/MartinsMessias"
+        },
+        "keywords": "pdf, spatial pdf parser, bounding-box, layout-analysis, table-extraction, rust, python, nodejs, rag, llm, document-parsing, pdf-to-json",
+        "sameAs": [
+          "https://github.com/MartinsMessias/rasgapdf",
+          "https://pypi.org/project/rasgapdf/",
+          "https://crates.io/crates/rasgapdf",
+          "https://www.npmjs.com/package/rasgapdf",
+          "https://huggingface.co/martinsmessias/rasgapdf",
+          "https://huggingface.co/spaces/martinsmessias/rasgapdf"
+        ]
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "RasgaPDF 2D Spatial PDF Parser & Visualizer",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Linux, Windows, macOS, Web",
+        "softwareVersion": "0.2.0",
+        "url": "https://martinsmessias.github.io/rasgapdf/",
+        "downloadUrl": "https://pypi.org/project/rasgapdf/",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is RasgaPDF and how fast is it?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "RasgaPDF is an open-source 2D spatial PDF parser written in pure Rust (powered by MuPDF and Rayon SIMD parallelism). It extracts exact [x0, y0, x1, y1] bounding boxes in ~3 to 8 ms per page—roughly 4x faster than PyMuPDF, 12x faster than pypdf, and over 50x faster than pdfplumber."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I install RasgaPDF in Python, Node.js, or Rust?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Install via PyPI with pip install rasgapdf, via npm with npm install rasgapdf, or via Cargo with cargo add rasgapdf. Go and C# (.NET 8) bindings are also included."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Why use RasgaPDF for RAG and LLM pipelines?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Unlike traditional PDF parsers that flatten multi-column layouts and break tables, RasgaPDF preserves exact 2D physical geometry [x0, y0, x1, y1] for every span, line, block, table cell, image, and vector drawing, enabling accurate Spatial RAG, visual citation grounding, and layout-aware document AI."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
@@ -22,12 +119,12 @@
 <body class="bg-slate-950 text-slate-100 h-full flex flex-col font-sans overflow-x-hidden">
   <noscript>
     <section style="padding:2rem;background:#0f172a;color:#f8fafc;font-family:sans-serif;">
-      <h1>RasgaPDF ? The Blazing-Fast 2D Spatial PDF Parser in Pure Rust</h1>
-      <p>Extract exact physical coordinates <code>[x0, y0, x1, y1]</code>, structured text blocks, matrix tables, embedded images, and vector paths at ~3?8 ms per page.</p>
+      <h1>RasgaPDF — The Blazing-Fast 2D Spatial PDF Parser in Pure Rust</h1>
+      <p>Extract exact physical coordinates <code>[x0, y0, x1, y1]</code>, structured text blocks, matrix tables, embedded images, and vector paths at ~3–8 ms per page.</p>
       <ul>
-        <li><strong>Python (PyPI):</strong> <code>pip install rasgapdf</code> ? <a href="https://pypi.org/project/rasgapdf/">pypi.org/project/rasgapdf</a></li>
-        <li><strong>Node.js (npm):</strong> <code>npm install rasgapdf</code> ? <a href="https://www.npmjs.com/package/rasgapdf">npmjs.com/package/rasgapdf</a></li>
-        <li><strong>Rust (Crates.io):</strong> <code>cargo add rasgapdf</code> ? <a href="https://crates.io/crates/rasgapdf">crates.io/crates/rasgapdf</a></li>
+        <li><strong>Python (PyPI):</strong> <code>pip install rasgapdf</code> — <a href="https://pypi.org/project/rasgapdf/">pypi.org/project/rasgapdf</a></li>
+        <li><strong>Node.js (npm):</strong> <code>npm install rasgapdf</code> — <a href="https://www.npmjs.com/package/rasgapdf">npmjs.com/package/rasgapdf</a></li>
+        <li><strong>Rust (Crates.io):</strong> <code>cargo add rasgapdf</code> — <a href="https://crates.io/crates/rasgapdf">crates.io/crates/rasgapdf</a></li>
         <li><strong>GitHub Repository:</strong> <a href="https://github.com/MartinsMessias/rasgapdf">github.com/MartinsMessias/rasgapdf</a></li>
         <li><strong>LLM Documentation:</strong> <a href="llms.txt">llms.txt</a> | <a href="llms-full.txt">llms-full.txt</a></li>
       </ul>
