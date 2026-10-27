@@ -1,15 +1,25 @@
 ---
 language:
 - en
+- pt
 license: agpl-3.0
 tags:
 - pdf
+- pdf-parser
 - spatial
+- spatial-pdf
 - parser
 - rust
+- python
+- nodejs
 - layout-analysis
 - document-parsing
 - bounding-box
+- table-extraction
+- rag
+- llm
+- pdf-to-json
+- document-ai
 pipeline_tag: document-question-answering
 ---
 

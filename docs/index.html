@@ -1,0 +1,2188 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚡ RasgaPDF // 2D Spatial PDF Parser Visualizer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    /* Monospace numerical coordinates */
+    .coord-font {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: #38bdf8;
+    }
+    /* Custom scrollbars */
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: #090d16; }
+    ::-webkit-scrollbar-thumb { background: #26334d; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3b4d71; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-full flex flex-col font-sans overflow-x-hidden">
+  <noscript>
+    <section style="padding:2rem;background:#0f172a;color:#f8fafc;font-family:sans-serif;">
+      <h1>RasgaPDF ? The Blazing-Fast 2D Spatial PDF Parser in Pure Rust</h1>
+      <p>Extract exact physical coordinates <code>[x0, y0, x1, y1]</code>, structured text blocks, matrix tables, embedded images, and vector paths at ~3?8 ms per page.</p>
+      <ul>
+        <li><strong>Python (PyPI):</strong> <code>pip install rasgapdf</code> ? <a href="https://pypi.org/project/rasgapdf/">pypi.org/project/rasgapdf</a></li>
+        <li><strong>Node.js (npm):</strong> <code>npm install rasgapdf</code> ? <a href="https://www.npmjs.com/package/rasgapdf">npmjs.com/package/rasgapdf</a></li>
+        <li><strong>Rust (Crates.io):</strong> <code>cargo add rasgapdf</code> ? <a href="https://crates.io/crates/rasgapdf">crates.io/crates/rasgapdf</a></li>
+        <li><strong>GitHub Repository:</strong> <a href="https://github.com/MartinsMessias/rasgapdf">github.com/MartinsMessias/rasgapdf</a></li>
+        <li><strong>LLM Documentation:</strong> <a href="llms.txt">llms.txt</a> | <a href="llms-full.txt">llms-full.txt</a></li>
+      </ul>
+    </section>
+  </noscript>
+
+  <!-- Header (Sticky & Compact) -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50 px-4 sm:px-6 py-2.5 shrink-0">
+    <div class="w-full flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <span class="text-xl sm:text-2xl font-black bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">⚡ RasgaPDF</span>
+        <span class="text-xs px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono font-bold">v0.2.0</span>
+        <span id="headerComputeBadge" class="hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">Client-Side Compute</span>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- Duplicate Space Button -->
+        <a href="https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true" target="_blank" class="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs shadow transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+          <span class="hidden xs:inline">Duplicate to Your HF Account</span>
+          <span class="xs:hidden">Duplicate</span>
+        </a>
+
+        <!-- Repository & Package Links -->
+        <a href="https://github.com/MartinsMessias/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path></svg>
+          GitHub
+        </a>
+        <a href="https://pypi.org/project/rasgapdf/" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">PyPI</a>
+        <a href="https://crates.io/crates/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-orange-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">Crates</a>
+        <a href="https://www.npmjs.com/package/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-red-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">npm</a>
+        <a href="https://huggingface.co/martinsmessias/rasgapdf" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono transition">HF Hub</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Viewport-Filling Workspace -->
+  <main class="flex-1 w-full p-3 sm:p-5 flex flex-col lg:flex-row gap-4 min-h-0 overflow-y-auto lg:overflow-hidden">
+
+    <!-- Left Controls Sidebar (Compact on mobile, fixed width on desktop) -->
+    <aside class="w-full lg:w-80 xl:w-96 flex flex-col gap-3 shrink-0 overflow-y-visible lg:overflow-y-auto pr-0 lg:pr-1">
+      
+      <!-- File Upload Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg">
+        <label class="block text-xs font-semibold text-slate-200 mb-2">📄 Select or Upload PDF</label>
+        <div id="dropzone" class="border-2 border-dashed border-slate-700 hover:border-cyan-500 rounded-lg p-4 sm:p-5 text-center cursor-pointer transition bg-slate-950/50">
+          <svg class="mx-auto h-7 w-7 text-cyan-400 mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+          <p class="text-xs text-slate-300 font-medium">Click to upload or drag & drop</p>
+          <p class="text-[10px] text-slate-500 mt-0.5">Processed 100% locally in your browser</p>
+          <input type="file" id="pdfFileInput" accept="application/pdf" class="hidden">
+        </div>
+
+        <button id="btnLoadSample" class="mt-2.5 w-full py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-medium text-cyan-300 transition flex items-center justify-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          Load Built-in Sample PDF
+        </button>
+      </div>
+
+      <!-- Navigation & Controls -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-slate-200">📖 Page Navigation</span>
+          <span id="pageIndicator" class="text-xs font-mono text-cyan-400">Page 1 of 1</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btnPrevPage" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-semibold disabled:opacity-50 transition">Previous</button>
+          <input type="range" id="pageSlider" min="1" max="1" value="1" class="flex-1 accent-cyan-400 cursor-pointer">
+          <button id="btnNextPage" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-semibold disabled:opacity-50 transition">Next</button>
+        </div>
+
+        <div class="border-t border-slate-800/80 pt-2.5 flex flex-col gap-2">
+          <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" id="chkShowBoxes" checked class="rounded accent-cyan-400">
+            <span>Show 2D Bounding Boxes (Translucent Cyan)</span>
+          </label>
+          <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" id="chkShowImages" checked class="rounded accent-orange-400">
+            <span>Show Embedded Images (Translucent Orange)</span>
+          </label>
+          <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" id="chkShowVectors" checked class="rounded accent-fuchsia-400">
+            <span>Show Vector Paths (Translucent Magenta)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Performance Metrics Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg">
+        <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2.5">⚡ Extraction Metrics</span>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Parse Latency</span>
+            <span id="metricLatency" class="font-mono text-cyan-400 font-bold text-xs">0.00 ms</span>
+          </div>
+          <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Total Spans</span>
+            <span id="metricSpans" class="font-mono text-cyan-400 font-bold text-xs">0</span>
+          </div>
+          <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Embedded Images</span>
+            <span id="metricImages" class="font-mono text-orange-400 font-bold text-xs">0</span>
+          </div>
+          <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Vector Paths</span>
+            <span id="metricVectors" class="font-mono text-fuchsia-400 font-bold text-xs">0</span>
+          </div>
+          <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Canvas Dimensions</span>
+            <span id="metricDims" class="font-mono text-slate-300 text-[11px]">-</span>
+          </div>
+          <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
+            <span class="text-slate-500 block text-[10px]">Compute Mode</span>
+            <span id="metricComputeMode" class="font-mono text-amber-400 font-bold text-[11px]">Client Browser</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Right Workspace Area (Full Width & Height) -->
+    <section class="flex-1 h-full min-h-[550px] lg:min-h-0 flex flex-col gap-3 overflow-hidden">
+
+      <!-- Navigation Tabs -->
+      <div class="flex border-b border-slate-800 gap-1 overflow-x-auto pb-1 text-xs font-semibold shrink-0">
+        <button data-tab="tab-visual" class="tab-btn px-4 py-2 border-b-2 border-cyan-400 text-cyan-300 font-bold flex items-center gap-1.5 transition">
+          👁️ 1. 2D Canvas Overlay
+        </button>
+        <button data-tab="tab-coords" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          ⚡ 2. Raw Coordinates (X/Y Table)
+        </button>
+        <button data-tab="tab-text" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          📝 3. Pure Plain Text
+        </button>
+        <button data-tab="tab-json" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          📄 4. Raw JSON Export
+        </button>
+        <button data-tab="tab-images" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          🖼️ 5. Embedded Images
+        </button>
+      </div>
+
+      <!-- Tab Content 1: 2D Visual Overlay (Primary Tab, Full Height & Width) -->
+      <div id="tab-visual" class="tab-panel flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+        <div class="p-2.5 sm:p-3 bg-slate-950 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs shrink-0">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="font-semibold text-slate-200 whitespace-nowrap">Rendered Canvas Overlay</span>
+          </div>
+          <!-- Responsive Zoom Controls -->
+          <div class="flex items-center gap-1 shrink-0">
+            <span class="text-slate-400 text-[11px] mr-1 hidden sm:inline">Zoom:</span>
+            <button id="btnFitPage" class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold" title="Fit entire page vertically and horizontally">🔍 Fit Page</button>
+            <button id="btnFitWidth" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition" title="Fit page width to screen">↔️ Fit Width</button>
+            <button id="btnZoom100" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition">100%</button>
+            <button id="btnZoom150" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition">150%</button>
+          </div>
+        </div>
+
+        <!-- Canvas Scroll Area: Starts from Top (y=0), Full Screen Scrollable -->
+        <div id="canvasScrollArea" class="flex-1 w-full h-full min-h-0 overflow-auto p-4 sm:p-6 bg-slate-950/80">
+          <div id="canvasWrapper" class="shadow-2xl border border-slate-700/80 rounded bg-white transition-all mx-auto w-max">
+            <canvas id="pdfCanvas" class="block cursor-crosshair"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Content 2: Raw Coordinates Table -->
+      <div id="tab-coords" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs shrink-0">
+          <span class="font-semibold text-slate-300">Exact Physical Coordinates Matrix</span>
+          <span id="tableCount" class="text-slate-500 font-mono">0 spans displayed</span>
+        </div>
+        <div class="flex-1 overflow-auto w-full">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-950 sticky top-0 border-b border-slate-800 text-cyan-400 font-mono font-bold">
+              <tr>
+                <th class="p-3 w-16 text-center">Page</th>
+                <th class="p-3 w-20">X0 (pt)</th>
+                <th class="p-3 w-20">Y0 (pt)</th>
+                <th class="p-3 w-20">X1 (pt)</th>
+                <th class="p-3 w-20">Y1 (pt)</th>
+                <th class="p-3 w-16">Size</th>
+                <th class="p-3 w-28">Font</th>
+                <th class="p-3 min-w-[280px]">Extracted Text</th>
+              </tr>
+            </thead>
+            <tbody id="coordsTableBody" class="divide-y divide-slate-800/60 font-sans">
+              <tr>
+                <td colspan="8" class="p-8 text-center text-slate-500">No PDF loaded. Please upload a file or click "Load Built-in Sample PDF".</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab Content 3: Pure Plain Text -->
+      <div id="tab-text" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs shrink-0">
+          <span class="font-semibold text-slate-300">Pure Text Stream & Raw Coordinates Dump</span>
+          <button id="btnCopyText" class="px-3 py-1 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 rounded text-xs font-semibold flex items-center gap-1 transition">
+            📋 Copy to Clipboard
+          </button>
+        </div>
+        <textarea id="pureTextBox" readonly class="flex-1 w-full h-full bg-slate-950 p-4 text-xs font-mono text-slate-200 outline-none resize-none leading-relaxed" placeholder="Text stream will appear here..."></textarea>
+      </div>
+
+      <!-- Tab Content 4: JSON Export -->
+      <div id="tab-json" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs shrink-0">
+          <span class="font-semibold text-slate-300">Raw Spatial Document JSON</span>
+          <div class="flex items-center gap-2">
+            <button id="btnCopyJson" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-xs font-semibold flex items-center gap-1 transition">
+              📋 Copy JSON
+            </button>
+            <button id="btnDownloadJson" class="px-3 py-1 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 rounded text-xs font-semibold flex items-center gap-1 transition">
+              💾 Download JSON
+            </button>
+          </div>
+        </div>
+        <pre id="jsonViewer" class="flex-1 w-full h-full bg-slate-950 p-4 text-xs font-mono text-cyan-300 overflow-auto"></pre>
+      </div>
+
+      <!-- Tab Content 5: Embedded Images -->
+      <div id="tab-images" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs shrink-0">
+          <span class="font-semibold text-slate-300">Embedded Images (decoded client-side from the content stream)</span>
+          <span id="imagesCount" class="text-slate-500 font-mono">0 images on page 1</span>
+        </div>
+        <div id="imagesGrid" class="flex-1 overflow-auto w-full p-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 content-start">
+          <div class="col-span-full p-8 text-center text-slate-500 text-xs">No PDF loaded. Please upload a file or click "Load Built-in Sample PDF".</div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Floating hover tooltip: follows the cursor over the overlay canvas -->
+  <div id="hoverInfo" class="hidden fixed z-40 pointer-events-none font-mono text-[11px] leading-snug text-cyan-200 bg-slate-950/95 px-2.5 py-1.5 rounded border border-cyan-700 shadow-xl truncate max-w-[420px]"></div>
+
+  <!-- File load error toast: without it a rejected PDF fails silently -->
+  <div id="loadError" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[92%] sm:w-auto sm:max-w-lg bg-rose-950/95 border border-rose-700 text-rose-100 rounded-xl px-4 py-3 shadow-2xl">
+    <div class="flex items-start gap-3">
+      <span class="text-base leading-none mt-0.5">⚠️</span>
+      <div class="min-w-0 flex-1">
+        <p id="loadErrorTitle" class="text-sm font-bold text-rose-200">Could not open this PDF</p>
+        <p id="loadErrorMessage" class="text-xs text-rose-200/80 mt-1 break-words"></p>
+      </div>
+      <button id="loadErrorClose" class="shrink-0 text-rose-300/70 hover:text-white text-sm leading-none px-1" title="Dismiss">✕</button>
+    </div>
+  </div>
+
+  <!-- Embedded image lightbox -->
+  <div id="imageLightbox" class="fixed inset-0 z-50 bg-slate-950/90 items-center justify-center p-6" style="display: none;">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col max-w-full max-h-full overflow-hidden">
+      <div class="flex items-start justify-between gap-6 px-4 py-2.5 bg-slate-950 border-b border-slate-800">
+        <div class="flex flex-col min-w-0">
+          <span id="lightboxTitle" class="text-sm font-bold text-orange-400 font-mono truncate">-</span>
+          <span id="lightboxMeta" class="text-[11px] text-slate-400 font-mono truncate">-</span>
+        </div>
+        <button id="lightboxClose" class="shrink-0 text-slate-400 hover:text-slate-100 text-base leading-none px-2 py-1 rounded hover:bg-slate-800 transition" title="Close (Esc)">✕</button>
+      </div>
+      <div class="overflow-auto bg-slate-950 flex items-center justify-center p-4">
+        <canvas id="lightboxCanvas" class="shadow-lg"></canvas>
+      </div>
+      <div class="px-4 py-2 bg-slate-950 border-t border-slate-800 text-[11px] text-slate-400 font-mono flex items-center justify-between gap-4">
+        <span id="lightboxSize">-</span>
+        <span class="text-slate-600">Esc to close · scroll to pan</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script logic with PDF.js client-side parser -->
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let currentPdfDoc = null;
+    let currentPageNum = 1;
+    let extractedSpans = [];
+    let extractedImages = [];
+    let extractedDrawings = [];
+    let currentRenderScale = 1.0;
+    let activeZoomMode = 'fit-page'; // 'fit-page' | 'fit-width' | 'manual'
+    let currentViewport = null;
+    let cleanPdfBitmap = null;
+    let hoveredSpan = null;
+    let hoveredImage = null;
+    let hoveredDrawing = null;
+
+    // Document-wide extraction cache. Each entry mirrors the Rust JSON schema
+    // (coordinates in PDF points, top-down) so the visualizer can rebuild any
+    // page from it and export a `pages[]` document exactly like the native engine.
+    let pageCache = [];
+    let docModel = null;
+    let docFileName = 'document.pdf';
+    let docParseMs = 0;
+    let docParseStart = 0;
+    let parseGeneration = 0;
+
+    // Elements
+    const fileInput = document.getElementById('pdfFileInput');
+    const dropzone = document.getElementById('dropzone');
+    const btnLoadSample = document.getElementById('btnLoadSample');
+    const pageSlider = document.getElementById('pageSlider');
+    const pageIndicator = document.getElementById('pageIndicator');
+    const btnPrevPage = document.getElementById('btnPrevPage');
+    const btnNextPage = document.getElementById('btnNextPage');
+    const chkShowBoxes = document.getElementById('chkShowBoxes');
+    const chkShowImages = document.getElementById('chkShowImages');
+    const chkShowVectors = document.getElementById('chkShowVectors');
+    const coordsTableBody = document.getElementById('coordsTableBody');
+    const tableCount = document.getElementById('tableCount');
+    const pureTextBox = document.getElementById('pureTextBox');
+    const btnCopyText = document.getElementById('btnCopyText');
+    const btnDownloadJson = document.getElementById('btnDownloadJson');
+    const btnCopyJson = document.getElementById('btnCopyJson');
+    const jsonViewer = document.getElementById('jsonViewer');
+    const imagesGrid = document.getElementById('imagesGrid');
+    const imagesCount = document.getElementById('imagesCount');
+    const imageLightbox = document.getElementById('imageLightbox');
+    const lightboxCanvas = document.getElementById('lightboxCanvas');
+    const lightboxTitle = document.getElementById('lightboxTitle');
+    const lightboxMeta = document.getElementById('lightboxMeta');
+    const lightboxSize = document.getElementById('lightboxSize');
+    const lightboxClose = document.getElementById('lightboxClose');
+    const metricLatency = document.getElementById('metricLatency');
+    const metricSpans = document.getElementById('metricSpans');
+    const metricImages = document.getElementById('metricImages');
+    const metricVectors = document.getElementById('metricVectors');
+    const metricComputeMode = document.getElementById('metricComputeMode');
+    const headerComputeBadge = document.getElementById('headerComputeBadge');
+    let currentRustDoc = null;
+    const loadError = document.getElementById('loadError');
+    const loadErrorTitle = document.getElementById('loadErrorTitle');
+    const loadErrorMessage = document.getElementById('loadErrorMessage');
+    const loadErrorClose = document.getElementById('loadErrorClose');
+    const metricDims = document.getElementById('metricDims');
+    const hoverInfo = document.getElementById('hoverInfo');
+    const canvasScrollArea = document.getElementById('canvasScrollArea');
+
+    const btnFitPage = document.getElementById('btnFitPage');
+    const btnFitWidth = document.getElementById('btnFitWidth');
+    const btnZoom100 = document.getElementById('btnZoom100');
+    const btnZoom150 = document.getElementById('btnZoom150');
+
+    const pdfCanvas = document.getElementById('pdfCanvas');
+    const pdfCtx = pdfCanvas.getContext('2d');
+
+    // Tabs logic
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => {
+          b.classList.remove('border-cyan-400', 'text-cyan-300', 'font-bold');
+          b.classList.add('border-transparent', 'text-slate-400');
+        });
+        btn.classList.add('border-cyan-400', 'text-cyan-300', 'font-bold');
+        btn.classList.remove('border-transparent', 'text-slate-400');
+
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+        const targetPanel = document.getElementById(btn.dataset.tab);
+        targetPanel.classList.remove('hidden');
+
+        // If switching to visual tab, guarantee instant repaint
+        if (btn.dataset.tab === 'tab-visual') {
+          if (cleanPdfBitmap) {
+            drawCanvas(null);
+          } else if (currentPdfDoc) {
+            renderCurrentPage();
+          }
+        }
+      });
+    });
+
+    // Zoom Buttons Styling
+    function updateZoomButtons() {
+      [btnFitPage, btnFitWidth, btnZoom100, btnZoom150].forEach(b => {
+        b.className = 'px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono hover:bg-slate-700 transition';
+      });
+
+      if (activeZoomMode === 'fit-page') {
+        btnFitPage.className = 'px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold';
+      } else if (activeZoomMode === 'fit-width') {
+        btnFitWidth.className = 'px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold';
+      } else if (currentRenderScale === 1.0) {
+        btnZoom100.className = 'px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold';
+      } else if (currentRenderScale === 1.5) {
+        btnZoom150.className = 'px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[11px] font-mono hover:bg-cyan-900 transition font-bold';
+      }
+    }
+
+    async function calculateAutoZoom(mode = activeZoomMode) {
+      if (!currentPdfDoc) return 1.0;
+      const page = await currentPdfDoc.getPage(currentPageNum);
+      const vp1 = page.getViewport({ scale: 1.0 });
+
+      // Available container space
+      const availW = Math.max(canvasScrollArea.clientWidth - 52, 280);
+      const availH = Math.max(canvasScrollArea.clientHeight - 52, 320);
+
+      if (mode === 'fit-page') {
+        // Fits both width and height cleanly without clipping
+        const scaleW = availW / vp1.width;
+        const scaleH = availH / vp1.height;
+        return Math.min(scaleW, scaleH);
+      } else if (mode === 'fit-width') {
+        // Fits width of available area
+        return availW / vp1.width;
+      }
+      return currentRenderScale;
+    }
+
+    btnFitPage.addEventListener('click', async () => {
+      activeZoomMode = 'fit-page';
+      currentRenderScale = await calculateAutoZoom('fit-page');
+      updateZoomButtons();
+      renderCurrentPage();
+    });
+
+    btnFitWidth.addEventListener('click', async () => {
+      activeZoomMode = 'fit-width';
+      currentRenderScale = await calculateAutoZoom('fit-width');
+      updateZoomButtons();
+      renderCurrentPage();
+    });
+
+    btnZoom100.addEventListener('click', () => {
+      activeZoomMode = 'manual';
+      currentRenderScale = 1.0;
+      updateZoomButtons();
+      renderCurrentPage();
+    });
+
+    btnZoom150.addEventListener('click', () => {
+      activeZoomMode = 'manual';
+      currentRenderScale = 1.5;
+      updateZoomButtons();
+      renderCurrentPage();
+    });
+
+    // Window Resize Observer for Responsive Fit
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(async () => {
+        if (currentPdfDoc && (activeZoomMode === 'fit-page' || activeZoomMode === 'fit-width')) {
+          currentRenderScale = await calculateAutoZoom(activeZoomMode);
+          renderCurrentPage();
+        }
+      }, 200);
+    });
+
+    // File selection
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('border-cyan-400'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('border-cyan-400'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('border-cyan-400');
+      if (e.dataTransfer.files.length > 0) loadPdfFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) loadPdfFile(e.target.files[0]);
+    });
+
+    btnLoadSample.addEventListener('click', async () => {
+      try {
+        const res = await fetch('sample.pdf');
+        const blob = await res.blob();
+        loadPdfFile(blob, 'sample.pdf');
+      } catch (e) {
+        alert('Could not load sample.pdf: ' + e);
+      }
+    });
+
+    function showLoadError(err, fileName) {
+      const name = (err && err.name) || '';
+      const msg = (err && err.message) || String(err || 'Unknown error');
+
+      let title = 'Could not open this PDF';
+      let text = msg;
+
+      if (name === 'PasswordException' || /password/i.test(msg)) {
+        title = 'Password-protected PDF';
+        text = 'This file is encrypted with a password. Remove the password (or export an unprotected copy) and try again.';
+      } else if (/encryption|EBX_HANDLER|ADEPT|encrypted/i.test(msg)) {
+        title = 'This PDF is DRM-protected';
+        text = "It uses Adobe ADEPT / EBX_HANDLER encryption (typical of e-books). The content is locked by the store's key, so no PDF library can read it without removing the DRM. Try an unprotected copy.";
+      } else if (name === 'InvalidPDFException' || /invalid pdf/i.test(msg)) {
+        title = 'This file is not a valid PDF';
+        text = 'The file looks corrupted or is not a PDF at all. Try re-exporting it.';
+      }
+
+      if (fileName) text = fileName + ' — ' + text;
+
+      loadErrorTitle.textContent = title;
+      loadErrorMessage.textContent = text;
+      loadError.classList.remove('hidden');
+      console.error('loadPdfFile failed:', err);
+    }
+
+    loadErrorClose.addEventListener('click', () => loadError.classList.add('hidden'));
+
+    async function loadPdfFile(file, name = null) {
+      const fileName = name || file.name || 'document.pdf';
+
+      try {
+        loadError.classList.add('hidden');
+
+        const arrayBuffer = await file.arrayBuffer();
+        // Uint8Array lets pdf.js copy the bytes instead of adopting a detached buffer.
+        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+        currentPdfDoc = await loadingTask.promise;
+
+        // Check if local Rust backend is available and parse with native engine
+        currentRustDoc = null;
+        try {
+          const formData = new FormData();
+          formData.append('file', file, fileName);
+          const apiRes = await fetch('/api/parse', { method: 'POST', body: formData });
+          if (apiRes.ok) {
+            currentRustDoc = await apiRes.json();
+            console.log('⚡ Parsed with Native Rust Engine in', currentRustDoc.parse_time_ms, 'ms');
+          }
+        } catch (e) {
+          console.log('Running in client-side compute mode:', e);
+        }
+
+        pageSlider.max = currentPdfDoc.numPages;
+        pageSlider.value = 1;
+        currentPageNum = 1;
+        docFileName = fileName;
+
+        // Reset the document model for the new file.
+        parseGeneration += 1;
+        pageCache = new Array(currentPdfDoc.numPages);
+        docModel = null;
+        docParseMs = 0;
+
+        // On mobile devices, default to fit-width; on desktop, default to fit-page
+        if (window.innerWidth < 768) {
+          activeZoomMode = 'fit-width';
+        } else {
+          activeZoomMode = 'fit-page';
+        }
+
+        // Parse page 1 first so the canvas shows up immediately; the remaining
+        // pages keep being extracted in the background to complete the JSON.
+        if (!currentRustDoc) {
+          docParseStart = performance.now();
+          await parsePageToCache(1, parseGeneration);
+          docParseMs = performance.now() - docParseStart;
+        }
+
+        currentRenderScale = await calculateAutoZoom(activeZoomMode);
+        updateZoomButtons();
+        await renderCurrentPage();
+
+        if (!currentRustDoc) {
+          parseRemainingPages(parseGeneration);
+        }
+      } catch (e) {
+        showLoadError(e, fileName);
+      }
+    }
+
+    let renderInFlight = false;
+    let renderQueued = false;
+
+    async function renderCurrentPage() {
+      if (!currentPdfDoc) return;
+
+      // Serialize renders: pdf.js refuses two render() calls on the same canvas,
+      // and zoom / resize / page-change events can fire while a page is still
+      // painting. Without this the later call dies silently and leaves the
+      // extracted arrays empty.
+      if (renderInFlight) {
+        renderQueued = true;
+        return;
+      }
+
+      renderInFlight = true;
+      try {
+        do {
+          renderQueued = false;
+          await renderPageOnce();
+        } while (renderQueued && currentPdfDoc);
+      } finally {
+        renderInFlight = false;
+      }
+    }
+
+    async function renderPageOnce() {
+      if (!currentPdfDoc) return;
+
+      const t0 = performance.now();
+      pageIndicator.textContent = `Page ${currentPageNum} of ${currentPdfDoc.numPages}`;
+      pageSlider.value = currentPageNum;
+      btnPrevPage.disabled = (currentPageNum <= 1);
+      btnNextPage.disabled = (currentPageNum >= currentPdfDoc.numPages);
+
+      const page = await currentPdfDoc.getPage(currentPageNum);
+      const viewport = page.getViewport({ scale: currentRenderScale });
+      currentViewport = viewport;
+
+      pdfCanvas.width = viewport.width;
+      pdfCanvas.height = viewport.height;
+
+      metricDims.textContent = `${Math.round(viewport.width / currentRenderScale)}x${Math.round(viewport.height / currentRenderScale)} pt`;
+
+      // 1. Render base PDF page directly onto canvas
+      await page.render({ canvasContext: pdfCtx, viewport }).promise;
+
+      // 2. Cache clean rasterized bitmap of PDF for zero-latency redrawing
+      cleanPdfBitmap = await createImageBitmap(pdfCanvas);
+
+      // If Native Rust Engine processed this document, use its 100% native Rust data!
+      if (currentRustDoc && currentRustDoc.structured && currentRustDoc.structured.pages) {
+        const pageData = currentRustDoc.structured.pages[currentPageNum - 1] || {};
+
+        // 1. Spans from Rust
+        const pageSpans = (currentRustDoc.raw && currentRustDoc.raw.spans
+          ? currentRustDoc.raw.spans.filter(s => s.page === currentPageNum)
+          : []);
+
+        extractedSpans = pageSpans.map(s => {
+          const vx0 = s.x0 * currentRenderScale;
+          const vy0 = s.y0 * currentRenderScale;
+          const vx1 = s.x1 * currentRenderScale;
+          const vy1 = s.y1 * currentRenderScale;
+          return {
+            page: s.page,
+            x0: s.x0,
+            y0: s.y0,
+            x1: s.x1,
+            y1: s.y1,
+            font_size: s.font_size,
+            font_name: s.font_name || 'Helvetica',
+            text: s.text,
+            vx0,
+            vy0,
+            vw: Math.max(vx1 - vx0, 1.0),
+            vh: Math.max(vy1 - vy0, 1.0)
+          };
+        });
+
+        // 2. Images from Rust
+        extractedImages = (pageData.images || []).map(im => {
+          const b = im.bbox || { x0: 0, y0: 0, x1: 0, y1: 0, width: 0, height: 0 };
+          const vx = b.x0 * currentRenderScale;
+          const vy = b.y0 * currentRenderScale;
+          const vw = b.width * currentRenderScale;
+          const vh = b.height * currentRenderScale;
+          let thumb = null;
+          const uriKey = im.xref ? `xref_${im.xref}` : `${currentPageNum}_${im.image_id}`;
+          const uri = currentRustDoc.image_data_uris
+            ? (currentRustDoc.image_data_uris[uriKey] || currentRustDoc.image_data_uris[im.image_id] || currentRustDoc.image_data_uris[String(im.image_id)])
+            : null;
+          if (uri) {
+            thumb = new Image();
+            thumb.src = uri;
+          } else if (b.width > 0 && b.height > 0) {
+            thumb = cropFromPage({ vx, vy, vw, vh });
+          }
+          return {
+            objId: im.name || '#' + im.image_id,
+            px: { width: im.pixel_width, height: im.pixel_height },
+            pt: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 },
+            paint: { vx, vy, vw, vh },
+            count: 1,
+            thumb: thumb,
+            cropped: !uri,
+            mime: im.mime_type,
+            sha256: im.sha256
+          };
+        });
+
+        // 3. Vector drawings from Rust
+        extractedDrawings = (pageData.drawings || []).map(d => {
+          const b = d.bbox || { x0: 0, y0: 0, x1: 0, y1: 0, width: 0, height: 0 };
+          const vx = b.x0 * currentRenderScale;
+          const vy = b.y0 * currentRenderScale;
+          const vw = b.width * currentRenderScale;
+          const vh = b.height * currentRenderScale;
+          return {
+            paint: { vx, vy, vw, vh },
+            pt: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }
+          };
+        });
+
+        // 4. Update metrics with real Rust values
+        const rustLatency = (currentRustDoc.parse_time_ms !== undefined)
+          ? Number(currentRustDoc.parse_time_ms).toFixed(2)
+          : (performance.now() - t0).toFixed(2);
+        metricLatency.textContent = `${rustLatency} ms`;
+        metricSpans.textContent = extractedSpans.length;
+        metricImages.textContent = extractedImages.length;
+        metricVectors.textContent = extractedDrawings.length;
+        if (metricComputeMode) {
+          metricComputeMode.textContent = 'Native Rust Engine (librasgapdf.so)';
+          metricComputeMode.className = 'font-mono text-emerald-400 font-bold text-[11px]';
+        }
+        if (headerComputeBadge) {
+          headerComputeBadge.textContent = '⚡ Native Rust Engine';
+          headerComputeBadge.className = 'hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700 font-mono font-bold';
+        }
+
+        updateTable();
+        updateTextDump();
+        updateImageGallery();
+        drawCanvas(null);
+        updateJsonViewer();
+        return;
+      }
+
+      // 3. Fallback: rebuild this page from the document-wide client-side model.
+      //    The model is extracted once per page (in PDF points) and cached, so the
+      //    canvas, the overlays and the JSON export always agree with each other.
+      const entry = pageCache[currentPageNum - 1];
+
+      if (!entry) {
+        extractedSpans = [];
+        extractedImages = [];
+        extractedDrawings = [];
+        metricLatency.textContent = `${(performance.now() - t0).toFixed(2)} ms`;
+        metricSpans.textContent = 0;
+        metricImages.textContent = 0;
+        metricVectors.textContent = 0;
+        updateTable();
+        updateTextDump();
+        updateImageGallery();
+        drawCanvas(null);
+        updateJsonViewer();
+        return;
+      }
+
+      const scale = currentRenderScale;
+
+      extractedSpans = entry.spans.map(s => ({
+        page: s.page,
+        x0: s.x0,
+        y0: s.y0,
+        x1: s.x1,
+        y1: s.y1,
+        font_size: s.font_size,
+        font_name: s.font_name || 'Helvetica',
+        text: s.text,
+        vx0: s.x0 * scale,
+        vy0: s.y0 * scale,
+        vw: Math.max((s.x1 - s.x0) * scale, 1.0),
+        vh: Math.max((s.y1 - s.y0) * scale, 1.0)
+      }));
+
+      // Image previews are resolved lazily from the pdf.js object store; the
+      // model keeps only metadata, exactly like the Rust JSON.
+      extractedImages = [];
+      for (const im of entry.images) {
+        const b = im.bbox || { x0: 0, y0: 0, x1: 0, y1: 0, width: 0, height: 0 };
+        const vx = b.x0 * scale;
+        const vy = b.y0 * scale;
+        const vw = Math.max(b.width * scale, 1.0);
+        const vh = Math.max(b.height * scale, 1.0);
+
+        let thumb = null;
+        const decoded = im.inline ? im.inline : await resolveImageData(page, im.objId);
+        if (decoded) thumb = decodedImageToCanvas(decoded);
+        if (!thumb && cleanPdfBitmap) thumb = cropFromPage({ vx, vy, vw, vh });
+
+        extractedImages.push({
+          objId: im.name,
+          px: { width: im.pixel_width, height: im.pixel_height },
+          pt: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 },
+          paint: { vx, vy, vw, vh },
+          count: im.count,
+          thumb,
+          cropped: !decoded,
+          mime: im.mime_type,
+          sha256: im.sha256
+        });
+      }
+
+      extractedDrawings = entry.drawings.map(d => {
+        const b = d.bbox || { x0: 0, y0: 0, x1: 0, y1: 0, width: 0, height: 0 };
+        const vx = b.x0 * scale;
+        const vy = b.y0 * scale;
+        return {
+          type: d.drawing_type,
+          fill: rgb01ToHex(d.fill_color),
+          stroke: rgb01ToHex(d.stroke_color),
+          // Degenerate paths (straight lines) get a 1px floor so the box stays
+          // visible; `pt` keeps the true extent so it matches the Rust output.
+          paint: { vx, vy, vw: Math.max(b.width * scale, 1.0), vh: Math.max(b.height * scale, 1.0) },
+          pt: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }
+        };
+      });
+
+      metricLatency.textContent = `${entry.parse_time_ms.toFixed(2)} ms`;
+      metricSpans.textContent = extractedSpans.length;
+      metricImages.textContent = extractedImages.length;
+      metricVectors.textContent = extractedDrawings.length;
+      if (metricComputeMode) {
+        metricComputeMode.textContent = 'Client Browser (pdf.js)';
+        metricComputeMode.className = 'font-mono text-amber-400 font-bold text-[11px]';
+      }
+      if (headerComputeBadge) {
+        headerComputeBadge.textContent = 'Client-Side Compute';
+        headerComputeBadge.className = 'hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono font-bold';
+      }
+
+      updateTable();
+      updateTextDump();
+      updateImageGallery();
+      drawCanvas(null);
+      updateJsonViewer();
+    }
+
+    // ---------------------------------------------------------------------------
+    // Embedded image extraction (client-side, from the content stream)
+    //
+    // pdf.js paints EVERY image into the unit square [0,1]x[0,1] transformed by the
+    // current CTM. In canvas.js: paintInlineImageXObject does
+    //     ctx.scale(1 / width, -1 / height);
+    //     drawImage(..., 0, -height, width, height);
+    // which maps the image onto exactly (0,0)-(1,1) in the current CTM space.
+    // paintImageXObjectRepeat uses [scaleX, 0, 0, scaleY, x, y] per position, and
+    // paintSolidColorImageMask fills the same unit square — same rule for all.
+    // So: replay save/restore/transform and take the unit square on image ops.
+    // ---------------------------------------------------------------------------
+    const MAT_IDENTITY = [1, 0, 0, 1, 0, 0];
+
+    function matMul(m, n) {
+      return [
+        m[0] * n[0] + m[2] * n[1],
+        m[1] * n[0] + m[3] * n[1],
+        m[0] * n[2] + m[2] * n[3],
+        m[1] * n[2] + m[3] * n[3],
+        m[0] * n[4] + m[2] * n[5] + m[4],
+        m[1] * n[4] + m[3] * n[5] + m[5]
+      ];
+    }
+
+    function unitSquareCorners(m) {
+      return [[0, 0], [1, 0], [0, 1], [1, 1]].map(p => pdfjsLib.Util.applyTransform(p, m));
+    }
+
+    function resolveImageData(page, objId) {
+      return new Promise(resolve => {
+        const maps = [page.objs, page.commonObjs].filter(Boolean);
+
+        for (const map of maps) {
+          let value = null;
+          try {
+            value = map.get(objId);
+          } catch (e) {
+            value = null;
+          }
+          if (value) {
+            resolve(value);
+            return;
+          }
+        }
+
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            resolve(null);
+          }
+        }, 2000);
+
+        for (const map of maps) {
+          try {
+            map.get(objId, v => {
+              if (!settled) {
+                settled = true;
+                clearTimeout(timer);
+                resolve(v);
+              }
+            });
+          } catch (e) {
+            /* ignore */
+          }
+        }
+      });
+    }
+
+    function decodedImageToCanvas(img) {
+      if (!img || !img.width || !img.height) return null;
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const cx = c.getContext('2d');
+
+        if (img.bitmap) {
+          cx.drawImage(img.bitmap, 0, 0);
+          return c;
+        }
+        if (img.data && img.data.length === img.width * img.height * 4) {
+          cx.putImageData(new ImageData(new Uint8ClampedArray(img.data), img.width, img.height), 0, 0);
+          return c;
+        }
+      } catch (e) {
+        console.warn('Falha ao decodificar imagem embutida:', e);
+      }
+      return null;
+    }
+
+    function cropFromPage(paint) {
+      if (!cleanPdfBitmap) return null;
+      try {
+        const x = Math.max(0, Math.round(paint.vx));
+        const y = Math.max(0, Math.round(paint.vy));
+        const w = Math.max(1, Math.round(paint.vw));
+        const h = Math.max(1, Math.round(paint.vh));
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        c.getContext('2d').drawImage(cleanPdfBitmap, x, y, w, h, 0, 0, w, h);
+        return c;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Document model extraction (client-side parity with the Rust JSON schema)
+    //
+    // Everything below works in PDF points, top-down, exactly like the native
+    // engine output: `{ file_name, total_pages, parse_time_ms, pages: [...] }`.
+    // The canvas only rescales those points at render time.
+    // -------------------------------------------------------------------------
+
+    const round2 = (v) => Number((Number.isFinite(v) ? v : 0).toFixed(2));
+
+    function makeBBox(x0, y0, x1, y1) {
+      const ax = Math.min(x0, x1);
+      const ay = Math.min(y0, y1);
+      const bx = Math.max(x0, x1);
+      const by = Math.max(y0, y1);
+      return {
+        x0: round2(ax), y0: round2(ay),
+        x1: round2(bx), y1: round2(by),
+        width: round2(bx - ax), height: round2(by - ay)
+      };
+    }
+
+    function rgbToHex255(a) {
+      if (!a || a.length < 3 || typeof a[0] !== 'number') return null;
+      // pdf.js emits 0-255 ints; keep float support in case a build changes that.
+      const k = (a[0] > 1 || a[1] > 1 || a[2] > 1) ? 1 : 255;
+      const to = (v) => Math.max(0, Math.min(255, Math.round(v * k))).toString(16).padStart(2, '0');
+      return '#' + to(a[0]) + to(a[1]) + to(a[2]);
+    }
+
+    function rgb01ToHex(rgb) {
+      if (!rgb || rgb.length < 3) return null;
+      const to = (v) => Math.max(0, Math.min(255, Math.round(v * 255))).toString(16).padStart(2, '0');
+      return '#' + to(rgb[0]) + to(rgb[1]) + to(rgb[2]);
+    }
+
+    function hexToRgb01(hex) {
+      if (!hex || hex[0] !== '#') return null;
+      return [
+        round2(parseInt(hex.slice(1, 3), 16) / 255),
+        round2(parseInt(hex.slice(3, 5), 16) / 255),
+        round2(parseInt(hex.slice(5, 7), 16) / 255)
+      ];
+    }
+
+    async function sha256Hex(bytes) {
+      try {
+        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // Text spans in PDF points. `viewport` must be built with scale = 1 so the
+    // matrix math yields points directly (page rotation already included).
+    async function extractPageSpans(page, viewport, pageNum) {
+      const textContent = await page.getTextContent();
+      const spans = [];
+
+      for (const item of textContent.items) {
+        if (!item.str || item.str.trim() === '') continue;
+
+        const m = pdfjsLib.Util.transform(viewport.transform, item.transform);
+        const fontHeight = Math.hypot(m[2], m[3]);
+        const fontScaleX = Math.hypot(m[0], m[1]);
+        if (fontHeight === 0 || fontScaleX === 0) continue;
+
+        const ux = m[0] / fontScaleX;
+        const uy = m[1] / fontScaleX;
+        const advance = item.width;
+
+        // Ascent/descent vectors in page space (m[2], m[3] run baseline -> glyph top).
+        const ascX = m[2] * 0.85;
+        const ascY = m[3] * 0.85;
+        const descX = -m[2] * 0.20;
+        const descY = -m[3] * 0.20;
+
+        const c1x = m[4] + ascX,                  c1y = m[5] + ascY;
+        const c2x = m[4] + ascX + ux * advance,   c2y = m[5] + ascY + uy * advance;
+        const c3x = m[4] + descX,                 c3y = m[5] + descY;
+        const c4x = m[4] + descX + ux * advance,  c4y = m[5] + descY + uy * advance;
+
+        spans.push({
+          page: pageNum,
+          x0: round2(Math.min(c1x, c2x, c3x, c4x)),
+          y0: round2(Math.min(c1y, c2y, c3y, c4y)),
+          x1: round2(Math.max(c1x, c2x, c3x, c4x)),
+          y1: round2(Math.max(c1y, c2y, c3y, c4y)),
+          font_size: round2(fontHeight),
+          font_name: item.fontName || 'Helvetica',
+          text: item.str
+        });
+      }
+
+      // Spatial order: top-to-bottom in 6pt buckets, then left-to-right —
+      // the same ordering the Rust parser applies before table detection.
+      spans.sort((a, b) => {
+        const bucketA = Math.round(a.y0 / 6);
+        const bucketB = Math.round(b.y0 / 6);
+        if (bucketA !== bucketB) return bucketA - bucketB;
+        return a.x0 - b.x0;
+      });
+
+      return spans;
+    }
+
+    // Port of src/table.rs (TableDetector) with the same thresholds used by the
+    // Space backend: min 3 columns, 16pt column tolerance, 6pt row tolerance.
+    function detectTables(spans, tableIdStart = 1) {
+      const MIN_COLS = 3;
+      const COL_TOLERANCE = 16;
+      const ROW_TOLERANCE = 6;
+
+      if (!spans.length) return [];
+
+      const lines = [];
+      let currentLine = [];
+      let currentY = spans[0].y0;
+
+      for (const span of spans) {
+        if (Math.abs(span.y0 - currentY) <= ROW_TOLERANCE) {
+          currentLine.push(span);
+        } else {
+          if (currentLine.length) {
+            currentLine.sort((a, b) => a.x0 - b.x0);
+            lines.push(currentLine);
+          }
+          currentLine = [span];
+          currentY = span.y0;
+        }
+      }
+      if (currentLine.length) {
+        currentLine.sort((a, b) => a.x0 - b.x0);
+        lines.push(currentLine);
+      }
+
+      const buildTable = (rowsRaw, colsX, tableId) => {
+        const numCols = colsX.length;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        const structuredRows = [];
+        const cells = [];
+
+        rowsRaw.forEach((rowSpans, rowIdx) => {
+          const rowStrings = new Array(numCols).fill('');
+
+          for (const span of rowSpans) {
+            minX = Math.min(minX, span.x0);
+            minY = Math.min(minY, span.y0);
+            maxX = Math.max(maxX, span.x1);
+            maxY = Math.max(maxY, span.y1);
+
+            let bestCol = 0;
+            let minDist = Infinity;
+            colsX.forEach((cx, cIdx) => {
+              const d = Math.abs(cx - span.x0);
+              if (d < minDist) {
+                minDist = d;
+                bestCol = cIdx;
+              }
+            });
+
+            if (rowStrings[bestCol]) rowStrings[bestCol] += ' ';
+            rowStrings[bestCol] += span.text.trim();
+
+            cells.push({
+              row: rowIdx,
+              col: bestCol,
+              text: span.text.trim(),
+              bbox: makeBBox(span.x0, span.y0, span.x1, span.y1)
+            });
+          }
+
+          structuredRows.push(rowStrings);
+        });
+
+        return {
+          table_id: tableId,
+          bbox: makeBBox(minX, minY, maxX, maxY),
+          col_count: numCols,
+          row_count: rowsRaw.length,
+          headers: structuredRows.length ? structuredRows[0].slice() : [],
+          rows: structuredRows,
+          cells
+        };
+      };
+
+      const tables = [];
+      let activeRows = [];
+      let activeCols = [];
+      let tableCounter = tableIdStart;
+
+      for (const line of lines) {
+        if (line.length >= MIN_COLS) {
+          if (!activeCols.length) {
+            activeCols = line.map(s => s.x0);
+            activeRows.push(line);
+          } else {
+            const aligns = line.some(s => activeCols.some(c => Math.abs(c - s.x0) <= COL_TOLERANCE));
+            if (aligns) {
+              activeRows.push(line);
+            } else {
+              if (activeRows.length >= 2) {
+                tables.push(buildTable(activeRows, activeCols, tableCounter++));
+              }
+              activeRows = [line];
+              activeCols = line.map(s => s.x0);
+            }
+          }
+        } else {
+          if (activeRows.length) {
+            if (activeRows.length >= 2) {
+              tables.push(buildTable(activeRows, activeCols, tableCounter++));
+            }
+            activeRows = [];
+            activeCols = [];
+          }
+        }
+      }
+
+      if (activeRows.length >= 2) {
+        tables.push(buildTable(activeRows, activeCols, tableCounter++));
+      }
+
+      return tables;
+    }
+
+    // Groups spans into lines and paragraphs. MuPDF gives the native engine real
+    // blocks; here the grouping is geometric (vertical gap + horizontal overlap).
+    function buildTextBlocks(spans) {
+      if (!spans.length) return [];
+
+      const ordered = spans.slice().sort((a, b) => {
+        const bucketA = Math.round(a.y0 / 3);
+        const bucketB = Math.round(b.y0 / 3);
+        if (bucketA !== bucketB) return bucketA - bucketB;
+        return a.x0 - b.x0;
+      });
+
+      const lines = [];
+      for (const span of ordered) {
+        const line = lines[lines.length - 1];
+        if (line) {
+          const ref = line.spans[line.spans.length - 1];
+          const tolerance = Math.max(2.0, Math.min(ref.font_size || 0, span.font_size || 0) * 0.4);
+          const gapX = span.x0 - ref.x1;
+          // Same baseline AND horizontally adjacent: words of one line. Table
+          // cells share the baseline but are far apart, so they stay separate
+          // lines (MuPDF emits one line per cell).
+          const closeX = gapX <= Math.max(1.5, Math.min(ref.font_size || 0, span.font_size || 0) * 0.8);
+          if (Math.abs(span.y0 - ref.y0) <= tolerance && closeX) {
+            line.spans.push(span);
+            continue;
+          }
+        }
+        lines.push({ spans: [span] });
+      }
+
+      const unionBox = (boxes) => {
+        let x0 = Infinity;
+        let y0 = Infinity;
+        let x1 = -Infinity;
+        let y1 = -Infinity;
+        for (const b of boxes) {
+          x0 = Math.min(x0, b.x0);
+          y0 = Math.min(y0, b.y0);
+          x1 = Math.max(x1, b.x1);
+          y1 = Math.max(y1, b.y1);
+        }
+        return makeBBox(x0, y0, x1, y1);
+      };
+
+      for (const line of lines) {
+        line.spans.sort((a, b) => a.x0 - b.x0);
+        line.bbox = unionBox(line.spans);
+        line.blockSpans = line.spans.map(s => ({
+          text: s.text,
+          bbox: makeBBox(s.x0, s.y0, s.x1, s.y1),
+          font_name: s.font_name || 'Helvetica',
+          font_size: s.font_size,
+          char_count: [...s.text].length
+        }));
+        line.text = line.spans.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
+      }
+
+      const blocks = [];
+      let current = null;
+
+      for (const line of lines) {
+        const lineSize = Math.max(1, ...line.spans.map(s => s.font_size || 0));
+
+        if (current) {
+          const prevLine = current.lines[current.lines.length - 1];
+          const gap = line.bbox.y0 - current.bbox.y1;
+          const overlap = Math.min(current.bbox.x1, line.bbox.x1) - Math.max(current.bbox.x0, line.bbox.x0);
+          const minWidth = Math.min(current.bbox.width, line.bbox.width);
+
+          // A different type size means a different block (title vs body), which is
+          // how MuPDF splits them in the native output.
+          const prevSize = Math.max(1, ...prevLine.spans.map(s => s.font_size || 0));
+          const similarSize = Math.max(lineSize, prevSize) / Math.min(lineSize, prevSize) <= 1.5;
+
+          // Cells on the same baseline belong to the same row/block even when
+          // their boxes do not overlap horizontally.
+          const sameRowTolerance = Math.max(2, lineSize * 0.3);
+          const sameRow =
+            Math.abs(line.bbox.y0 - prevLine.bbox.y0) <= sameRowTolerance &&
+            Math.abs(line.bbox.y1 - prevLine.bbox.y1) <= sameRowTolerance;
+
+          // Tight vertical gap = same paragraph. MuPDF keeps table rows apart
+          // because their leading is much larger than their type size.
+          if (similarSize && (sameRow || (gap <= Math.max(lineSize * 0.6, 3) && overlap > Math.max(minWidth * 0.15, 0)))) {
+            current.lines.push(line);
+            current.bbox = unionBox([current.bbox, line.bbox]);
+            continue;
+          }
+        }
+
+        current = { block_id: blocks.length + 1, bbox: line.bbox, lines: [line] };
+        blocks.push(current);
+      }
+
+      return blocks.map(block => ({
+        block_id: block.block_id,
+        block_type: 'text',
+        bbox: block.bbox,
+        lines: block.lines.map(line => ({
+          text: line.text,
+          bbox: line.bbox,
+          spans: line.blockSpans
+        }))
+      }));
+    }
+
+    // Operator-list walk: images keep metadata + sha256 (of the normalized PNG),
+    // paths become SpatialDrawing objects with items, colours and stroke style.
+    async function extractPageGraphicsModel(page, viewport) {
+      const images = [];
+      const drawings = [];
+
+      let opList;
+      try {
+        opList = await page.getOperatorList();
+      } catch (e) {
+        console.warn('getOperatorList failed:', e);
+        return { images, drawings };
+      }
+
+      const ops = pdfjsLib.OPS;
+
+      const toPage = (p, matrix) => {
+        const a = pdfjsLib.Util.applyTransform(p, matrix);
+        const b = pdfjsLib.Util.applyTransform(a, viewport.transform);
+        return [round2(b[0]), round2(b[1])];
+      };
+
+      const cornersToBBox = (matrix) => {
+        const pts = [[0, 0], [1, 0], [0, 1], [1, 1]].map(p => toPage(p, matrix));
+        const xs = pts.map(p => p[0]);
+        const ys = pts.map(p => p[1]);
+        return makeBBox(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys));
+      };
+
+      const pathBBox = (bounds, matrix) => {
+        // pdf.js reports path bounds as [minX, maxX, minY, maxY].
+        const [minX, maxX, minY, maxY] = bounds;
+        const pts = [
+          toPage([minX, minY], matrix),
+          toPage([maxX, minY], matrix),
+          toPage([minX, maxY], matrix),
+          toPage([maxX, maxY], matrix)
+        ];
+        const xs = pts.map(p => p[0]);
+        const ys = pts.map(p => p[1]);
+        return makeBBox(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys));
+      };
+
+      const pageArea = Math.abs(viewport.width * viewport.height);
+
+      let ctm = MAT_IDENTITY.slice();
+      const stack = [];
+      let fillHex = null;
+      let strokeHex = null;
+      let lineWidth = null;
+      let lineCap = null;
+      let lineJoin = null;
+      let dashPattern = null;
+      let dashPhase = null;
+      let fillOpacity = null;
+      let strokeOpacity = null;
+      let seqno = 0;
+
+      const foundImages = [];
+      let pendingPath = null;
+
+      const cmykToRgb = (c, m, y, k) => [
+        255 * (1 - c) * (1 - k),
+        255 * (1 - m) * (1 - k),
+        255 * (1 - y) * (1 - k)
+      ];
+
+      for (let i = 0; i < opList.fnArray.length; i++) {
+        const fn = opList.fnArray[i];
+        const args = opList.argsArray[i];
+
+        if (fn === ops.save) {
+          stack.push(ctm.slice());
+        } else if (fn === ops.restore) {
+          ctm = stack.pop() || MAT_IDENTITY.slice();
+        } else if (fn === ops.transform) {
+          ctm = matMul(ctm, args);
+        } else if (fn === ops.paintFormXObjectBegin || fn === ops.beginGroup) {
+          stack.push(ctm.slice());
+          if (args && Array.isArray(args[0]) && args[0].length === 6) {
+            ctm = matMul(ctm, args[0]);
+          }
+        } else if (fn === ops.paintFormXObjectEnd || fn === ops.endGroup) {
+          ctm = stack.pop() || MAT_IDENTITY.slice();
+        } else if (fn === ops.setLineWidth) {
+          lineWidth = round2(args[0]);
+        } else if (fn === ops.setLineCap) {
+          lineCap = ['butt', 'round', 'square'][args[0]] || null;
+        } else if (fn === ops.setLineJoin) {
+          lineJoin = ['miter', 'round', 'bevel'][args[0]] || null;
+        } else if (fn === ops.setDash) {
+          const pattern = Array.isArray(args[0]) ? args[0].map(round2) : [];
+          dashPattern = pattern.length ? pattern : null;
+          dashPhase = dashPattern ? round2(args[1] || 0) : null;
+        } else if (fn === ops.setFillAlpha) {
+          fillOpacity = round2(args[0]);
+        } else if (fn === ops.setStrokeAlpha) {
+          strokeOpacity = round2(args[0]);
+        } else if (fn === ops.setGState) {
+          const state = args && args[0];
+          if (state) {
+            if (typeof state.ca === 'number') fillOpacity = round2(state.ca);
+            if (typeof state.CA === 'number') strokeOpacity = round2(state.CA);
+            if (typeof state.lineWidth === 'number') lineWidth = round2(state.lineWidth);
+            if (state.dash && Array.isArray(state.dash) && state.dash.length) {
+              dashPattern = state.dash.map(round2);
+              dashPhase = 0;
+            }
+          }
+        } else if (fn === ops.setFillRGBColor) {
+          fillHex = rgbToHex255(args);
+        } else if (fn === ops.setStrokeRGBColor) {
+          strokeHex = rgbToHex255(args);
+        } else if (fn === ops.setFillGray) {
+          fillHex = rgbToHex255([args[0] * 255, args[0] * 255, args[0] * 255]);
+        } else if (fn === ops.setStrokeGray) {
+          strokeHex = rgbToHex255([args[0] * 255, args[0] * 255, args[0] * 255]);
+        } else if (fn === ops.setFillCMYKColor) {
+          fillHex = rgbToHex255(cmykToRgb(args[0], args[1], args[2], args[3]));
+        } else if (fn === ops.setStrokeCMYKColor) {
+          strokeHex = rgbToHex255(cmykToRgb(args[0], args[1], args[2], args[3]));
+        } else if (fn === ops.constructPath) {
+          // pdf.js may emit one path in several constructPath calls (e.g. a
+          // rectangle followed by closePath). Merge them until a paint op.
+          const pathOps = args && args[0];
+          const pathArgs = args && args[1];
+          const minMax = args && args[2];
+
+          if (pathOps && pathArgs) {
+            if (!pendingPath) {
+              pendingPath = { pathOps: [], pathArgs: [], minMax: null, matrix: ctm.slice() };
+            }
+            pendingPath.pathOps = pendingPath.pathOps.concat(Array.from(pathOps));
+            pendingPath.pathArgs = pendingPath.pathArgs.concat(Array.from(pathArgs));
+
+            if (minMax && minMax.length === 4 && Array.from(minMax).every(v => typeof v === 'number' && Number.isFinite(v))) {
+              if (!pendingPath.minMax) {
+                pendingPath.minMax = Array.from(minMax);
+              } else {
+                pendingPath.minMax = [
+                  Math.min(pendingPath.minMax[0], minMax[0]),
+                  Math.max(pendingPath.minMax[1], minMax[1]),
+                  Math.min(pendingPath.minMax[2], minMax[2]),
+                  Math.max(pendingPath.minMax[3], minMax[3])
+                ];
+              }
+            }
+          }
+        } else if (fn === ops.fill || fn === ops.eoFill || fn === ops.fillStroke ||
+                   fn === ops.eoFillStroke || fn === ops.closePathFillStroke ||
+                   fn === ops.closePathEOFillStroke || fn === ops.stroke || fn === ops.closePathStroke) {
+          if (pendingPath && !pendingPath.minMax) pendingPath = null;
+          if (pendingPath) {
+            const doFill = (fn === ops.fill || fn === ops.eoFill || fn === ops.fillStroke ||
+                            fn === ops.eoFillStroke || fn === ops.closePathFillStroke ||
+                            fn === ops.closePathEOFillStroke);
+            const doStroke = (fn === ops.stroke || fn === ops.closePathStroke ||
+                              fn === ops.fillStroke || fn === ops.eoFillStroke ||
+                              fn === ops.closePathFillStroke || fn === ops.closePathEOFillStroke);
+            const isEvenOdd = (fn === ops.eoFill || fn === ops.eoFillStroke || fn === ops.closePathEOFillStroke);
+
+            const bbox = pathBBox(pendingPath.minMax, pendingPath.matrix);
+
+            // Background fills (>= 95% of the page) are noise — same filter as Rust.
+            const isBackground = doFill && !doStroke && pageArea > 0 &&
+              (bbox.width * bbox.height) >= 0.95 * pageArea;
+
+            if (!isBackground) {
+              const matrix = pendingPath.matrix;
+              const items = [];
+              let ai = 0;
+              let cur = null;
+              let start = null;
+
+              for (const op of pendingPath.pathOps) {
+                if (op === ops.moveTo) {
+                  cur = [pendingPath.pathArgs[ai++], pendingPath.pathArgs[ai++]];
+                  start = cur;
+                } else if (op === ops.lineTo) {
+                  const p = [pendingPath.pathArgs[ai++], pendingPath.pathArgs[ai++]];
+                  if (cur) items.push({ kind: 'line', p1: toPage(cur, matrix), p2: toPage(p, matrix) });
+                  cur = p;
+                } else if (op === ops.curveTo) {
+                  const c1 = [pendingPath.pathArgs[ai++], pendingPath.pathArgs[ai++]];
+                  const c2 = [pendingPath.pathArgs[ai++], pendingPath.pathArgs[ai++]];
+                  const p = [pendingPath.pathArgs[ai++], pendingPath.pathArgs[ai++]];
+                  if (cur) {
+                    items.push({
+                      kind: 'curve',
+                      p1: toPage(cur, matrix),
+                      p2: toPage(c1, matrix),
+                      p3: toPage(c2, matrix),
+                      p4: toPage(p, matrix)
+                    });
+                  }
+                  cur = p;
+                } else if (op === ops.closePath) {
+                  if (cur && start) {
+                    const dx = start[0] - cur[0];
+                    const dy = start[1] - cur[1];
+                    // Rectangles are already closed; skip degenerate segments.
+                    if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
+                      items.push({ kind: 'line', p1: toPage(cur, matrix), p2: toPage(start, matrix) });
+                    }
+                    cur = start;
+                  }
+                } else if (op === ops.rectangle) {
+                  const x = pendingPath.pathArgs[ai++];
+                  const y = pendingPath.pathArgs[ai++];
+                  const w = pendingPath.pathArgs[ai++];
+                  const h = pendingPath.pathArgs[ai++];
+                  const pts = [
+                    toPage([x, y], matrix),
+                    toPage([x + w, y], matrix),
+                    toPage([x, y + h], matrix),
+                    toPage([x + w, y + h], matrix)
+                  ];
+                  const xs = pts.map(p => p[0]);
+                  const ys = pts.map(p => p[1]);
+                  items.push({
+                    kind: 'rect',
+                    bbox: makeBBox(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)),
+                    orientation: 1
+                  });
+                  cur = [x, y];
+                  start = cur;
+                }
+              }
+
+              drawings.push({
+                drawing_id: drawings.length + 1,
+                bbox,
+                drawing_type: (doFill && doStroke) ? 'fill_stroke' : (doFill ? 'fill' : 'stroke'),
+                item_count: items.length,
+                items,
+                stroke_color: doStroke ? hexToRgb01(strokeHex) : null,
+                fill_color: doFill ? hexToRgb01(fillHex) : null,
+                width: doStroke ? lineWidth : null,
+                fill_opacity: doFill ? (fillOpacity === null ? 1 : fillOpacity) : null,
+                stroke_opacity: doStroke ? (strokeOpacity === null ? 1 : strokeOpacity) : null,
+                even_odd: doFill ? isEvenOdd : null,
+                dash_pattern: doStroke ? (dashPattern || []) : null,
+                dash_phase: doStroke ? (dashPhase === null ? 0 : dashPhase) : null,
+                line_join: doStroke ? (lineJoin || 'miter') : null,
+                line_cap: doStroke ? (lineCap || 'butt') : null,
+                layer: null,
+                seqno: ++seqno
+              });
+            }
+
+            pendingPath = null;
+          }
+        } else if (fn === ops.endPath || fn === ops.clip) {
+          pendingPath = null;
+        } else if (fn === ops.paintImageXObject) {
+          foundImages.push({ objId: String(args[0]), inline: null, matrix: ctm.slice() });
+        } else if (fn === ops.paintInlineImageXObject) {
+          foundImages.push({ objId: null, inline: args[0], matrix: ctm.slice() });
+        } else if (fn === ops.paintImageXObjectRepeat) {
+          for (let p = 0; p < args[3].length; p += 2) {
+            foundImages.push({
+              objId: String(args[0]),
+              inline: null,
+              matrix: matMul(ctm, [args[1], 0, 0, args[2], args[3][p], args[3][p + 1]])
+            });
+          }
+        }
+      }
+
+      // Dedupe by resource: an image painted N times is still one embedded image.
+      const byKey = new Map();
+      for (const item of foundImages) {
+        const key = item.objId !== null ? 'x:' + item.objId : 'inline:' + images.length + ':' + foundImages.indexOf(item);
+        const bbox = cornersToBBox(item.matrix);
+        const existing = byKey.get(key);
+        if (existing) {
+          existing.count += 1;
+          continue;
+        }
+        byKey.set(key, {
+          objId: item.objId,
+          inline: item.inline,
+          matrix: item.matrix,
+          bbox,
+          count: 1
+        });
+      }
+
+      let imageId = 1;
+      for (const entry of byKey.values()) {
+        const decoded = entry.inline ? entry.inline : await resolveImageData(page, entry.objId);
+
+        let pixelWidth = decoded && decoded.width ? decoded.width : Math.round(entry.bbox.width);
+        let pixelHeight = decoded && decoded.height ? decoded.height : Math.round(entry.bbox.height);
+        let bitsPerComponent = null;
+        let colorSpace = null;
+
+        // pdf.js does not expose the original PDF colour space; infer it from the
+        // decoded buffer (1bpp masks are 1 byte per 8 pixels, grey is 1 B/px).
+        if (decoded) {
+          if (decoded.bitmap) {
+            bitsPerComponent = 8;
+            colorSpace = '/DeviceRGB';
+          } else if (decoded.data && decoded.width && decoded.height) {
+            const bytesPerPixel = decoded.data.length / (decoded.width * decoded.height);
+            if (bytesPerPixel < 1) {
+              bitsPerComponent = 1;
+              colorSpace = '/DeviceGray';
+            } else if (bytesPerPixel < 3) {
+              bitsPerComponent = 8;
+              colorSpace = '/DeviceGray';
+            } else {
+              bitsPerComponent = 8;
+              colorSpace = '/DeviceRGB';
+            }
+          }
+        }
+
+        // The browser only exposes decoded pixels, so the digest/file size below
+        // refer to the normalized PNG (documented in the Space README).
+        let sha256 = null;
+        let byteLength = null;
+        const canvas = decodedImageToCanvas(decoded);
+        if (canvas) {
+          try {
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            if (blob) {
+              const buffer = await blob.arrayBuffer();
+              byteLength = buffer.byteLength;
+              sha256 = await sha256Hex(buffer);
+            }
+          } catch (e) {
+            /* hashing is best-effort */
+          }
+        }
+
+        images.push({
+          image_id: imageId++,
+          name: entry.objId !== null ? entry.objId : 'inline',
+          xref: 0,
+          bbox: entry.bbox,
+          pixel_width: pixelWidth,
+          pixel_height: pixelHeight,
+          bits_per_component: bitsPerComponent,
+          color_space: colorSpace,
+          filter: null,
+          mime_type: 'image/png',
+          byte_length: byteLength,
+          sha256,
+          file: null,
+          count: entry.count,
+          objId: entry.objId,
+          inline: entry.inline
+        });
+      }
+
+      return { images, drawings };
+    }
+
+    async function parsePageToCache(pageNum, generation = parseGeneration) {
+      const doc = currentPdfDoc;
+      if (!doc || pageNum < 1 || pageNum > doc.numPages) return null;
+      if (pageCache[pageNum - 1]) return pageCache[pageNum - 1];
+
+      const t0 = performance.now();
+      const page = await doc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1 });
+
+      const spans = await extractPageSpans(page, viewport, pageNum);
+      const graphics = await extractPageGraphicsModel(page, viewport);
+
+      const entry = {
+        page_number: pageNum,
+        width: round2(viewport.width),
+        height: round2(viewport.height),
+        rotation: page.rotate || 0,
+        text_blocks: buildTextBlocks(spans),
+        tables: detectTables(spans, 1),
+        raw_span_count: spans.length,
+        images: graphics.images,
+        drawings: graphics.drawings,
+        spans,
+        parse_time_ms: performance.now() - t0
+      };
+
+      // A new file may have been dropped while this page was being extracted.
+      // In that case the result belongs to a stale document: drop it instead of
+      // overwriting the fresh page cache.
+      if (generation !== parseGeneration || doc !== currentPdfDoc) return null;
+
+      pageCache[pageNum - 1] = entry;
+      return entry;
+    }
+
+    async function parseRemainingPages(generation) {
+      if (!currentPdfDoc) return;
+      const total = currentPdfDoc.numPages;
+
+      for (let p = 2; p <= total; p++) {
+        if (generation !== parseGeneration) return;
+        try {
+          await parsePageToCache(p, generation);
+        } catch (e) {
+          console.warn('page ' + p + ' extraction failed:', e);
+        }
+        if (generation !== parseGeneration) return;
+        pageIndicator.textContent = `Page ${currentPageNum} of ${total} · extracted ${p}/${total}`;
+      }
+
+      if (generation !== parseGeneration) return;
+      docParseMs = performance.now() - docParseStart;
+      pageIndicator.textContent = `Page ${currentPageNum} of ${total}`;
+      updateJsonViewer();
+      console.log(`⚡ Client-side document model ready: ${pageCache.filter(Boolean).length}/${total} pages in ${docParseMs.toFixed(0)} ms`);
+    }
+
+    async function ensureFullDocument() {
+      if (!currentPdfDoc) return;
+      const total = currentPdfDoc.numPages;
+
+      for (let p = 1; p <= total; p++) {
+        if (!pageCache[p - 1]) {
+          try {
+            await parsePageToCache(p, parseGeneration);
+          } catch (e) {
+            console.warn('page ' + p + ' extraction failed:', e);
+          }
+        }
+      }
+
+      if (!docParseMs && docParseStart) {
+        docParseMs = performance.now() - docParseStart;
+      }
+      updateJsonViewer();
+    }
+
+    function buildDocumentJson() {
+      if (!currentPdfDoc) return null;
+
+      const pages = pageCache.filter(Boolean).map(p => ({
+        page_number: p.page_number,
+        width: p.width,
+        height: p.height,
+        rotation: p.rotation,
+        text_blocks: p.text_blocks,
+        tables: p.tables,
+        raw_span_count: p.raw_span_count,
+        images: p.images.map(im => ({
+          image_id: im.image_id,
+          name: im.name,
+          xref: im.xref,
+          bbox: im.bbox,
+          pixel_width: im.pixel_width,
+          pixel_height: im.pixel_height,
+          bits_per_component: im.bits_per_component,
+          color_space: im.color_space,
+          filter: im.filter,
+          mime_type: im.mime_type,
+          byte_length: im.byte_length,
+          sha256: im.sha256,
+          file: null
+        })),
+        drawings: p.drawings
+      }));
+
+      return {
+        file_name: docFileName,
+        total_pages: currentPdfDoc.numPages,
+        parse_time_ms: round2(docParseMs),
+        pages
+      };
+    }
+
+
+    function updateImageGallery() {
+      imagesGrid.innerHTML = '';
+      imagesCount.textContent = `${extractedImages.length} image(s) on page ${currentPageNum}`;
+
+      if (extractedImages.length === 0) {
+        imagesGrid.innerHTML = '<div class="col-span-full p-8 text-center text-slate-500 text-xs">No embedded images found on this page.</div>';
+        return;
+      }
+
+      extractedImages.forEach((im, idx) => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex flex-col cursor-pointer group hover:border-orange-500/70 transition focus:outline-none focus:ring-2 focus:ring-orange-500/60';
+        card.title = 'Click to view full size';
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label',
+          'Enlarge image ' + (idx + 1) +
+          (im.px ? ', ' + im.px.width + ' by ' + im.px.height + ' pixels' : ''));
+        card.addEventListener('click', () => openLightbox(im, idx));
+        card.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openLightbox(im, idx);
+          }
+        });
+
+        const frame = document.createElement('div');
+        frame.className = 'relative bg-slate-900/60 flex items-center justify-center p-2 h-44';
+        if (im.thumb) {
+          im.thumb.className = 'max-h-full max-w-full object-contain shadow';
+          frame.appendChild(im.thumb);
+        } else {
+          frame.innerHTML = '<span class="text-slate-500 text-xs">preview unavailable</span>';
+        }
+
+        const hint = document.createElement('span');
+        hint.className = 'absolute bottom-1.5 right-2 text-[10px] font-mono text-slate-300 bg-slate-950/85 border border-slate-700 rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition';
+        hint.textContent = '🔍 enlarge';
+        frame.appendChild(hint);
+
+        const label = im.objId !== null && im.objId !== undefined
+          ? 'XObject ' + im.objId
+          : 'inline image';
+
+        const meta = document.createElement('div');
+        meta.className = 'p-2.5 text-[11px] font-mono text-slate-300 flex flex-col gap-1 border-t border-slate-800';
+        meta.innerHTML =
+          '<span class="text-orange-400 font-bold">#' + (idx + 1) + ' ' + escapeHtml(String(label)) + '</span>' +
+          '<span>pixels: <span class="coord-font">' + (im.px ? im.px.width + ' x ' + im.px.height : 'unknown') + '</span></span>' +
+          '<span>bbox pt: <span class="coord-font">[' + im.pt.x0 + ', ' + im.pt.y0 + ', ' + im.pt.x1 + ', ' + im.pt.y1 + ']</span></span>' +
+          '<span>painted: <span class="coord-font">' + im.count + 'x</span>' +
+          (im.cropped ? ' <span class="text-amber-400">(crop fallback)</span>' : '') + '</span>' +
+          '<span class="text-slate-500">🔍 click to enlarge</span>';
+
+        card.appendChild(frame);
+        card.appendChild(meta);
+        imagesGrid.appendChild(card);
+      });
+    }
+
+    function drawCanvas(highlightSpan = null) {
+      if (!cleanPdfBitmap) return;
+
+      // Draw clean base PDF
+      pdfCtx.drawImage(cleanPdfBitmap, 0, 0);
+
+      // Embedded image placement (orange); the hovered image gets a stronger tint
+      if (chkShowImages.checked) {
+        extractedImages.forEach(im => {
+          const isHovered = (im === hoveredImage);
+          pdfCtx.fillStyle = isHovered ? 'rgba(249, 115, 22, 0.40)' : 'rgba(249, 115, 22, 0.22)';
+          pdfCtx.strokeStyle = isHovered ? 'rgba(251, 146, 60, 1.0)' : 'rgba(249, 115, 22, 0.95)';
+          pdfCtx.lineWidth = isHovered
+            ? Math.max(2.5, 3.2 * (currentRenderScale / 1.5))
+            : Math.max(1.5, 2.0 * (currentRenderScale / 1.5));
+          pdfCtx.fillRect(im.paint.vx, im.paint.vy, im.paint.vw, im.paint.vh);
+          pdfCtx.strokeRect(im.paint.vx, im.paint.vy, im.paint.vw, im.paint.vh);
+        });
+      }
+
+      // Vector paths (magenta); the hovered path gets a stronger stroke
+      if (chkShowVectors.checked) {
+        extractedDrawings.forEach(d => {
+          const isHovered = (d === hoveredDrawing);
+          const px = d.paint;
+
+          if (px.vw > 1.5 && px.vh > 1.5) {
+            pdfCtx.fillStyle = isHovered ? 'rgba(217, 70, 239, 0.24)' : 'rgba(217, 70, 239, 0.10)';
+            pdfCtx.fillRect(px.vx, px.vy, px.vw, px.vh);
+          }
+
+          pdfCtx.strokeStyle = isHovered ? 'rgba(240, 171, 252, 1.0)' : 'rgba(217, 70, 239, 0.85)';
+          pdfCtx.lineWidth = isHovered
+            ? Math.max(2.0, 2.6 * (currentRenderScale / 1.5))
+            : Math.max(1.0, 1.2 * (currentRenderScale / 1.5));
+          pdfCtx.strokeRect(px.vx, px.vy, px.vw, px.vh);
+        });
+      }
+
+      if (!chkShowBoxes.checked) return;
+
+      extractedSpans.forEach(s => {
+        const isHovered = (s === highlightSpan);
+
+        if (isHovered) {
+          pdfCtx.fillStyle = 'rgba(6, 182, 212, 0.40)';
+          pdfCtx.strokeStyle = 'rgba(34, 211, 238, 1.0)';
+          pdfCtx.lineWidth = Math.max(1.5, 2.0 * (currentRenderScale / 1.5));
+        } else {
+          pdfCtx.fillStyle = 'rgba(6, 182, 212, 0.18)';
+          pdfCtx.strokeStyle = 'rgba(6, 182, 212, 0.85)';
+          pdfCtx.lineWidth = Math.max(1.0, 1.3 * (currentRenderScale / 1.5));
+        }
+
+        pdfCtx.fillRect(s.vx0, s.vy0, s.vw, s.vh);
+        pdfCtx.strokeRect(s.vx0, s.vy0, s.vw, s.vh);
+      });
+    }
+
+    // Interactive Hover on Canvas (text spans + embedded images).
+    // The tooltip is position:fixed and follows the cursor.
+    const TOOLTIP_MARGIN = 8;
+    const TOOLTIP_OFFSET = 14;
+
+    function positionTooltip(clientX, clientY) {
+      const box = hoverInfo.getBoundingClientRect();
+      let x = clientX + TOOLTIP_OFFSET;
+      let y = clientY + TOOLTIP_OFFSET;
+
+      if (x + box.width + TOOLTIP_MARGIN > window.innerWidth) {
+        x = clientX - TOOLTIP_OFFSET - box.width;
+      }
+      if (y + box.height + TOOLTIP_MARGIN > window.innerHeight) {
+        y = clientY - TOOLTIP_OFFSET - box.height;
+      }
+
+      hoverInfo.style.left = Math.max(TOOLTIP_MARGIN, Math.round(x)) + 'px';
+      hoverInfo.style.top = Math.max(TOOLTIP_MARGIN, Math.round(y)) + 'px';
+    }
+
+    function setTooltipKind(kind) {
+      hoverInfo.classList.remove(
+        'text-cyan-200', 'border-cyan-700',
+        'text-orange-200', 'border-orange-700',
+        'text-fuchsia-200', 'border-fuchsia-700'
+      );
+      if (kind === 'image') {
+        hoverInfo.classList.add('text-orange-200', 'border-orange-700');
+      } else if (kind === 'vector') {
+        hoverInfo.classList.add('text-fuchsia-200', 'border-fuchsia-700');
+      } else {
+        hoverInfo.classList.add('text-cyan-200', 'border-cyan-700');
+      }
+    }
+
+    function drawingTooltipText(d) {
+      const col = d.type === 'stroke' ? d.stroke : (d.fill || d.stroke);
+      return 'path · ' + d.type +
+        (col ? ' · ' + col : '') +
+        ' · bbox [' + d.pt.x0 + ', ' + d.pt.y0 + ', ' + d.pt.x1 + ', ' + d.pt.y1 + ']';
+    }
+
+    function imageTooltipText(im) {
+      const label = (im.objId !== null && im.objId !== undefined) ? 'XObject ' + im.objId : 'inline image';
+      const px = im.px ? (im.px.width + '×' + im.px.height + ' px') : 'unknown size';
+      return label + ' · ' + px +
+        ' · bbox [' + im.pt.x0 + ', ' + im.pt.y0 + ', ' + im.pt.x1 + ', ' + im.pt.y1 + ']' +
+        ' · painted ' + im.count + 'x';
+    }
+
+    pdfCanvas.addEventListener('mousemove', (e) => {
+      if (!currentViewport) return;
+
+      const rect = pdfCanvas.getBoundingClientRect();
+      const scaleX = pdfCanvas.width / rect.width;
+      const scaleY = pdfCanvas.height / rect.height;
+      const mouseX = (e.clientX - rect.left) * scaleX;
+      const mouseY = (e.clientY - rect.top) * scaleY;
+
+      // Text spans are the smaller targets, so they win when they overlap an image.
+      const span = extractedSpans.find(s =>
+        mouseX >= s.vx0 && mouseX <= s.vx0 + s.vw &&
+        mouseY >= s.vy0 && mouseY <= s.vy0 + s.vh
+      ) || null;
+
+      const img = (span || !chkShowImages.checked) ? null : (extractedImages.find(im =>
+        mouseX >= im.paint.vx && mouseX <= im.paint.vx + im.paint.vw &&
+        mouseY >= im.paint.vy && mouseY <= im.paint.vy + im.paint.vh
+      ) || null);
+
+      // Smallest matching path wins: the table's outer rect would otherwise
+      // swallow its own grid lines, which are far more useful to inspect.
+      const drw = (span || img || !chkShowVectors.checked) ? null : (() => {
+        let best = null;
+        let bestArea = Infinity;
+        for (const d of extractedDrawings) {
+          const p = d.paint;
+          if (mouseX < p.vx || mouseX > p.vx + p.vw || mouseY < p.vy || mouseY > p.vy + p.vh) continue;
+          const area = p.vw * p.vh;
+          if (area < bestArea) {
+            bestArea = area;
+            best = d;
+          }
+        }
+        return best;
+      })();
+
+      if (span !== hoveredSpan || img !== hoveredImage || drw !== hoveredDrawing) {
+        hoveredSpan = span;
+        hoveredImage = img;
+        hoveredDrawing = drw;
+        drawCanvas(hoveredSpan);
+
+        if (hoveredSpan) {
+          setTooltipKind('text');
+          hoverInfo.textContent = `[${hoveredSpan.x0.toFixed(1)}, ${hoveredSpan.y0.toFixed(1)}, ${hoveredSpan.x1.toFixed(1)}, ${hoveredSpan.y1.toFixed(1)}] "${hoveredSpan.text}"`;
+          hoverInfo.classList.remove('hidden');
+        } else if (hoveredImage) {
+          setTooltipKind('image');
+          hoverInfo.textContent = imageTooltipText(hoveredImage);
+          hoverInfo.classList.remove('hidden');
+        } else if (hoveredDrawing) {
+          setTooltipKind('vector');
+          hoverInfo.textContent = drawingTooltipText(hoveredDrawing);
+          hoverInfo.classList.remove('hidden');
+        } else {
+          hoverInfo.classList.add('hidden');
+        }
+      }
+
+      if (hoveredSpan || hoveredImage || hoveredDrawing) positionTooltip(e.clientX, e.clientY);
+    });
+
+    pdfCanvas.addEventListener('mouseleave', () => {
+      if (hoveredSpan || hoveredImage || hoveredDrawing) {
+        hoveredSpan = null;
+        hoveredImage = null;
+        hoveredDrawing = null;
+        drawCanvas(null);
+        hoverInfo.classList.add('hidden');
+      }
+    });
+
+    function updateTable() {
+      coordsTableBody.innerHTML = '';
+      tableCount.textContent = `${extractedSpans.length} spans on page ${currentPageNum}`;
+
+      if (extractedSpans.length === 0) {
+        coordsTableBody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-slate-500">No text elements found on this page.</td></tr>';
+        return;
+      }
+
+      extractedSpans.forEach(s => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-800/40 transition border-b border-slate-800/40';
+        tr.innerHTML = `
+          <td class="p-3 text-center text-slate-400 font-mono">${s.page}</td>
+          <td class="p-3 coord-font">${s.x0.toFixed(2)}</td>
+          <td class="p-3 coord-font">${s.y0.toFixed(2)}</td>
+          <td class="p-3 coord-font">${s.x1.toFixed(2)}</td>
+          <td class="p-3 coord-font">${s.y1.toFixed(2)}</td>
+          <td class="p-3 coord-font">${s.font_size}</td>
+          <td class="p-3 text-slate-400 font-mono text-[11px]">${s.font_name}</td>
+          <td class="p-3 text-slate-200">${escapeHtml(s.text)}</td>
+        `;
+        coordsTableBody.appendChild(tr);
+      });
+    }
+
+    function updateTextDump() {
+      let flow = `=== [CLEAN TEXT FLOW] ===\n\n`;
+      extractedSpans.forEach(s => flow += s.text + '\n');
+
+      flow += `\n=======================================================\n`;
+      flow += `=== [RAW PHYSICAL COORDINATES DUMP] ===\n\n`;
+      extractedSpans.forEach(s => {
+        flow += `[Page ${s.page}] (X0: ${s.x0.toFixed(2).padStart(7)}, Y0: ${s.y0.toFixed(2).padStart(7)}, X1: ${s.x1.toFixed(2).padStart(7)}, Y1: ${s.y1.toFixed(2).padStart(7)}) [${s.font_size}pt] "${s.text}"\n`;
+      });
+
+      pureTextBox.value = flow;
+    }
+
+    function updateJsonViewer() {
+      if (currentRustDoc && currentRustDoc.structured) {
+        jsonViewer.textContent = JSON.stringify(currentRustDoc.structured, null, 2);
+        return;
+      }
+      // Client-side model: same schema the native engine emits (pages[], tables,
+      // text_blocks, images with sha256, drawings with items/colours).
+      const doc = buildDocumentJson() || {
+        file_name: docFileName,
+        total_pages: 0,
+        parse_time_ms: 0,
+        pages: []
+      };
+      jsonViewer.textContent = JSON.stringify(doc, null, 2);
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Embedded image lightbox (click a gallery thumbnail to inspect it 1:1)
+    // ---------------------------------------------------------------------------
+    function openLightbox(im, index) {
+      if (!im || !im.thumb) return;
+
+      const imgW = im.thumb.naturalWidth || im.thumb.width || (im.px ? im.px.width : 300);
+      const imgH = im.thumb.naturalHeight || im.thumb.height || (im.px ? im.px.height : 200);
+
+      lightboxCanvas.width = imgW;
+      lightboxCanvas.height = imgH;
+      const lctx = lightboxCanvas.getContext('2d');
+      lctx.clearRect(0, 0, lightboxCanvas.width, lightboxCanvas.height);
+      lctx.drawImage(im.thumb, 0, 0, imgW, imgH);
+
+      const label = (im.objId !== null && im.objId !== undefined) ? 'XObject ' + im.objId : 'inline image';
+      lightboxTitle.textContent = '#' + (index + 1) + '  ' + label;
+      lightboxMeta.textContent =
+        'bbox pt [' + im.pt.x0 + ', ' + im.pt.y0 + ', ' + im.pt.x1 + ', ' + im.pt.y1 + ']' +
+        ' · painted ' + im.count + 'x' +
+        (im.cropped ? ' · crop fallback' : '');
+      lightboxSize.textContent = im.px
+        ? (im.px.width + ' x ' + im.px.height + ' px')
+        : (imgW + ' x ' + imgH + ' px');
+
+      // Enlarge small images so the embedded pixels are actually visible.
+      const maxW = Math.max(window.innerWidth * 0.85, 320);
+      const maxH = Math.max(window.innerHeight * 0.72, 240);
+      const k = Math.min(maxW / imgW, maxH / imgH);
+      const scale = k >= 1 ? Math.min(k, 8) : 1;
+
+      lightboxCanvas.style.width = Math.round(imgW * scale) + 'px';
+      lightboxCanvas.style.height = Math.round(imgH * scale) + 'px';
+      lightboxCanvas.style.imageRendering = scale >= 2 ? 'pixelated' : 'auto';
+
+      imageLightbox.style.display = 'flex';
+    }
+
+    function closeLightbox() {
+      imageLightbox.style.display = 'none';
+    }
+
+    lightboxClose.addEventListener('click', closeLightbox);
+    imageLightbox.addEventListener('click', (e) => {
+      if (e.target === imageLightbox) closeLightbox();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && imageLightbox.style.display !== 'none') closeLightbox();
+    });
+
+    // Navigation Controls
+    btnPrevPage.addEventListener('click', () => { if (currentPageNum > 1) { currentPageNum--; renderCurrentPage(); } });
+    btnNextPage.addEventListener('click', () => { if (currentPdfDoc && currentPageNum < currentPdfDoc.numPages) { currentPageNum++; renderCurrentPage(); } });
+    pageSlider.addEventListener('input', (e) => { currentPageNum = parseInt(e.target.value); renderCurrentPage(); });
+    chkShowBoxes.addEventListener('change', () => {
+      drawCanvas(hoveredSpan);
+    });
+    chkShowImages.addEventListener('change', () => {
+      drawCanvas(hoveredSpan);
+    });
+    chkShowVectors.addEventListener('change', () => {
+      drawCanvas(hoveredSpan);
+    });
+
+    btnCopyText.addEventListener('click', () => {
+      navigator.clipboard.writeText(pureTextBox.value);
+      btnCopyText.textContent = '✅ Copied!';
+      setTimeout(() => btnCopyText.textContent = '📋 Copy to Clipboard', 2000);
+    });
+
+    btnDownloadJson.addEventListener('click', async () => {
+      const original = btnDownloadJson.textContent;
+      btnDownloadJson.textContent = '⏳ Preparing…';
+      btnDownloadJson.disabled = true;
+      await ensureFullDocument();
+      btnDownloadJson.textContent = original;
+      btnDownloadJson.disabled = false;
+
+      const blob = new Blob([jsonViewer.textContent], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'rasgapdf_document.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    if (btnCopyJson) {
+      btnCopyJson.addEventListener('click', async () => {
+        btnCopyJson.textContent = '⏳ Preparing…';
+        btnCopyJson.disabled = true;
+        await ensureFullDocument();
+        btnCopyJson.disabled = false;
+
+        const text = jsonViewer.textContent || '';
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (e) {
+          // Clipboard API needs a secure context (https/localhost); fall back to a
+          // hidden textarea so the button still works on plain http.
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch (err) { /* ignore */ }
+          document.body.removeChild(ta);
+        }
+        btnCopyJson.textContent = '✅ Copied!';
+        setTimeout(() => btnCopyJson.textContent = '📋 Copy JSON', 2000);
+      });
+    }
+
+    // Auto-load sample PDF on startup
+    window.addEventListener('DOMContentLoaded', () => {
+      btnLoadSample.click();
+    });
+  </script>
+</body>
+</html>

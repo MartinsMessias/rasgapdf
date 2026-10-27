@@ -1,7 +1,7 @@
 {
   "name": "rasgapdf",
   "version": "0.2.0",
-  "description": "Ultra-fast 2D spatial PDF parser powered by pure Rust",
+  "description": "Ultra-fast 2D spatial PDF parser powered by pure Rust — extract exact [x0, y0, x1, y1] bounding boxes, text blocks, tables, images & vector paths in milliseconds for RAG & LLMs",
   "main": "index.js",
   "files": [
     "index.js",
@@ -13,16 +13,29 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://huggingface.co/martinsmessias/rasgapdf.git"
+    "url": "git+https://github.com/MartinsMessias/rasgapdf.git"
   },
-  "homepage": "https://huggingface.co/martinsmessias/rasgapdf",
+  "homepage": "https://martinsmessias.github.io/rasgapdf/",
+  "bugs": {
+    "url": "https://github.com/MartinsMessias/rasgapdf/issues"
+  },
   "keywords": [
     "pdf",
+    "pdf-parser",
+    "pdf-to-json",
+    "pdf-table-extractor",
     "spatial",
+    "spatial-pdf",
     "parser",
     "bounding-box",
+    "coordinates",
     "layout-analysis",
-    "rust"
+    "document-parsing",
+    "rag",
+    "llm",
+    "document-ai",
+    "rust",
+    "mupdf"
   ],
   "author": "Messias Martins",
   "license": "AGPL-3.0-or-later",

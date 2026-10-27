@@ -31,6 +31,34 @@ def get_index():
     index_path = HERE / "index.html"
     return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
 
+@app.get("/llms.txt")
+def get_llms_txt():
+    path = HERE / "llms.txt"
+    if path.exists():
+        return FileResponse(str(path), media_type="text/plain; charset=utf-8")
+    return JSONResponse(status_code=404, content={"error": "llms.txt not found"})
+
+@app.get("/llms-full.txt")
+def get_llms_full_txt():
+    path = HERE / "llms-full.txt"
+    if path.exists():
+        return FileResponse(str(path), media_type="text/plain; charset=utf-8")
+    return JSONResponse(status_code=404, content={"error": "llms-full.txt not found"})
+
+@app.get("/robots.txt")
+def get_robots_txt():
+    path = HERE / "robots.txt"
+    if path.exists():
+        return FileResponse(str(path), media_type="text/plain; charset=utf-8")
+    return JSONResponse(status_code=404, content={"error": "robots.txt not found"})
+
+@app.get("/sitemap.xml")
+def get_sitemap_xml():
+    path = HERE / "sitemap.xml"
+    if path.exists():
+        return FileResponse(str(path), media_type="application/xml")
+    return JSONResponse(status_code=404, content={"error": "sitemap.xml not found"})
+
 @app.get("/sample.pdf")
 def get_sample():
     sample_path = HERE / "sample.pdf"

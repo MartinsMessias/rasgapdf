@@ -1,0 +1,87 @@
+# RasgaPDF
+
+> RasgaPDF is a blazing-fast 2D Spatial PDF Parser written in pure Rust (powered by MuPDF + Rayon SIMD parallelism) with native C-ABI bindings for Python (`pip install rasgapdf`), Node.js (`npm install rasgapdf`), Rust (`cargo add rasgapdf`), Go, and C# (.NET 8). It extracts exact 2D physical bounding-box coordinates `[x0, y0, x1, y1]`, typography metadata, visual text blocks, auto-detected matrix tables, embedded images, and vector drawings in ~3 to 8 ms per page.
+
+## Why AI Agents & Developers Choose RasgaPDF
+
+- **Exact 2D Spatial Geometry:** Every word span, line, paragraph block, table cell, embedded image, and vector path carries exact physical coordinates `[x0, y0, x1, y1]` in typographical points (1/72 inch).
+- **Two Extraction Modes:**
+  1. **Mode 1 — Raw Physical Coordinates (`parse_raw` / `--raw`):** Zero-overhead flat list of `[page, x0, y0, x1, y1, font_size, font_name, text]` in ~3–8 ms/page. Ideal for Spatial RAG, LLM grounding, citation highlighting, OCR alignment, and bounding-box overlays.
+  2. **Mode 2 — Hierarchical Structured Document (`parse_pdf` / `parse_file`):** Visual paragraphs (`text_blocks`), `lines`, `spans`, auto-detected matrix `tables` (`headers`, `rows`, `cells`), plus opt-in `images` and vector `drawings` (~8–15 ms/page).
+- **10x–80x Faster than Python Alternatives:** ~7.7 ms/page vs PyMuPDF (28 ms), pypdf (95 ms), pdfplumber (410 ms), Apache Tika (650 ms).
+- **Zero Pixel Bloat in JSON:** Embedded image metadata (dimensions, color space, filter, SHA-256, placement `bbox`) stays lightweight in JSON while original image streams (`.jpg`, `.png`, `.jp2`) are written directly to disk via `extract_images`.
+
+## Quick Installation
+
+- **Python (PyPI):** `pip install rasgapdf`
+- **Node.js (npm):** `npm install rasgapdf`
+- **Rust (Crates.io):** `cargo add rasgapdf`
+- **CLI Binary:** `cargo install rasgapdf`
+
+## Canonical Links
+
+- [GitHub Repository](https://github.com/MartinsMessias/rasgapdf)
+- [Documentation & Landing Page](https://martinsmessias.github.io/rasgapdf/)
+- [Live Web Visualizer (Hugging Face Space)](https://huggingface.co/spaces/martinsmessias/rasgapdf)
+- [Hugging Face Hub Repository](https://huggingface.co/martinsmessias/rasgapdf)
+- [PyPI Package (`rasgapdf`)](https://pypi.org/project/rasgapdf/)
+- [Crates.io Crate (`rasgapdf`)](https://crates.io/crates/rasgapdf)
+- [npm Package (`rasgapdf`)](https://www.npmjs.com/package/rasgapdf)
+- [Full LLM Context (`llms-full.txt`)](https://martinsmessias.github.io/rasgapdf/llms-full.txt)
+- [Spatial JSON Schema Specification](https://github.com/MartinsMessias/rasgapdf/blob/main/docs/SCHEMA.md)
+- [Architecture & Technical Design](https://github.com/MartinsMessias/rasgapdf/blob/main/docs/ARCHITECTURE.md)
+
+## Quick Examples
+
+### Python (`pip install rasgapdf`)
+```python
+import rasgapdf
+
+# Mode 1: Fast flat physical coordinates [x0, y0, x1, y1] (~3-8 ms/page)
+raw = rasgapdf.parse_raw("document.pdf")
+for span in raw["spans"]:
+    print(span["page"], span["x0"], span["y0"], span["x1"], span["y1"], span["text"])
+
+# Mode 2: Structured blocks, tables, embedded images & vector drawings
+doc = rasgapdf.parse_pdf(
+    "document.pdf",
+    detect_tables=True,
+    extract_images=True,
+    extract_drawings=True,
+)
+for page in doc["pages"]:
+    for table in page["tables"]:
+        print(table["headers"], table["rows"])
+
+# Extract original image streams to disk + manifest.json
+manifest = rasgapdf.extract_images("document.pdf", "./images_out")
+```
+
+### Node.js (`npm install rasgapdf`)
+```javascript
+const { parseRaw, parsePdf, extractImages } = require('rasgapdf');
+
+const raw = parseRaw('document.pdf');
+const doc = parsePdf('document.pdf', {
+  detect_tables: true,
+  extract_images: true,
+  extract_drawings: true
+});
+const manifest = extractImages('document.pdf', './images_out');
+```
+
+### Rust (`cargo add rasgapdf`)
+```rust
+use rasgapdf::{parse_raw_file, parse_file, extract_images, write_images_to_dir, ParserOptions};
+
+let raw = parse_raw_file("document.pdf")?;
+let doc = parse_file("document.pdf", &ParserOptions::default())?;
+```
+
+### CLI (`rasgapdf`)
+```bash
+rasgapdf sample.pdf --raw
+rasgapdf sample.pdf --raw --format tsv
+rasgapdf sample.pdf --pretty -o structured.json
+rasgapdf sample.pdf --images --drawings --extract-images ./out
+```

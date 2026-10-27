@@ -3,12 +3,14 @@ name = "rasgapdf"
 version = "0.2.0"
 edition = "2021"
 authors = ["Messias Martins"]
-description = "Blazing-fast spatial 2D PDF parser in pure Rust with multi-language bindings (Python, Node.js, Go, C#)"
+description = "Blazing-fast spatial 2D PDF parser in pure Rust with multi-language bindings (Python, Node.js, Go, C#) for RAG, LLMs, bounding boxes, and table extraction"
 license = "AGPL-3.0-or-later"
 readme = "README.md"
-repository = "https://huggingface.co/martinsmessias/rasgapdf"
+homepage = "https://martinsmessias.github.io/rasgapdf/"
+documentation = "https://docs.rs/rasgapdf"
+repository = "https://github.com/MartinsMessias/rasgapdf"
 keywords = ["pdf", "spatial", "parser", "layout-analysis", "bounding-box"]
-categories = ["text-processing", "parsing"]
+categories = ["text-processing", "parsing", "command-line-utilities"]
 exclude = [
     "bindings/*",
     "demo_gradio/*",

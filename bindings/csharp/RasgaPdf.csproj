@@ -7,9 +7,11 @@
     <PackageId>RasgaPdf</PackageId>
     <Version>0.2.0</Version>
     <Authors>Messias Martins</Authors>
-    <Description>Ultra-fast 2D spatial PDF parser powered by Rust for .NET</Description>
+    <Description>Ultra-fast 2D spatial PDF parser powered by pure Rust for .NET — extract exact [x0, y0, x1, y1] bounding boxes, text blocks, tables, images &amp; vector paths in milliseconds</Description>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
-    <RepositoryUrl>https://huggingface.co/martinsmessias/rasgapdf</RepositoryUrl>
+    <PackageProjectUrl>https://martinsmessias.github.io/rasgapdf/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MartinsMessias/rasgapdf</RepositoryUrl>
+    <PackageTags>pdf;pdf-parser;spatial-pdf;bounding-box;table-extraction;layout-analysis;rag;llm;rust;mupdf</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
