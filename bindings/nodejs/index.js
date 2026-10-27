@@ -252,22 +252,30 @@ function extractText(input) {
       const lines = [];
       for (const block of (page.text_blocks || [])) {
         for (const line of (block.lines || [])) {
-          if (line.text) lines.push(line.text);
+          if (line.text && line.text.trim()) lines.push(line.text.trimEnd());
         }
       }
-      pagesTexts.push(lines.join('\n'));
+      if (lines.length > 0) pagesTexts.push(lines.join('
+'));
     }
-    return pagesTexts.join('\n');
+    const joined = pagesTexts.join('
+
+');
+    return joined.replace(/
+{3,}/g, '
+
+').trim() + '
+';
   } finally {
     if (tempPath && fs.existsSync(tempPath)) {
       try { fs.unlinkSync(tempPath); } catch (_) {}
     }
-  }
+  }: normalize whitespace in extract_text and bump version to 0.2.2)
 }
 
 function version() {
   if (ffiLib) return ffiLib.version();
-  return '0.2.1';
+  return '0.2.2';
 }
 
 module.exports = {

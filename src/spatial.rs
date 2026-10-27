@@ -529,15 +529,38 @@ pub fn extract_text_bytes(pdf_bytes: &[u8]) -> Result<String, Box<dyn std::error
     let total_pages = doc.page_count()? as usize;
 
     let mut out = String::with_capacity(total_pages * 2048);
+    let mut consecutive_newlines = 0;
+
     for page_idx in 0..total_pages {
         if let Ok(page) = doc.load_page(page_idx as i32) {
             if let Ok(text_page) = page.to_text_page(TextPageFlags::empty()) {
                 if let Ok(t) = text_page.to_text() {
-                    out.push_str(&t);
-                    out.push('\n');
+                    for line in t.lines() {
+                        let trimmed = line.trim_end();
+                        if trimmed.is_empty() {
+                            if consecutive_newlines < 2 && !out.is_empty() {
+                                out.push('\n');
+                                consecutive_newlines += 1;
+                            }
+                        } else {
+                            if !out.is_empty() && consecutive_newlines == 0 {
+                                out.push('\n');
+                            }
+                            out.push_str(trimmed);
+                            consecutive_newlines = 0;
+                        }
+                    }
+                    if !out.is_empty() && consecutive_newlines == 0 {
+                        out.push('\n');
+                        consecutive_newlines = 1;
+                    }
                 }
             }
         }
+    }
+
+    if !out.ends_with('\n') && !out.is_empty() {
+        out.push('\n');
     }
 
     Ok(out)
