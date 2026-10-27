@@ -235,19 +235,34 @@ function extractText(input) {
     }
   }
 
-  // 2. Fallback via parsePdf estruturado (preserva colunas e blocos)
-  const doc = parsePdf(filePath || input, { detect_tables: false });
-  const pagesTexts = [];
-  for (const page of (doc.pages || [])) {
-    const lines = [];
-    for (const block of (page.text_blocks || [])) {
-      for (const line of (block.lines || [])) {
-        if (line.text) lines.push(line.text);
-      }
-    }
-    pagesTexts.append ? pagesTexts.append(lines.join('\n')) : pagesTexts.push(lines.join('\n'));
+  // Se buf mas não filePath, cria arquivo temporário para fallback CLI
+  let tempPath = null;
+  if (!filePath && buf) {
+    const os = require('os');
+    tempPath = path.join(os.tmpdir(), `rasga_tmp_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`);
+    fs.writeFileSync(tempPath, buf);
+    filePath = tempPath;
   }
-  return pagesTexts.join('\n');
+
+  try {
+    // 2. Fallback via parsePdf estruturado (preserva colunas e blocos)
+    const doc = parsePdf(filePath, { detect_tables: false });
+    const pagesTexts = [];
+    for (const page of (doc.pages || [])) {
+      const lines = [];
+      for (const block of (page.text_blocks || [])) {
+        for (const line of (block.lines || [])) {
+          if (line.text) lines.push(line.text);
+        }
+      }
+      pagesTexts.push(lines.join('\n'));
+    }
+    return pagesTexts.join('\n');
+  } finally {
+    if (tempPath && fs.existsSync(tempPath)) {
+      try { fs.unlinkSync(tempPath); } catch (_) {}
+    }
+  }
 }
 
 function version() {
