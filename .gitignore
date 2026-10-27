@@ -36,3 +36,5 @@ obj/
 
 *.tgz
 *.nupkg
+
+.npmrc
