@@ -33,3 +33,6 @@ obj/
 .vscode/
 *.swp
 *.bak
+
+*.tgz
+*.nupkg
