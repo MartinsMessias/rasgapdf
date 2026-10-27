@@ -434,3 +434,111 @@ fn fallback_empty_page(page_number: usize) -> SpatialPage {
         drawings: Vec::new(),
     }
 }
+
+
+/// Modo 1 (Em Memória): Parse Bruto Espacial a partir de slice de bytes (`&[u8]`)
+pub fn parse_raw_bytes(pdf_bytes: &[u8]) -> Result<RawSpatialDocument, Box<dyn std::error::Error + Send + Sync>> {
+    let start = Instant::now();
+    let doc = Document::from_bytes(pdf_bytes, "application/pdf")?;
+    let total_pages = doc.page_count()? as usize;
+
+    let pages_spans: Vec<Vec<RawCoordSpan>> = (0..total_pages)
+        .into_par_iter()
+        .map(|page_idx| {
+            let local_doc = match Document::from_bytes(pdf_bytes, "application/pdf") {
+                Ok(d) => d,
+                Err(_) => return Vec::new(),
+            };
+            let page = match local_doc.load_page(page_idx as i32) {
+                Ok(p) => p,
+                Err(_) => return Vec::new(),
+            };
+            let text_page = match page.to_text_page(TextPageFlags::empty()) {
+                Ok(tp) => tp,
+                Err(_) => return Vec::new(),
+            };
+            let json_str = match text_page.to_json(1.0) {
+                Ok(j) => j,
+                Err(_) => return Vec::new(),
+            };
+            let stext: RawStextPage = match serde_json::from_str(&json_str) {
+                Ok(st) => st,
+                Err(_) => return Vec::new(),
+            };
+
+            let mut spans = Vec::new();
+            for block in stext.blocks {
+                if block.block_type != "text" {
+                    continue;
+                }
+                for line in block.lines {
+                    let text = line.text.trim().to_string();
+                    if !text.is_empty() {
+                        let Some(line_bbox) = line.bbox.as_ref() else {
+                            continue;
+                        };
+                        spans.push(RawCoordSpan {
+                            page: page_idx + 1,
+                            x0: line_bbox.x0(),
+                            y0: line_bbox.y0(),
+                            x1: line_bbox.x1(),
+                            y1: line_bbox.y1(),
+                            font_size: line.font.as_ref().map(|f| f.size as f32).unwrap_or(0.0),
+                            font_name: line.font.as_ref().map(|f| f.name.clone()).unwrap_or_default(),
+                            text,
+                        });
+                    }
+                }
+            }
+
+            spans.sort_by(|a, b| {
+                let y_bucket_a = (a.y0 / 4.0).round() as i32;
+                let y_bucket_b = (b.y0 / 4.0).round() as i32;
+                if y_bucket_a != y_bucket_b {
+                    y_bucket_a.cmp(&y_bucket_b)
+                } else {
+                    a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal)
+                }
+            });
+
+            spans
+        })
+        .collect();
+
+    let mut all_spans = Vec::new();
+    for page_spans in pages_spans {
+        all_spans.extend(page_spans);
+    }
+
+    let parse_time_ms = start.elapsed().as_secs_f64() * 1000.0;
+    let total_spans = all_spans.len();
+
+    Ok(RawSpatialDocument {
+        file_name: "memory.pdf".to_string(),
+        total_pages,
+        total_spans,
+        parse_time_ms,
+        spans: all_spans,
+    })
+}
+
+/// Extração paralela ultrarrápida de texto puro em memória (Rayon + MuPDF)
+/// com expansão automática de ligaduras e desifenização.
+pub fn extract_text_bytes(pdf_bytes: &[u8]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let doc = Document::from_bytes(pdf_bytes, "application/pdf")?;
+    let total_pages = doc.page_count()? as usize;
+
+    let mut out = String::with_capacity(total_pages * 2048);
+    for page_idx in 0..total_pages {
+        if let Ok(page) = doc.load_page(page_idx as i32) {
+            if let Ok(text_page) = page.to_text_page(TextPageFlags::empty()) {
+                if let Ok(t) = text_page.to_text() {
+                    out.push_str(&t);
+                    out.push('\n');
+                }
+            }
+        }
+    }
+
+    Ok(out)
+}

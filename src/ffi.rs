@@ -1,7 +1,7 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use crate::types::ParserOptions;
-use crate::spatial::{parse_file, parse_raw_file};
+use crate::spatial::{extract_text_bytes, parse_file, parse_raw_bytes, parse_raw_file};
 
 /// Processa um arquivo PDF e retorna o JSON espacial estruturado como string C.
 /// O chamador deve liberar a memória chamando `rasgapdf_free_string`.
@@ -144,4 +144,74 @@ fn create_error_json(err_msg: &str) -> *mut c_char {
     });
     let s = serde_json::to_string(&err_obj).unwrap_or_else(|_| "{\"error\":true}".to_string());
     CString::new(s).unwrap().into_raw()
+}
+
+
+/// Modo 1 (Em Memória): Retorna lista plana de coordenadas brutas X/Y a partir de bytes em RAM.
+#[no_mangle]
+pub extern "C" fn rasgapdf_parse_raw_bytes(bytes_ptr: *const u8, len: usize) -> *mut c_char {
+    if bytes_ptr.is_null() || len == 0 {
+        return create_error_json("Bytes pointer is null or empty");
+    }
+    let slice = unsafe { std::slice::from_raw_parts(bytes_ptr, len) };
+    match parse_raw_bytes(slice) {
+        Ok(doc) => match serde_json::to_string(&doc) {
+            Ok(json_str) => match CString::new(json_str) {
+                Ok(c_str) => c_str.into_raw(),
+                Err(_) => create_error_json("Failed to create CString"),
+            },
+            Err(e) => create_error_json(&format!("JSON serialization error: {}", e)),
+        },
+        Err(e) => create_error_json(&format!("Parse error: {}", e)),
+    }
+}
+
+/// Extrai texto puro paralelizado via Rayon diretamente de um slice de bytes em RAM.
+#[no_mangle]
+pub extern "C" fn rasgapdf_extract_text_bytes(bytes_ptr: *const u8, len: usize) -> *mut c_char {
+    if bytes_ptr.is_null() || len == 0 {
+        return CString::new("").unwrap().into_raw();
+    }
+    let slice = unsafe { std::slice::from_raw_parts(bytes_ptr, len) };
+    match extract_text_bytes(slice) {
+        Ok(text) => {
+            // Remove eventuais bytes nulos internos para compatibilidade CString
+            let clean = text.replace('\0', "");
+            CString::new(clean).unwrap_or_default().into_raw()
+        }
+        Err(_) => CString::new("").unwrap().into_raw(),
+    }
+}
+
+/// Extrai imagens embutidas diretamente de bytes em RAM e grava em `dir_ptr`.
+#[no_mangle]
+pub extern "C" fn rasgapdf_extract_images_bytes(
+    bytes_ptr: *const u8,
+    len: usize,
+    dir_ptr: *const c_char,
+) -> *mut c_char {
+    if bytes_ptr.is_null() || len == 0 || dir_ptr.is_null() {
+        return create_error_json("Bytes/Dir pointer is null");
+    }
+    let slice = unsafe { std::slice::from_raw_parts(bytes_ptr, len) };
+    let dir_str = match unsafe { CStr::from_ptr(dir_ptr) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return create_error_json("Invalid UTF-8 in dir"),
+    };
+    let mut found = match crate::image::extract_images_from_bytes(slice) {
+        Ok(found) => found,
+        Err(e) => return create_error_json(&format!("Extract error: {}", e)),
+    };
+    let dir = std::path::Path::new(dir_str);
+    let written = match crate::image::write_images_to_dir(&mut found, dir) {
+        Ok(w) => w,
+        Err(e) => return create_error_json(&format!("Write error: {}", e)),
+    };
+    match serde_json::to_string(&crate::image::build_manifest(&found, written, "memory.pdf")) {
+        Ok(json_str) => match CString::new(json_str) {
+            Ok(c_str) => c_str.into_raw(),
+            Err(_) => create_error_json("Failed to create CString"),
+        },
+        Err(e) => create_error_json(&format!("JSON serialization error: {}", e)),
+    }
 }

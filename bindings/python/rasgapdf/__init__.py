@@ -13,6 +13,7 @@ def _find_library() -> str:
         # Relative to installed package
         os.path.join(os.path.dirname(__file__), lib_name),
         os.path.join(os.path.dirname(__file__), "..", "..", "..", "target", "release", lib_name),
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "target", "debug", lib_name),
         os.path.join(os.path.dirname(__file__), "..", "..", "target", "release", lib_name),
         os.path.join(os.path.expanduser("~"), "rasgapdf", "target", "release", lib_name),
         "/usr/local/lib/" + lib_name,
@@ -54,9 +55,22 @@ if _lib:
         _lib.rasgapdf_extract_images.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
         _lib.rasgapdf_extract_images.restype = ctypes.c_void_p
 
+    # Funções em memória (bytes diretos em RAM, zero I/O de disco)
+    if hasattr(_lib, "rasgapdf_parse_raw_bytes"):
+        _lib.rasgapdf_parse_raw_bytes.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
+        _lib.rasgapdf_parse_raw_bytes.restype = ctypes.c_void_p
+
+    if hasattr(_lib, "rasgapdf_extract_text_bytes"):
+        _lib.rasgapdf_extract_text_bytes.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
+        _lib.rasgapdf_extract_text_bytes.restype = ctypes.c_void_p
+
+    if hasattr(_lib, "rasgapdf_extract_images_bytes"):
+        _lib.rasgapdf_extract_images_bytes.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p]
+        _lib.rasgapdf_extract_images_bytes.restype = ctypes.c_void_p
+
 def version() -> str:
     if not _lib:
-        return "0.2.0 (unlinked)"
+        return "0.2.1 (unlinked)"
     return _lib.rasgapdf_version().decode("utf-8")
 
 def parse_raw(file_path: str) -> Dict[str, Any]:
@@ -217,4 +231,98 @@ def extract_images(file_path: str, output_dir: str) -> Dict[str, Any]:
     finally:
         _lib.rasgapdf_free_string(res_ptr)
 
-__all__ = ["parse_raw", "parse_pdf", "extract_images", "version"]
+
+def parse_raw_bytes(data: bytes) -> Dict[str, Any]:
+    """
+    ⚡ Modo 1 (Em Memória): Extrai coordenadas físicas [x0, y0, x1, y1] direto de `bytes` em RAM.
+    """
+    if not _lib or not hasattr(_lib, "rasgapdf_parse_raw_bytes"):
+        raise RuntimeError("RasgaPDF native library with `rasgapdf_parse_raw_bytes` not loaded.")
+    res_ptr = _lib.rasgapdf_parse_raw_bytes(data, len(data))
+    if not res_ptr:
+        raise RuntimeError("Null pointer returned from native rasgapdf library.")
+    try:
+        raw_json = ctypes.string_at(res_ptr).decode("utf-8")
+        parsed = json.loads(raw_json)
+        if isinstance(parsed, dict) and parsed.get("error"):
+            raise RuntimeError(f"RasgaPDF Error: {parsed.get('message')}")
+        return parsed
+    finally:
+        _lib.rasgapdf_free_string(res_ptr)
+
+
+def extract_text(data_or_path: bytes | str) -> str:
+    """
+    🚀 Extrai o texto completo do PDF em ordem natural de blocos de leitura
+    diretamente de `bytes` ou caminho de arquivo.
+    """
+    if isinstance(data_or_path, (bytes, bytearray)):
+        data = bytes(data_or_path)
+        is_bytes = True
+    else:
+        data = None
+        is_bytes = False
+
+    # 1. Caminho ultra-rápido nativo (se a biblioteca expor rasgapdf_extract_text_bytes)
+    if _lib and hasattr(_lib, "rasgapdf_extract_text_bytes"):
+        b_data = data if is_bytes else Path(data_or_path).read_bytes()
+        res_ptr = _lib.rasgapdf_extract_text_bytes(b_data, len(b_data))
+        if res_ptr:
+            try:
+                res_str = ctypes.string_at(res_ptr).decode("utf-8", errors="replace")
+                if res_str.strip():
+                    return res_str
+            finally:
+                _lib.rasgapdf_free_string(res_ptr)
+
+    # 2. Fallback robusto via parse_pdf estruturado (preserva blocos e colunas)
+    tmp_path = None
+    try:
+        if is_bytes:
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
+                tf.write(data)
+                tmp_path = tf.name
+            path_to_parse = tmp_path
+        else:
+            path_to_parse = str(data_or_path)
+
+        doc = parse_pdf(path_to_parse, detect_tables=False)
+        pages_texts = []
+        for page in doc.get("pages", []):
+            lines = []
+            for block in page.get("text_blocks", []):
+                for line in block.get("lines", []):
+                    text = line.get("text", "")
+                    if text:
+                        lines.append(text)
+            pages_texts.append("\n".join(lines))
+        return "\n".join(pages_texts)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+
+def extract_images_bytes(data: bytes, output_dir: str) -> Dict[str, Any]:
+    """
+    🖼️ Extrai streams originais de imagens embutidas direto de `bytes` em RAM para `output_dir`.
+    """
+    if not _lib or not hasattr(_lib, "rasgapdf_extract_images_bytes"):
+        raise RuntimeError("RasgaPDF native library with `rasgapdf_extract_images_bytes` not loaded.")
+    dir_bytes = os.path.abspath(output_dir).encode("utf-8")
+    res_ptr = _lib.rasgapdf_extract_images_bytes(data, len(data), dir_bytes)
+    if not res_ptr:
+        raise RuntimeError("Null pointer returned from native rasgapdf library.")
+    try:
+        raw_json = ctypes.string_at(res_ptr).decode("utf-8")
+        parsed = json.loads(raw_json)
+        if isinstance(parsed, dict) and parsed.get("error"):
+            raise RuntimeError(f"RasgaPDF Error: {parsed.get('message')}")
+        return parsed
+    finally:
+        _lib.rasgapdf_free_string(res_ptr)
+
+__all__ = ["parse_raw", "parse_raw_bytes", "parse_pdf", "extract_text", "extract_images", "extract_images_bytes", "version"]

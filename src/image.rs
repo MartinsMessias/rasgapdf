@@ -211,3 +211,41 @@ pub fn extract_images(
 
     Ok(out)
 }
+
+
+/// Extrai todas as imagens embutidas a partir de um buffer de bytes em memória (`&[u8]`).
+pub fn extract_images_from_bytes(
+    pdf_bytes: &[u8],
+) -> Result<Vec<ExtractedImageData>, Box<dyn Error + Send + Sync>> {
+    let doc = Document::from_bytes(pdf_bytes, "application/pdf")?;
+    let page_count = doc.page_count()? as usize;
+    let pdf_doc = PdfDocument::try_from(doc)
+        .map_err(|e| format!("document is not a PDF: {e}"))?;
+
+    let mut out: Vec<ExtractedImageData> = Vec::new();
+
+    for page_idx in 0..page_count {
+        let page = pdf_doc.load_page(page_idx as i32)?;
+        let pdf_page = PdfPage::try_from(page)
+            .map_err(|e| format!("failed to convert page {}: {e}", page_idx + 1))?;
+
+        let infos = pdf_page.images().unwrap_or_default();
+        for (idx, info) in infos.iter().enumerate() {
+            let bytes = extract_image_bytes(&pdf_doc, info.xref).unwrap_or_default();
+            let has_bytes = !bytes.is_empty();
+            let image = build_spatial_image(
+                idx + 1,
+                info,
+                None,
+                if has_bytes { Some(bytes.as_slice()) } else { None },
+            );
+            out.push(ExtractedImageData {
+                page: page_idx + 1,
+                image,
+                bytes,
+            });
+        }
+    }
+
+    Ok(out)
+}

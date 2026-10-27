@@ -126,7 +126,7 @@ Add `rasgapdf` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rasgapdf = "0.2.0"
+rasgapdf = "0.2.1"
 ```
 
 ### ⚡ Mode 1: Raw Physical Coordinates (Raw X/Y)
