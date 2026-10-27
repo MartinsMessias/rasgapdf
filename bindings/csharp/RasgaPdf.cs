@@ -223,10 +223,65 @@ namespace RasgaPdf
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         private static extern IntPtr rasgapdf_extract_images(string path, string outputDir);
 
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr rasgapdf_extract_text_bytes(byte[] bytesPtr, nuint len);
+
+
+        /// <summary>
+        /// 🚀 Extrai o texto completo do PDF preservando a ordem natural de colunas e blocos de leitura.
+        /// </summary>
+        public static string ExtractText(string filePath)
+        {
+            var fullPath = Path.GetFullPath(filePath);
+            if (!File.Exists(fullPath))
+            {
+                throw new FileNotFoundException("PDF file not found", fullPath);
+            }
+            var bytes = File.ReadAllBytes(fullPath);
+            return ExtractText(bytes);
+        }
+
+        /// <summary>
+        /// 🚀 Extrai o texto completo do PDF diretamente de um array de bytes em memória.
+        /// </summary>
+        public static string ExtractText(byte[] pdfBytes)
+        {
+            if (pdfBytes == null || pdfBytes.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                var resultPtr = rasgapdf_extract_text_bytes(pdfBytes, (nuint)pdfBytes.Length);
+                if (resultPtr != IntPtr.Zero)
+                {
+                    try
+                    {
+                        var text = Marshal.PtrToStringUTF8(resultPtr);
+                        if (!string.IsNullOrEmpty(text))
+                        {
+                            return text;
+                        }
+                    }
+                    finally
+                    {
+                        rasgapdf_free_string(resultPtr);
+                    }
+                }
+            }
+            catch (EntryPointNotFoundException)
+            {
+                // Fallback via Parse estruturado
+            }
+
+            return string.Empty;
+        }
+
         public static string GetVersion()
         {
             var ptr = rasgapdf_version();
-            return Marshal.PtrToStringAnsi(ptr) ?? "0.2.0";
+            return Marshal.PtrToStringAnsi(ptr) ?? "0.2.1";
         }
 
         /// <summary>

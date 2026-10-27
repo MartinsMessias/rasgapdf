@@ -6,6 +6,7 @@
   "files": [
     "index.js",
     "librasgapdf.so",
+    "rasgapdf.dll",
     "README.md"
   ],
   "scripts": {

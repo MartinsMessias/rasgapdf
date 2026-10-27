@@ -55,6 +55,9 @@ if (sharedLibPath) {
       freeString: lib.func('void rasgapdf_free_string(char*)'),
       version: lib.func('str rasgapdf_version()')
     };
+    try {
+      ffiLib.extractTextBytes = lib.func('char* rasgapdf_extract_text_bytes(uint8_t*, size_t)');
+    } catch (_) {}
   } catch (e) {
     // Fallback para CLI execution
   }
@@ -194,14 +197,68 @@ function extractImages(filePath, outputDir) {
   return JSON.parse(fs.readFileSync(path.join(absOut, 'manifest.json'), 'utf-8'));
 }
 
+
+/**
+ * 🚀 Extrai o texto completo do PDF preservando a ordem natural de colunas e blocos de leitura.
+ * Aceita caminho do arquivo ou Buffer em memória.
+ *
+ * @param {string|Buffer} input Caminho do arquivo ou Buffer de bytes do PDF
+ * @returns {string} Texto extraído do PDF
+ */
+function extractText(input) {
+  let buf = null;
+  let filePath = null;
+
+  if (Buffer.isBuffer(input)) {
+    buf = input;
+  } else {
+    filePath = path.resolve(input);
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`PDF file not found: ${filePath}`);
+    }
+  }
+
+  // 1. Caminho nativo ultra-rápido se FFI estiver disponível
+  if (ffiLib && ffiLib.extractTextBytes) {
+    if (!buf && filePath) {
+      buf = fs.readFileSync(filePath);
+    }
+    if (buf) {
+      const ptr = ffiLib.extractTextBytes(buf, buf.length);
+      if (ptr) {
+        try {
+          return ptr;
+        } finally {
+          ffiLib.freeString(ptr);
+        }
+      }
+    }
+  }
+
+  // 2. Fallback via parsePdf estruturado (preserva colunas e blocos)
+  const doc = parsePdf(filePath || input, { detect_tables: false });
+  const pagesTexts = [];
+  for (const page of (doc.pages || [])) {
+    const lines = [];
+    for (const block of (page.text_blocks || [])) {
+      for (const line of (block.lines || [])) {
+        if (line.text) lines.push(line.text);
+      }
+    }
+    pagesTexts.append ? pagesTexts.append(lines.join('\n')) : pagesTexts.push(lines.join('\n'));
+  }
+  return pagesTexts.join('\n');
+}
+
 function version() {
   if (ffiLib) return ffiLib.version();
-  return '0.2.0';
+  return '0.2.1';
 }
 
 module.exports = {
   parseRaw,
   parsePdf,
+  extractText,
   extractImages,
   version
 };
