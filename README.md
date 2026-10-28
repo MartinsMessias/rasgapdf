@@ -38,6 +38,7 @@ pipeline_tag: document-question-answering
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?logo=github)](https://github.com/MartinsMessias/rasgapdf)
 [![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hub-Model%20Repo-blue)](https://huggingface.co/martinsmessias/rasgapdf)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![Commercial License](https://img.shields.io/badge/Commercial%20License-Available-success.svg)](mailto:messiasads2017@gmail.com?subject=RasgaPDF%20Commercial%20License%20Inquiry)
 
 [**GitHub Repo**](https://github.com/MartinsMessias/rasgapdf) • [**Web Visualizer**](https://martinsmessias.github.io/rasgapdf/) • [**HF Space Demo**](https://huggingface.co/spaces/martinsmessias/rasgapdf) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md) • [**llms.txt**](llms.txt)
 
@@ -254,6 +255,53 @@ RasgaPDF provides native C-ABI bindings for other languages, each published with
 
 ---
 
+## 🦜️🔗 Official AI & RAG Integrations (LangChain & LlamaIndex)
+
+RasgaPDF provides out-of-the-box loaders for **LangChain** and **LlamaIndex** with zero external setup:
+
+### 🦜️ LangChain Document Loader (`RasgaPDFLoader`)
+
+Preserves reading flow, exact 2D coordinates `[x0, y0, x1, y1]`, and turns tables into structured Markdown matrices for LLM prompting:
+
+```python
+from rasgapdf import RasgaPDFLoader
+
+# Mode 1: "pages" (Default — 1 LangChain Document per PDF page with markdown tables)
+loader = RasgaPDFLoader("contract.pdf", mode="pages")
+docs = loader.load()
+for doc in docs:
+    print(f"Page {doc.metadata['page']} (Tables: {doc.metadata['table_count']})")
+    print(doc.page_content)
+
+# Mode 2: "elements" (Spatial RAG — 1 Document per text block/table with exact bounding box!)
+spatial_loader = RasgaPDFLoader("invoice.pdf", mode="elements")
+elements = spatial_loader.load()
+for el in elements:
+    # Each chunk carries its true physical coordinates [x0, y0, x1, y1]
+    print(f"Type: {el.metadata['type']} | BBox: {el.metadata['bbox']}")
+    print(el.page_content)
+```
+
+### 🦙 LlamaIndex Reader (`RasgaPDFReader`)
+
+Native high-throughput reader for LlamaIndex vector indices and query engines:
+
+```python
+from rasgapdf import RasgaPDFReader
+from llama_index.core import VectorStoreIndex
+
+reader = RasgaPDFReader(mode="pages", detect_tables=True)
+documents = reader.load_data("financial_report.pdf")
+
+# Build lightning-fast vector index with exact spatial context
+index = VectorStoreIndex.from_documents(documents)
+query_engine = index.as_query_engine()
+response = query_engine.query("What was the net profit in table 3?")
+print(response)
+```
+
+---
+
 ## 🎨 Interactive Web Visualizer
 
 ### 🌐 Live Hugging Face Space (Zero Server Quota / Client-Side)
@@ -298,3 +346,19 @@ RasgaPDF links against [MuPDF](https://mupdf.com/) (Artifex Software), which is
 distributed under the AGPL-3.0. As a derivative work, the whole project is licensed
 under the same terms: if you distribute RasgaPDF — or expose it as a network service —
 you must make the complete corresponding source available under the AGPL-3.0.
+
+---
+
+## 💼 Commercial & Enterprise Licensing (AGPL-3.0 Waiver)
+
+Need to use **RasgaPDF** in closed-source commercial software, proprietary SaaS platforms, private cloud environments, or corporate applications without releasing your source code under the AGPL-3.0?
+
+A **Commercial / Enterprise License** is available directly from the author:
+
+- **Complete AGPL-3.0 Exemption:** Keep your intellectual property, backend code, and SaaS infrastructure 100% closed-source and proprietary.
+- **Enterprise SLA & Support:** Direct architecture advisory, guaranteed response times, and priority bug resolution.
+- **On-Premise & Air-Gapped Appliances:** Ready-to-deploy private Docker containers for confidential banking, healthcare, and legal compliance (LGPD / GDPR).
+- **Custom Spatial Features:** Tailored table extractors for bank statements, invoices, and court proceedings.
+
+📬 **Inquiries & Licensing:**  
+Contact **Messias Martins** directly at [**messiasads2017@gmail.com**](mailto:messiasads2017@gmail.com?subject=RasgaPDF%20Commercial%20License%20Inquiry) with details about your company and project.

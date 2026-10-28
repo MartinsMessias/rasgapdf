@@ -163,6 +163,33 @@ print(manifest["written"], "files written")
 
 ---
 
+---
+
+## 🦜️🔗 AI Framework Integrations (LangChain & LlamaIndex)
+
+### 🦜️ LangChain Document Loader
+`python
+from rasgapdf import RasgaPDFLoader
+
+# 1 Document per page with markdown tables:
+loader = RasgaPDFLoader('document.pdf', mode='pages')
+docs = loader.load()
+
+# Spatial RAG: 1 Document per block/table with exact [x0, y0, x1, y1] coordinates:
+spatial_loader = RasgaPDFLoader('document.pdf', mode='elements')
+chunks = spatial_loader.load()
+for chunk in chunks:
+    print(chunk.metadata['bbox'], chunk.page_content[:40])
+`
+
+### 🦙 LlamaIndex Reader
+`python
+from rasgapdf import RasgaPDFReader
+
+reader = RasgaPDFReader(mode='pages')
+documents = reader.load_data('financial_report.pdf')
+`
+
 ## 📄 License
 
 GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). Copyright (c) 2026 Messias Martins.
@@ -170,3 +197,19 @@ GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). Copyright (
 RasgaPDF embeds and links against [MuPDF](https://mupdf.com/) (Artifex Software),
 which is distributed under the AGPL-3.0. That is why this project is licensed
 under the same terms.
+
+---
+
+## 💼 Commercial & Enterprise Licensing (AGPL-3.0 Waiver)
+
+Need to use **RasgaPDF** in closed-source commercial software, proprietary SaaS platforms, private cloud environments, or corporate applications without releasing your source code under the AGPL-3.0?
+
+A **Commercial / Enterprise License** is available directly from the author:
+
+- **Complete AGPL-3.0 Exemption:** Keep your intellectual property, backend code, and SaaS infrastructure 100% closed-source and proprietary.
+- **Enterprise SLA & Support:** Direct architecture advisory, guaranteed response times, and priority bug resolution.
+- **On-Premise & Air-Gapped Appliances:** Ready-to-deploy private Docker containers for confidential banking, healthcare, and legal compliance (LGPD / GDPR).
+- **Custom Spatial Features:** Tailored table extractors for bank statements, invoices, and court proceedings.
+
+📬 **Inquiries & Licensing:**  
+Contact **Messias Martins** directly at [**messiasads2017@gmail.com**](mailto:messiasads2017@gmail.com?subject=RasgaPDF%20Commercial%20License%20Inquiry) with details about your company and project.

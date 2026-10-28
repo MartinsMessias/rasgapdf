@@ -339,4 +339,24 @@ def extract_images_bytes(data: bytes, output_dir: str) -> Dict[str, Any]:
     finally:
         _lib.rasgapdf_free_string(res_ptr)
 
-__all__ = ["parse_raw", "parse_raw_bytes", "parse_pdf", "extract_text", "extract_images", "extract_images_bytes", "version"]
+def __getattr__(name: str):
+    if name == "RasgaPDFLoader":
+        from .integrations.langchain import RasgaPDFLoader
+        return RasgaPDFLoader
+    if name == "RasgaPDFReader":
+        from .integrations.llama_index import RasgaPDFReader
+        return RasgaPDFReader
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+__all__ = [
+    "parse_raw",
+    "parse_raw_bytes",
+    "parse_pdf",
+    "extract_text",
+    "extract_images",
+    "extract_images_bytes",
+    "version",
+    "RasgaPDFLoader",
+    "RasgaPDFReader",
+]
