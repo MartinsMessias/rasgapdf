@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import ctypes
+from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 
 def _find_library() -> str:
