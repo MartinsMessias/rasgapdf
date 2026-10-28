@@ -361,4 +361,4 @@ A **Commercial / Enterprise License** is available directly from the author:
 - **Custom Spatial Features:** Tailored table extractors for bank statements, invoices, and court proceedings.
 
 📬 **Inquiries & Licensing:**  
-Contact **Messias Martins** directly at [**messiasads2017@gmail.com**](mailto:messiasads2017@gmail.com?subject=RasgaPDF%20Commercial%20License%20Inquiry) with details about your company and project.
+[👉 **Click here to Request a Commercial License & Pricing**](mailto:messiasads2017@gmail.com?subject=RasgaPDF%20Commercial%20License%20Inquiry) with details about your organization, use case, and estimated volume.
