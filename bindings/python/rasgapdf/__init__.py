@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import ctypes
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 
 def _find_library() -> str:
     lib_name = "librasgapdf.so" if sys.platform != "win32" else "rasgapdf.dll"
@@ -251,7 +251,7 @@ def parse_raw_bytes(data: bytes) -> Dict[str, Any]:
         _lib.rasgapdf_free_string(res_ptr)
 
 
-def extract_text(data_or_path: bytes | str) -> str:
+def extract_text(data_or_path: Union[bytes, str]) -> str:
     """
     🚀 Extrai o texto completo do PDF em ordem natural de blocos de leitura
     diretamente de `bytes` ou caminho de arquivo.

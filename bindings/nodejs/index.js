@@ -255,22 +255,15 @@ function extractText(input) {
           if (line.text && line.text.trim()) lines.push(line.text.trimEnd());
         }
       }
-      if (lines.length > 0) pagesTexts.push(lines.join('
-'));
+      if (lines.length > 0) pagesTexts.push(lines.join('\n'));
     }
-    const joined = pagesTexts.join('
-
-');
-    return joined.replace(/
-{3,}/g, '
-
-').trim() + '
-';
+    const joined = pagesTexts.join('\n\n');
+    return joined.replace(/\n{3,}/g, '\n\n').trim() + '\n';
   } finally {
     if (tempPath && fs.existsSync(tempPath)) {
       try { fs.unlinkSync(tempPath); } catch (_) {}
     }
-  }: normalize whitespace in extract_text and bump version to 0.2.2)
+  }
 }
 
 function version() {
