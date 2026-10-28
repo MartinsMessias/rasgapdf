@@ -28,7 +28,7 @@ class RasgaPDFLoader(BaseLoader):
     Args:
         file_path_or_bytes: Path to PDF file or raw bytes of a PDF.
         mode: Extraction granularity:
-            - "pages" (default): One Document per page with layout-preserved text & tables.
+            - "pages" (default): One Document per page with layout-preserved text & markdown tables.
             - "elements": One Document per spatial element (blocks and tables) with exact 2D bounding boxes.
             - "text": A single Document containing the entire normalized text stream.
         detect_tables: Whether to detect and reconstruct physical 2D tables. Default True.
@@ -79,7 +79,7 @@ class RasgaPDFLoader(BaseLoader):
                                 "source": self.source,
                                 "page": page_num,
                                 "type": "text_block",
-                                "bbox": block.get("bbox", []),
+                                "bbox": block.get("bbox", {}),
                                 "reading_order": block.get("reading_order", 0),
                                 "page_width": width,
                                 "page_height": height,
@@ -88,9 +88,8 @@ class RasgaPDFLoader(BaseLoader):
 
                 # 2. Tables
                 for t_idx, table in enumerate(page.get("tables", [])):
-                    rows = table.get("rows", [])
-                    table_md = self._format_table_markdown(rows) if self.markdown_tables else "\n".join(
-                        ["\t".join([cell.get("text", "") for cell in row.get("cells", [])]) for row in rows]
+                    table_md = self._format_table_markdown(table) if self.markdown_tables else "\n".join(
+                        ["\t".join([str(c) for c in row]) if isinstance(row, list) else str(row) for row in table.get("rows", [])]
                     )
                     if table_md.strip():
                         yield Document(
@@ -99,10 +98,10 @@ class RasgaPDFLoader(BaseLoader):
                                 "source": self.source,
                                 "page": page_num,
                                 "type": "table",
-                                "table_index": t_idx,
-                                "bbox": table.get("bbox", []),
-                                "row_count": len(rows),
-                                "col_count": len(rows[0].get("cells", [])) if rows else 0,
+                                "table_id": table.get("table_id", t_idx),
+                                "bbox": table.get("bbox", {}),
+                                "row_count": table.get("row_count", len(table.get("rows", []))),
+                                "col_count": table.get("col_count", 0),
                                 "page_width": width,
                                 "page_height": height,
                             },
@@ -123,15 +122,14 @@ class RasgaPDFLoader(BaseLoader):
 
             # Add formatted tables
             for table in page.get("tables", []):
-                rows = table.get("rows", [])
-                if rows:
-                    if self.markdown_tables:
-                        parts.append(self._format_table_markdown(rows))
-                    else:
-                        table_tsv = "\n".join(
-                            ["\t".join([cell.get("text", "") for cell in row.get("cells", [])]) for row in rows]
-                        )
-                        parts.append(table_tsv)
+                if self.markdown_tables:
+                    table_str = self._format_table_markdown(table)
+                else:
+                    table_str = "\n".join(
+                        ["\t".join([str(c) for c in row]) if isinstance(row, list) else str(row) for row in table.get("rows", [])]
+                    )
+                if table_str:
+                    parts.append(table_str)
 
             page_content = "\n\n".join(parts).strip()
             yield Document(
@@ -151,28 +149,37 @@ class RasgaPDFLoader(BaseLoader):
         return list(self.lazy_load())
 
     @staticmethod
-    def _format_table_markdown(rows: List[Dict[str, Any]]) -> str:
-        if not rows:
+    def _format_table_markdown(table: Dict[str, Any]) -> str:
+        rows = table.get("rows", [])
+        headers = table.get("headers", [])
+        if not rows and not headers:
             return ""
+
         matrix = []
+        if headers and isinstance(headers, list):
+            matrix.append([str(h).replace("\n", " ").strip() for h in headers])
+
         for row in rows:
-            row_cells = [cell.get("text", "").replace("\n", " ").strip() for cell in row.get("cells", [])]
+            if isinstance(row, list):
+                row_cells = [str(c).replace("\n", " ").strip() for c in row]
+            elif isinstance(row, dict):
+                row_cells = [str(c.get("text", "")).replace("\n", " ").strip() for c in row.get("cells", [])]
+            else:
+                row_cells = [str(row)]
             matrix.append(row_cells)
+
         if not matrix:
             return ""
 
         max_cols = max(len(r) for r in matrix)
-        # Normalize columns
         for r in matrix:
             while len(r) < max_cols:
                 r.append("")
 
         md_lines = []
-        # Header
         header = matrix[0]
         md_lines.append("| " + " | ".join(header) + " |")
         md_lines.append("| " + " | ".join(["---"] * max_cols) + " |")
-        # Rows
         for r in matrix[1:]:
             md_lines.append("| " + " | ".join(r) + " |")
         return "\n".join(md_lines)
