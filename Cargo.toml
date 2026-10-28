@@ -13,10 +13,8 @@ keywords = ["pdf", "spatial", "parser", "layout-analysis", "bounding-box"]
 categories = ["text-processing", "parsing", "command-line-utilities"]
 exclude = [
     "bindings/*",
-    "demo_gradio/*",
     "space_hf/*",
     "upload_to_hf.py",
-    "publish_all.sh",
 ]
 
 [lib]

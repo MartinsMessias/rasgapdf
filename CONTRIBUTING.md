@@ -19,7 +19,7 @@ This project and everyone participating in it is governed by the [Code of Conduc
   - Node.js: `bindings/nodejs/`
   - Go: `bindings/go/`
   - C# (.NET 8): `bindings/csharp/`
-- **Interactive Testing:** Visual Gradio app in `demo_gradio/app.py`.
+- **Interactive Testing:** Visual Web App in `space_hf/` and `server_local.py`.
 
 ---
 
