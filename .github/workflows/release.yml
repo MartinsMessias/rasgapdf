@@ -172,7 +172,7 @@ jobs:
         run: cargo build --release
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@3951f0ca7a015626166687bcc430754c67195b84 # v4.3.0
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
@@ -184,7 +184,7 @@ jobs:
       - name: NuGet login (OIDC Trusted Publishing)
         id: login
         continue-on-error: true
-        uses: NuGet/login@291cf541e21b76df479f6e1f0e21bc5c88686a3d # v1.1.0
+        uses: NuGet/login@v1
         with:
           user: MartinsMessias
 
