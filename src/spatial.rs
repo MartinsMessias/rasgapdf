@@ -47,6 +47,13 @@ pub fn parse_file(pdf_path: &str, options: &ParserOptions) -> Result<SpatialDocu
     Ok(structured)
 }
 
+/// Modo 2 (Em Memória): Parse Estruturado a partir de slice de bytes (`&[u8]`)
+pub fn parse_bytes(pdf_bytes: &[u8], options: &ParserOptions) -> Result<SpatialDocument, Box<dyn Error + Send + Sync>> {
+    let mut doc = PurePdfDoc::from_bytes(pdf_bytes).map_err(|e| format!("Pure PDF parse error: {e}"))?;
+    let structured = doc.parse_structured("memory.pdf", options).map_err(|e| format!("Pure PDF parse_structured error: {e}"))?;
+    Ok(structured)
+}
+
 /// Extração paralela de texto puro em memória a partir de slice de bytes (`&[u8]`)
 pub fn extract_text_bytes(pdf_bytes: &[u8]) -> Result<String, Box<dyn Error + Send + Sync>> {
     let mut doc = PurePdfDoc::from_bytes(pdf_bytes).map_err(|e| format!("Pure PDF parse error: {e}"))?;

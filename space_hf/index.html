@@ -625,7 +625,63 @@
 
     loadErrorClose.addEventListener('click', () => loadError.classList.add('hidden'));
 
-    async function loadPdfFile(file, name = null) {
+    
+    // Load WebAssembly Pure Rust Engine (rasgapdf.wasm)
+    let wasmEngine = null;
+    async function initWasmEngine() {
+      try {
+        const wasmRes = await fetch('rasgapdf.wasm');
+        if (wasmRes.ok) {
+          const wasmBytes = await wasmRes.arrayBuffer();
+          const { instance } = await WebAssembly.instantiate(wasmBytes);
+          wasmEngine = instance.exports;
+          console.log('⚡ Pure Rust WebAssembly Engine initialized successfully!');
+        }
+      } catch (err) {
+        console.warn('WASM engine unavailable, using browser fallback:', err);
+      }
+    }
+    initWasmEngine();
+
+    function parsePdfWithWasm(pdfUint8Array) {
+      if (!wasmEngine) return null;
+      const t0 = performance.now();
+      const ptr = wasmEngine.wasm_alloc(pdfUint8Array.length);
+      const mem = new Uint8Array(wasmEngine.memory.buffer);
+      mem.set(pdfUint8Array, ptr);
+
+      // Parse structured document (blocks and tables)
+      const resPtr = wasmEngine.rasgapdf_parse_bytes(ptr, pdfUint8Array.length);
+      const memOut = new Uint8Array(wasmEngine.memory.buffer);
+      let end = resPtr;
+      while (memOut[end] !== 0) end++;
+      const jsonStr = new TextDecoder('utf-8').decode(memOut.subarray(resPtr, end));
+      const structured = JSON.parse(jsonStr);
+
+      // Parse raw spans for highlighting
+      const rawPtr = wasmEngine.rasgapdf_parse_raw_bytes(ptr, pdfUint8Array.length);
+      const memRaw = new Uint8Array(wasmEngine.memory.buffer);
+      let endRaw = rawPtr;
+      while (memRaw[endRaw] !== 0) endRaw++;
+      const rawJsonStr = new TextDecoder('utf-8').decode(memRaw.subarray(rawPtr, endRaw));
+      const raw = JSON.parse(rawJsonStr);
+
+      const elapsed = (performance.now() - t0).toFixed(2);
+
+      wasmEngine.rasgapdf_free_string(resPtr);
+      wasmEngine.rasgapdf_free_string(rawPtr);
+      wasmEngine.wasm_free(ptr, pdfUint8Array.length);
+
+      return {
+        structured: structured,
+        raw: raw,
+        parse_time_ms: elapsed,
+        is_wasm: true
+      };
+    }
+
+
+async function loadPdfFile(file, name = null) {
       const fileName = name || file.name || 'document.pdf';
 
       try {
@@ -636,7 +692,7 @@
         const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
         currentPdfDoc = await loadingTask.promise;
 
-        // Check if local Rust backend is available and parse with native engine
+        // 1. Try local native server or pure Rust WebAssembly engine in browser
         currentRustDoc = null;
         try {
           const formData = new FormData();
@@ -644,10 +700,18 @@
           const apiRes = await fetch('/api/parse', { method: 'POST', body: formData });
           if (apiRes.ok) {
             currentRustDoc = await apiRes.json();
-            console.log('⚡ Parsed with Native Rust Engine in', currentRustDoc.parse_time_ms, 'ms');
+            console.log('⚡ Parsed with Native Rust Server in', currentRustDoc.parse_time_ms, 'ms');
           }
         } catch (e) {
-          console.log('Running in client-side compute mode:', e);
+          // Server not available (e.g. GitHub Pages) - use pure Rust WASM!
+          if (wasmEngine) {
+            try {
+              currentRustDoc = parsePdfWithWasm(new Uint8Array(arrayBuffer));
+              console.log('⚡ Parsed with Pure Rust WebAssembly Engine in', currentRustDoc.parse_time_ms, 'ms');
+            } catch (wErr) {
+              console.warn('WASM parse error:', wErr);
+            }
+          }
         }
 
         pageSlider.max = currentPdfDoc.numPages;
@@ -820,12 +884,14 @@
         metricSpans.textContent = extractedSpans.length;
         metricImages.textContent = extractedImages.length;
         metricVectors.textContent = extractedDrawings.length;
+        const isWasm = currentRustDoc && currentRustDoc.is_wasm;
+        const modeTitle = isWasm ? 'Pure Rust WebAssembly (WASM)' : 'Native Rust Engine (FFI)';
         if (metricComputeMode) {
-          metricComputeMode.textContent = 'Native Rust Engine (librasgapdf.so)';
+          metricComputeMode.textContent = modeTitle;
           metricComputeMode.className = 'font-mono text-emerald-400 font-bold text-[11px]';
         }
         if (headerComputeBadge) {
-          headerComputeBadge.textContent = '⚡ Native Rust Engine';
+          headerComputeBadge.textContent = isWasm ? '⚡ Rust WebAssembly Engine' : '⚡ Native Rust Engine';
           headerComputeBadge.className = 'hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700 font-mono font-bold';
         }
 

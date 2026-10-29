@@ -8,6 +8,30 @@ use crate::table::{RawSpan, TableDetector};
 use crate::types::*;
 use std::collections::{BTreeMap, HashMap};
 
+#[inline]
+fn get_elapsed_ms(#[allow(unused)] start: Option<std::time::Instant>) -> f64 {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        start.map(|s| s.elapsed().as_secs_f64() * 1000.0).unwrap_or(0.0)
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        0.0
+    }
+}
+
+#[inline]
+fn now_instant() -> Option<std::time::Instant> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Some(std::time::Instant::now())
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        None
+    }
+}
+
 /// High-level pure-Rust PDF document parser
 pub struct PurePdfDoc<'a> {
     data: &'a [u8],
@@ -299,7 +323,7 @@ impl<'a> PurePdfDoc<'a> {
 
     /// Extracts all atomic raw coordinate spans across all pages
     pub fn parse_raw(&mut self, file_name: &str) -> Result<RawSpatialDocument, String> {
-        let start = std::time::Instant::now();
+        let start = now_instant();
         let total_pages = self.page_count();
         let mut all_spans = Vec::new();
 
@@ -310,7 +334,7 @@ impl<'a> PurePdfDoc<'a> {
             all_spans.extend(interp.spans);
         }
 
-        let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+        let elapsed = get_elapsed_ms(start);
         let total_spans = all_spans.len();
 
         Ok(RawSpatialDocument {
@@ -405,7 +429,7 @@ impl<'a> PurePdfDoc<'a> {
 
     /// Mode 2: Structured Parse (Hierarchical with Lines, Blocks, and Tables)
     pub fn parse_structured(&mut self, file_name: &str, options: &ParserOptions) -> Result<SpatialDocument, String> {
-        let start = std::time::Instant::now();
+        let start = now_instant();
         let total_pages = self.page_count();
         let detector = TableDetector::new(
             options.min_table_columns,
@@ -604,7 +628,7 @@ impl<'a> PurePdfDoc<'a> {
             });
         }
 
-        let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+        let elapsed = get_elapsed_ms(start);
 
         Ok(SpatialDocument {
             file_name: file_name.to_string(),

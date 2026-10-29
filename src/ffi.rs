@@ -215,3 +215,66 @@ pub extern "C" fn rasgapdf_extract_images_bytes(
         Err(e) => create_error_json(&format!("JSON serialization error: {}", e)),
     }
 }
+
+
+/// Modo 2 (Em Memoria / WebAssembly): Processa bytes em RAM e retorna JSON estruturado.
+#[no_mangle]
+pub extern "C" fn rasgapdf_parse_bytes(bytes_ptr: *const u8, len: usize) -> *mut c_char {
+    rasgapdf_parse_bytes_options(bytes_ptr, len, std::ptr::null())
+}
+
+/// Modo 2 (Em Memoria / WebAssembly): Processa bytes em RAM com opcoes customizadas.
+#[no_mangle]
+pub extern "C" fn rasgapdf_parse_bytes_options(
+    bytes_ptr: *const u8,
+    len: usize,
+    options_json_ptr: *const c_char,
+) -> *mut c_char {
+    if bytes_ptr.is_null() || len == 0 {
+        return create_error_json("Bytes pointer is null or empty");
+    }
+
+    let options: ParserOptions = if !options_json_ptr.is_null() {
+        match unsafe { CStr::from_ptr(options_json_ptr) }.to_str() {
+            Ok(opts_str) => serde_json::from_str(opts_str).unwrap_or_default(),
+            Err(_) => ParserOptions::default(),
+        }
+    } else {
+        ParserOptions::default()
+    };
+
+    let slice = unsafe { std::slice::from_raw_parts(bytes_ptr, len) };
+
+    if options.mode == "raw" {
+        return rasgapdf_parse_raw_bytes(bytes_ptr, len);
+    }
+
+    match crate::spatial::parse_bytes(slice, &options) {
+        Ok(doc) => match serde_json::to_string(&doc) {
+            Ok(json_str) => match CString::new(json_str) {
+                Ok(c_str) => c_str.into_raw(),
+                Err(_) => create_error_json("Failed to create CString"),
+            },
+            Err(e) => create_error_json(&format!("JSON serialization error: {}", e)),
+        },
+        Err(e) => create_error_json(&format!("Parse error: {}", e)),
+    }
+}
+
+/// Funcoes utilitarias de alocacao de memoria para WebAssembly no Browser:
+#[no_mangle]
+pub extern "C" fn wasm_alloc(size: usize) -> *mut u8 {
+    let mut buf = Vec::with_capacity(size);
+    let ptr = buf.as_mut_ptr();
+    std::mem::forget(buf);
+    ptr
+}
+
+#[no_mangle]
+pub extern "C" fn wasm_free(ptr: *mut u8, size: usize) {
+    if !ptr.is_null() && size > 0 {
+        unsafe {
+            let _ = Vec::from_raw_parts(ptr, 0, size);
+        }
+    }
+}
