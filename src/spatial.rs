@@ -522,20 +522,85 @@ pub fn parse_raw_bytes(pdf_bytes: &[u8]) -> Result<RawSpatialDocument, Box<dyn s
     })
 }
 
+#[inline]
+fn decompose_ligatures(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 16);
+    for c in s.chars() {
+        match c {
+            '\u{FB00}' => out.push_str("ff"),
+            '\u{FB01}' => out.push_str("fi"),
+            '\u{FB02}' => out.push_str("fl"),
+            '\u{FB03}' => out.push_str("ffi"),
+            '\u{FB04}' => out.push_str("ffl"),
+            '\u{FB05}' => out.push_str("ft"),
+            '\u{FB06}' => out.push_str("st"),
+            '\u{A733}' => out.push_str("aa"),
+            '\u{00A0}' => out.push(' '),
+            '\u{FFFE}' => {},
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+fn dehyphenate_lines(lines: &mut Vec<String>) {
+    if lines.is_empty() {
+        return;
+    }
+    for i in 0..(lines.len() - 1) {
+        let ends_hyphen = lines[i].ends_with('-') || lines[i].ends_with('\u{FFFE}');
+        if ends_hyphen {
+            let next_line = &lines[i + 1];
+            let suffix = match next_line.find(' ') {
+                Some(idx) => &next_line[..idx],
+                None => next_line.as_str(),
+            };
+            if !suffix.is_empty() {
+                let suffix_len = suffix.len();
+                let suffix_owned = suffix.to_string();
+                lines[i].pop(); // remove '-'
+                lines[i].push_str(&suffix_owned);
+                lines[i + 1] = lines[i + 1][suffix_len..].to_string();
+            }
+        }
+    }
+}
+
 /// Extração paralela ultrarrápida de texto puro em memória (Rayon + MuPDF)
-/// com expansão automática de ligaduras e desifenização.
+/// com expansão automática de ligaduras e desifenização nativa em Rust.
 pub fn extract_text_bytes(pdf_bytes: &[u8]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let doc = Document::from_bytes(pdf_bytes, "application/pdf")?;
     let total_pages = doc.page_count()? as usize;
 
     let mut out = String::with_capacity(total_pages * 2048);
-    let mut consecutive_newlines = 0;
 
     for page_idx in 0..total_pages {
         if let Ok(page) = doc.load_page(page_idx as i32) {
-            if let Ok(text_page) = page.to_text_page(TextPageFlags::empty()) {
+            let flags = TextPageFlags::DEHYPHENATE;
+            if let Ok(text_page) = page.to_text_page(flags) {
                 if let Ok(t) = text_page.to_text() {
-                    for line in t.lines() {
+                    let decomp = decompose_ligatures(&t);
+                    let mut lines: Vec<String> = decomp
+                        .lines()
+                        .map(|l| l.trim_end().to_string())
+                        .collect();
+
+                    let page_num_str = (page_idx + 1).to_string();
+                    if let Some(first) = lines.first() {
+                        if first.trim() == page_num_str {
+                            lines.remove(0);
+                        }
+                    }
+                    if let Some(last_pos) = lines.iter().rposition(|l| !l.trim().is_empty()) {
+                        if lines[last_pos].trim() == page_num_str {
+                            lines.remove(last_pos);
+                        }
+                    }
+
+                    dehyphenate_lines(&mut lines);
+
+                    let mut consecutive_newlines = 0;
+                    for line in lines {
                         let trimmed = line.trim_end();
                         if trimmed.is_empty() {
                             if consecutive_newlines < 2 && !out.is_empty() {
@@ -552,7 +617,6 @@ pub fn extract_text_bytes(pdf_bytes: &[u8]) -> Result<String, Box<dyn std::error
                     }
                     if !out.is_empty() && consecutive_newlines == 0 {
                         out.push('\n');
-                        consecutive_newlines = 1;
                     }
                 }
             }
