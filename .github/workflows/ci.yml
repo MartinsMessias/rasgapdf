@@ -11,7 +11,7 @@ jobs:
     name: Build & Test (Rust, Python, Node, Go)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux system dependencies
         run: |
@@ -28,7 +28,7 @@ jobs:
         run: cargo test --release --verbose
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -47,7 +47,7 @@ jobs:
           node -e "const { version } = require('./bindings/nodejs/index.js'); console.log('Node FFI Version:', version());"
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: '1.22'
 
