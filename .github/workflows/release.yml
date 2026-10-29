@@ -150,3 +150,55 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.0
         with:
           files: rasgapdf-sbom.spdx.json
+
+  publish-nuget:
+    name: 🔷 Publish to NuGet (.NET)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libfontconfig1-dev libfreetype6-dev libharfbuzz-dev libclang-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - name: Build Rust Shared Library
+        run: cargo build --release
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@3951f0ca7a015626166687bcc430754c67195b84 # v4.3.0
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build and Pack NuGet Package
+        run: |
+          cd bindings/csharp
+          dotnet pack -c Release -o dist
+
+      - name: NuGet login (OIDC Trusted Publishing)
+        id: login
+        continue-on-error: true
+        uses: NuGet/login@291cf541e21b76df479f6e1f0e21bc5c88686a3d # v1.1.0
+        with:
+          user: MartinsMessias
+
+      - name: Publish to NuGet.org
+        run: |
+          KEY="${{ steps.login.outputs.NUGET_API_KEY }}"
+          if [ -z "$KEY" ]; then
+            KEY="${{ secrets.NUGET_API_KEY }}"
+          fi
+          if [ -n "$KEY" ]; then
+            dotnet nuget push bindings/csharp/dist/*.nupkg \
+              --api-key "$KEY" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          else
+            echo "Neither Trusted Publishing nor NUGET_API_KEY available; skipping push"
+          fi
