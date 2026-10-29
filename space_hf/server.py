@@ -66,6 +66,13 @@ def get_sample():
         return FileResponse(str(sample_path), media_type="application/pdf")
     return JSONResponse(status_code=404, content={"error": "sample.pdf not found"})
 
+@app.get("/rasgapdf.wasm")
+def get_wasm():
+    wasm_path = HERE / "rasgapdf.wasm"
+    if wasm_path.exists():
+        return FileResponse(str(wasm_path), media_type="application/wasm")
+    return JSONResponse(status_code=404, content={"error": "rasgapdf.wasm not found"})
+
 @app.get("/api/status")
 def get_status():
     return {
