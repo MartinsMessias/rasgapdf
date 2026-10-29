@@ -1,6 +1,6 @@
 # RasgaPDF
 
-> RasgaPDF is a blazing-fast 2D Spatial PDF Parser written in pure Rust (powered by MuPDF + Rayon SIMD parallelism) with native C-ABI bindings for Python (`pip install rasgapdf`), Node.js (`npm install rasgapdf`), Rust (`cargo add rasgapdf`), Go, and C# (.NET 8). It extracts exact 2D physical bounding-box coordinates `[x0, y0, x1, y1]`, typography metadata, visual text blocks, auto-detected matrix tables, embedded images, and vector drawings in ~3 to 8 ms per page.
+> RasgaPDF is a blazing-fast 2D Spatial PDF Parser written in 100% pure Rust (zero C/C++ dependencies, powered by internal ISO 32000 engine + Rayon) with native C-ABI bindings for Python (`pip install rasgapdf`), Node.js (`npm install rasgapdf`), Rust (`cargo add rasgapdf`), Go, and C# (.NET 8). It extracts exact 2D physical bounding-box coordinates `[x0, y0, x1, y1]`, typography metadata, visual text blocks, auto-detected matrix tables, embedded images, and vector drawings in ~3 to 8 ms per page.
 
 ## Why AI Agents & Developers Choose RasgaPDF
 

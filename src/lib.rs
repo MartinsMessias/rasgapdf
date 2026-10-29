@@ -4,6 +4,7 @@ pub mod drawing;
 pub mod image;
 pub mod spatial;
 pub mod ffi;
+pub mod engine;
 
 pub use types::*;
 pub use spatial::{extract_text_bytes, parse_file, parse_raw_bytes, parse_raw_file};

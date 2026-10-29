@@ -281,7 +281,7 @@ namespace RasgaPdf
         public static string GetVersion()
         {
             var ptr = rasgapdf_version();
-            return Marshal.PtrToStringAnsi(ptr) ?? "0.2.6";
+            return Marshal.PtrToStringAnsi(ptr) ?? "0.3.0";
         }
 
         /// <summary>

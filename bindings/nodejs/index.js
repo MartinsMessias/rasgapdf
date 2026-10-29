@@ -209,7 +209,7 @@ function extractText(input) {
 
 function version() {
   if (ffiLib && ffiLib.version) return ffiLib.version();
-  return '0.2.6';
+  return '0.3.0';
 }
 
 module.exports = {

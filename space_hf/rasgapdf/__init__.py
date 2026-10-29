@@ -2,7 +2,8 @@ import os
 import sys
 import json
 import ctypes
-from typing import Dict, Any, List, Optional
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Union
 
 def _find_library() -> str:
     lib_name = "librasgapdf.so" if sys.platform != "win32" else "rasgapdf.dll"
@@ -70,7 +71,7 @@ if _lib:
 
 def version() -> str:
     if not _lib:
-        return "0.2.6 (unlinked)"
+        return "0.3.0 (unlinked)"
     return _lib.rasgapdf_version().decode("utf-8")
 
 def parse_raw(file_path: str) -> Dict[str, Any]:
@@ -251,7 +252,7 @@ def parse_raw_bytes(data: bytes) -> Dict[str, Any]:
         _lib.rasgapdf_free_string(res_ptr)
 
 
-def extract_text(data_or_path: bytes | str) -> str:
+def extract_text(data_or_path: Union[bytes, str]) -> str:
     """
     🚀 Extrai o texto completo do PDF em ordem natural de blocos de leitura
     diretamente de `bytes` ou caminho de arquivo.
@@ -263,47 +264,61 @@ def extract_text(data_or_path: bytes | str) -> str:
         data = None
         is_bytes = False
 
+    res_str = ""
     # 1. Caminho ultra-rápido nativo (se a biblioteca expor rasgapdf_extract_text_bytes)
     if _lib and hasattr(_lib, "rasgapdf_extract_text_bytes"):
         b_data = data if is_bytes else Path(data_or_path).read_bytes()
         res_ptr = _lib.rasgapdf_extract_text_bytes(b_data, len(b_data))
         if res_ptr:
             try:
-                res_str = ctypes.string_at(res_ptr).decode("utf-8", errors="replace")
-                if res_str.strip():
-                    return res_str
+                native_str = ctypes.string_at(res_ptr).decode("utf-8", errors="replace")
+                if native_str.strip():
+                    res_str = native_str
             finally:
                 _lib.rasgapdf_free_string(res_ptr)
 
     # 2. Fallback robusto via parse_pdf estruturado (preserva blocos e colunas)
-    tmp_path = None
-    try:
-        if is_bytes:
-            import tempfile
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
-                tf.write(data)
-                tmp_path = tf.name
-            path_to_parse = tmp_path
-        else:
-            path_to_parse = str(data_or_path)
+    if not res_str:
+        tmp_path = None
+        try:
+            if is_bytes:
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
+                    tf.write(data)
+                    tmp_path = tf.name
+                path_to_parse = tmp_path
+            else:
+                path_to_parse = str(data_or_path)
 
-        doc = parse_pdf(path_to_parse, detect_tables=False)
-        pages_texts = []
-        for page in doc.get("pages", []):
-            lines = []
-            for block in page.get("text_blocks", []):
-                for line in block.get("lines", []):
-                    text = line.get("text", "")
-                    if text:
-                        lines.append(text)
-            pages_texts.append("\n".join(lines))
-        return "\n".join(pages_texts)
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except Exception:
-                pass
+            doc = parse_pdf(path_to_parse, detect_tables=False)
+            pages_texts = []
+            for page in doc.get("pages", []):
+                lines = []
+                for block in page.get("text_blocks", []):
+                    for line in block.get("lines", []):
+                        text = line.get("text", "")
+                        if text and text.strip():
+                            lines.append(text.rstrip())
+                if lines:
+                    pages_texts.append("\n".join(lines))
+            res_str = "\n\n".join(pages_texts)
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+
+    # Normalização nativa de whitespace
+    if res_str:
+        import re
+        lines = [line.rstrip() for line in res_str.splitlines()]
+        joined = "\n".join(lines)
+        res_str = re.sub(r"\n{3,}", "\n\n", joined).strip()
+        if res_str:
+            res_str += "\n"
+
+    return res_str
 
 
 def extract_images_bytes(data: bytes, output_dir: str) -> Dict[str, Any]:
@@ -325,4 +340,24 @@ def extract_images_bytes(data: bytes, output_dir: str) -> Dict[str, Any]:
     finally:
         _lib.rasgapdf_free_string(res_ptr)
 
-__all__ = ["parse_raw", "parse_raw_bytes", "parse_pdf", "extract_text", "extract_images", "extract_images_bytes", "version"]
+def __getattr__(name: str):
+    if name == "RasgaPDFLoader":
+        from .integrations.langchain import RasgaPDFLoader
+        return RasgaPDFLoader
+    if name == "RasgaPDFReader":
+        from .integrations.llama_index import RasgaPDFReader
+        return RasgaPDFReader
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+__all__ = [
+    "parse_raw",
+    "parse_raw_bytes",
+    "parse_pdf",
+    "extract_text",
+    "extract_images",
+    "extract_images_bytes",
+    "version",
+    "RasgaPDFLoader",
+    "RasgaPDFReader",
+]

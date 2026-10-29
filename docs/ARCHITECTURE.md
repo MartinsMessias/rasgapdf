@@ -11,7 +11,7 @@ flowchart TD
     INPUT["Input PDF File / Buffer"] --> CORE["RasgaPDF Core (Rust)"]
     
     subgraph CORE["RasgaPDF High-Performance Engine"]
-        MUPDF["MuPDF C-Binding"] --> PARALLEL["Rayon Parallel Pipeline"]
+        PURE_RUST["Pure Rust ISO 32000 Engine"] --> PARALLEL["Rayon Parallel Pipeline"]
         PARALLEL --> PAGE_WORKER["Page Geometric Deconstruction"]
         PAGE_WORKER --> SPAN_EXTRACT["Physical Spans & Bounding Boxes"]
         PAGE_WORKER --> GRAPHICS["Embedded Images & Vector Paths (opt-in)"]

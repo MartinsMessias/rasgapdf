@@ -71,7 +71,7 @@ if _lib:
 
 def version() -> str:
     if not _lib:
-        return "0.2.6 (unlinked)"
+        return "0.3.0 (unlinked)"
     return _lib.rasgapdf_version().decode("utf-8")
 
 def parse_raw(file_path: str) -> Dict[str, Any]:

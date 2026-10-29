@@ -7,11 +7,10 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
-use mupdf::pdf::{PageImageInfo, PdfDocument, PdfPage};
-use mupdf::Document;
 use sha2::{Digest, Sha256};
 
-use crate::types::{BoundingBox, SpatialImage};
+use crate::engine::PurePdfDoc;
+use crate::types::SpatialImage;
 
 /// Uma imagem embutida extraída, já com os bytes originais do stream.
 #[derive(Debug, Clone)]
@@ -25,8 +24,6 @@ pub struct ExtractedImageData {
 }
 
 /// Retorna o último nome de filtro declarado em `/Filter`, preservando o caso original.
-///
-/// Em `/Filter [/ASCII85Decode /DCTDecode]` o último filtro é o codec real da imagem.
 pub fn last_filter_name(filter: Option<&str>) -> Option<String> {
     let raw = filter?;
     raw.rsplit(|c: char| !c.is_ascii_alphanumeric())
@@ -75,41 +72,7 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     out
 }
 
-/// Monta os metadados espaciais de uma imagem.
-pub fn build_spatial_image(
-    image_id: usize,
-    info: &PageImageInfo,
-    bbox: Option<BoundingBox>,
-    bytes: Option<&[u8]>,
-) -> SpatialImage {
-    SpatialImage {
-        image_id,
-        name: info.name.clone(),
-        xref: info.xref,
-        bbox,
-        pixel_width: info.width,
-        pixel_height: info.height,
-        bits_per_component: info.bits_per_component,
-        color_space: info.color_space.clone(),
-        filter: last_filter_name(info.filter.as_deref()),
-        mime_type: mime_from_filter(info.filter.as_deref()).map(str::to_string),
-        byte_length: bytes.map(|b| b.len()),
-        sha256: bytes.map(sha256_hex),
-        file: None,
-    }
-}
-
-/// Lê o stream codificado de uma imagem pelo seu xref.
-pub fn extract_image_bytes(doc: &PdfDocument, xref: i32) -> Option<Vec<u8>> {
-    if xref <= 0 {
-        return None;
-    }
-    doc.extract_image(xref).ok().map(|img| img.encoded)
-}
-
 /// Escreve os streams extraídos em `dir` e preenche `image.file` com o nome gerado.
-///
-/// Retorna a quantidade de arquivos gravados. Imagens sem bytes são ignoradas.
 pub fn write_images_to_dir(
     images: &mut [ExtractedImageData],
     dir: &Path,
@@ -173,79 +136,18 @@ pub fn write_manifest(
 }
 
 /// Extrai todas as imagens embutidas do documento, com os bytes originais.
-///
-/// Percorre as páginas sequencialmente (o documento MuPDF não é `Send`, e a extração
-/// de bytes é dominada por I/O de stream, não por CPU).
 pub fn extract_images(
     pdf_path: &str,
 ) -> Result<Vec<ExtractedImageData>, Box<dyn Error + Send + Sync>> {
-    let doc = Document::open(pdf_path)?;
-    let page_count = doc.page_count()? as usize;
-    let pdf_doc = PdfDocument::try_from(doc)
-        .map_err(|e| format!("document is not a PDF: {e}"))?;
-
-    let mut out: Vec<ExtractedImageData> = Vec::new();
-
-    for page_idx in 0..page_count {
-        let page = pdf_doc.load_page(page_idx as i32)?;
-        let pdf_page = PdfPage::try_from(page)
-            .map_err(|e| format!("failed to convert page {}: {e}", page_idx + 1))?;
-
-        let infos = pdf_page.images().unwrap_or_default();
-        for (idx, info) in infos.iter().enumerate() {
-            let bytes = extract_image_bytes(&pdf_doc, info.xref).unwrap_or_default();
-            let has_bytes = !bytes.is_empty();
-            let image = build_spatial_image(
-                idx + 1,
-                info,
-                None,
-                if has_bytes { Some(bytes.as_slice()) } else { None },
-            );
-            out.push(ExtractedImageData {
-                page: page_idx + 1,
-                image,
-                bytes,
-            });
-        }
-    }
-
-    Ok(out)
+    let bytes = std::fs::read(pdf_path)?;
+    extract_images_from_bytes(&bytes)
 }
-
 
 /// Extrai todas as imagens embutidas a partir de um buffer de bytes em memória (`&[u8]`).
 pub fn extract_images_from_bytes(
     pdf_bytes: &[u8],
 ) -> Result<Vec<ExtractedImageData>, Box<dyn Error + Send + Sync>> {
-    let doc = Document::from_bytes(pdf_bytes, "application/pdf")?;
-    let page_count = doc.page_count()? as usize;
-    let pdf_doc = PdfDocument::try_from(doc)
-        .map_err(|e| format!("document is not a PDF: {e}"))?;
-
-    let mut out: Vec<ExtractedImageData> = Vec::new();
-
-    for page_idx in 0..page_count {
-        let page = pdf_doc.load_page(page_idx as i32)?;
-        let pdf_page = PdfPage::try_from(page)
-            .map_err(|e| format!("failed to convert page {}: {e}", page_idx + 1))?;
-
-        let infos = pdf_page.images().unwrap_or_default();
-        for (idx, info) in infos.iter().enumerate() {
-            let bytes = extract_image_bytes(&pdf_doc, info.xref).unwrap_or_default();
-            let has_bytes = !bytes.is_empty();
-            let image = build_spatial_image(
-                idx + 1,
-                info,
-                None,
-                if has_bytes { Some(bytes.as_slice()) } else { None },
-            );
-            out.push(ExtractedImageData {
-                page: page_idx + 1,
-                image,
-                bytes,
-            });
-        }
-    }
-
-    Ok(out)
+    let mut doc = PurePdfDoc::from_bytes(pdf_bytes).map_err(|e| format!("Pure PDF parse error: {e}"))?;
+    let images = doc.extract_all_images().map_err(|e| format!("Extract images error: {e}"))?;
+    Ok(images)
 }

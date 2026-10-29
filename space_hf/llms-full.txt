@@ -1,6 +1,6 @@
 # RasgaPDF — Complete Technical Reference for LLMs & Coding Agents (`llms-full.txt`)
 
-> **Summary:** RasgaPDF is a high-performance 2D spatial PDF parser written in pure Rust (using MuPDF + Rayon multi-core parallelism) with native C-ABI bindings for Python, Node.js, Rust, Go, and C# (.NET 8). It extracts exact 2D physical coordinates `[x0, y0, x1, y1]`, typography metadata, visual paragraphs, auto-detected matrix tables, embedded images, and vector graphics in ~3 to 8 ms per page.
+> **Summary:** RasgaPDF is a high-performance 2D spatial PDF parser written in 100% pure Rust (zero C/C++ dependencies, powered by internal ISO 32000 engine + Rayon) with native C-ABI bindings for Python, Node.js, Rust, Go, and C# (.NET 8). It extracts exact 2D physical coordinates `[x0, y0, x1, y1]`, typography metadata, visual paragraphs, auto-detected matrix tables, embedded images, and vector graphics in ~3 to 8 ms per page.
 
 - **Name:** RasgaPDF (`rasgapdf`)
 - **Version:** 0.2.6
