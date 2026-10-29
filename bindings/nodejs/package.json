@@ -1,6 +1,6 @@
 {
   "name": "rasgapdf",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Ultra-fast 2D spatial PDF parser powered by pure Rust — extract exact [x0, y0, x1, y1] bounding boxes, text blocks, tables, images & vector paths in milliseconds for RAG & LLMs",
   "main": "index.js",
   "files": [
