@@ -12,13 +12,15 @@
     <PackageProjectUrl>https://martinsmessias.github.io/rasgapdf/</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MartinsMessias/rasgapdf</RepositoryUrl>
     <PackageTags>pdf;pdf-parser;spatial-pdf;bounding-box;table-extraction;layout-analysis;rag;llm;rust;mupdf</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\target\release\librasgapdf.so" Condition="Exists('..\..\target\release\librasgapdf.so')">
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\target\release\librasgapdf.so" Condition="Exists('..\..\target\release\librasgapdf.so')" Pack="true" PackagePath="runtimes/linux-x64/native/librasgapdf.so">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\target\release\rasgapdf.dll" Condition="Exists('..\..\target\release\rasgapdf.dll')">
+    <None Include="..\..\target\release\rasgapdf.dll" Condition="Exists('..\..\target\release\rasgapdf.dll')" Pack="true" PackagePath="runtimes/win-x64/native/rasgapdf.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
