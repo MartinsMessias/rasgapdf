@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   id-token: write # Essencial para PyPI Trusted Publishing e npm Provenance via Sigstore
 
 jobs:
@@ -122,3 +122,24 @@ jobs:
         run: python upload_to_hf.py
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+
+  generate-sbom:
+    name: 🛡️ Generate & Attest SBOM (Supply Chain Security)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          format: spdx-json
+          output-file: rasgapdf-sbom.spdx.json
+
+      - name: Attach SBOM to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: rasgapdf-sbom.spdx.json
