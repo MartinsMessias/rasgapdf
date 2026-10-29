@@ -141,9 +141,11 @@ async def parse_pdf_endpoint(file: UploadFile = File(...)):
             "image_data_uris": data_uris,
         }
     except Exception as e:
+        import logging
+        logging.error("Error processing PDF: %s", e)
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "message": str(e)}
+            content={"status": "error", "message": "Failed to process PDF document"}
         )
     finally:
         # Cleanup temp files

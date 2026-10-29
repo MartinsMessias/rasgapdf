@@ -6,12 +6,15 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build & Test (Rust, Python, Node, Go)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
 
       - name: Install Linux system dependencies
         run: |
@@ -19,7 +22,7 @@ jobs:
           sudo apt-get install -y pkg-config libfontconfig1-dev libfreetype6-dev libharfbuzz-dev libclang-dev
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
       - name: Build Rust Core
         run: cargo build --release --verbose
@@ -28,7 +31,7 @@ jobs:
         run: cargo test --release --verbose
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.0.0
         with:
           python-version: '3.11'
 
@@ -38,7 +41,7 @@ jobs:
           python -c "import sys; sys.path.insert(0, 'bindings/python'); from rasgapdf import version; print('Python FFI Version:', version())"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.0.0
         with:
           node-version: '22'
 
@@ -47,7 +50,7 @@ jobs:
           node -e "const { version } = require('./bindings/nodejs/index.js'); console.log('Node FFI Version:', version());"
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.22'
 
