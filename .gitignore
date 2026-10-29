@@ -38,3 +38,8 @@ obj/
 *.nupkg
 
 .npmrc
+
+# Compiled native shared libraries
+*.so
+*.dll
+*.dylib
