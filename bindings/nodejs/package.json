@@ -41,6 +41,6 @@
   "author": "Messias Martins",
   "license": "AGPL-3.0-or-later",
   "optionalDependencies": {
-    "koffi": "^2.8.0"
+    "koffi": "^3.3.4"
   }
 }
