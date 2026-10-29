@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 # Injeta RasgaPDF do workspace
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "bindings" / "python"))
 
 import rasgapdf
