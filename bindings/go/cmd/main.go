@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/messiasmartins/rasgapdf/bindings/go"
+	"github.com/MartinsMessias/rasgapdf/bindings/go"
 )
 
 func main() {
