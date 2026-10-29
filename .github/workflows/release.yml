@@ -4,6 +4,15 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Publish target'
+        required: false
+        default: 'nuget'
+        type: choice
+        options:
+          - nuget
+          - all
 
 permissions:
   contents: read
@@ -11,6 +20,7 @@ permissions:
 jobs:
   publish-pypi:
     name: 🐍 Publish to PyPI (with Provenance)
+    if: github.event_name == 'release' || inputs.target == 'all'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -52,6 +62,7 @@ jobs:
 
   publish-npm:
     name: 📦 Publish to npm (with Provenance)
+    if: github.event_name == 'release' || inputs.target == 'all'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -88,6 +99,7 @@ jobs:
 
   publish-crates:
     name: 🦀 Publish to crates.io
+    if: github.event_name == 'release' || inputs.target == 'all'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -109,6 +121,7 @@ jobs:
 
   sync-huggingface:
     name: 🤗 Sync to Hugging Face (Model & Space)
+    if: github.event_name == 'release' || inputs.target == 'all'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -132,6 +145,7 @@ jobs:
 
   generate-sbom:
     name: 🛡️ Generate & Attest SBOM (Supply Chain Security)
+    if: github.event_name == 'release' || inputs.target == 'all'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -153,6 +167,7 @@ jobs:
 
   publish-nuget:
     name: 🔷 Publish to NuGet (.NET)
+    if: github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'nuget'
     runs-on: ubuntu-latest
     permissions:
       contents: read
