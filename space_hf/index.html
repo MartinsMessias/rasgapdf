@@ -692,25 +692,28 @@ async function loadPdfFile(file, name = null) {
         const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
         currentPdfDoc = await loadingTask.promise;
 
-        // 1. Try local native server or pure Rust WebAssembly engine in browser
+        // 1. Prioritize Pure Rust WebAssembly in the browser, fallback to local server
         currentRustDoc = null;
-        try {
-          const formData = new FormData();
-          formData.append('file', file, fileName);
-          const apiRes = await fetch('/api/parse', { method: 'POST', body: formData });
-          if (apiRes.ok) {
-            currentRustDoc = await apiRes.json();
-            console.log('⚡ Parsed with Native Rust Server in', currentRustDoc.parse_time_ms, 'ms');
+        if (wasmEngine) {
+          try {
+            currentRustDoc = parsePdfWithWasm(new Uint8Array(arrayBuffer));
+            console.log('⚡ Parsed with Pure Rust WebAssembly Engine in', currentRustDoc.parse_time_ms, 'ms');
+          } catch (wErr) {
+            console.warn('WASM parse error, trying server:', wErr);
           }
-        } catch (e) {
-          // Server not available (e.g. GitHub Pages) - use pure Rust WASM!
-          if (wasmEngine) {
-            try {
-              currentRustDoc = parsePdfWithWasm(new Uint8Array(arrayBuffer));
-              console.log('⚡ Parsed with Pure Rust WebAssembly Engine in', currentRustDoc.parse_time_ms, 'ms');
-            } catch (wErr) {
-              console.warn('WASM parse error:', wErr);
+        }
+
+        if (!currentRustDoc) {
+          try {
+            const formData = new FormData();
+            formData.append('file', file, fileName);
+            const apiRes = await fetch('/api/parse', { method: 'POST', body: formData });
+            if (apiRes.ok) {
+              currentRustDoc = await apiRes.json();
+              console.log('⚡ Parsed with Native Rust Server in', currentRustDoc.parse_time_ms, 'ms');
             }
+          } catch (e) {
+            console.log('Native server not reachable');
           }
         }
 
