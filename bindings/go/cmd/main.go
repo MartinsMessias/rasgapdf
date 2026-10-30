@@ -9,9 +9,11 @@ import (
 )
 
 func main() {
-	pdfPath := "../../demo_gradio/sample.pdf"
+	pdfPath := "../../docs/sample.pdf"
 	if len(os.Args) > 1 {
 		pdfPath = os.Args[1]
+	} else if _, err := os.Stat(pdfPath); os.IsNotExist(err) {
+		pdfPath = "../../tests/fixtures/mixed.pdf"
 	}
 
 	fmt.Println("=== RasgaPDF Go Native Test ===")

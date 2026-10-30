@@ -1,3 +1,4 @@
+use std::alloc::{alloc, dealloc, Layout};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use crate::types::ParserOptions;
@@ -138,12 +139,16 @@ pub extern "C" fn rasgapdf_version() -> *const c_char {
 }
 
 fn create_error_json(err_msg: &str) -> *mut c_char {
+    let sanitized_msg = err_msg.replace('\0', " ");
     let err_obj = serde_json::json!({
         "error": true,
-        "message": err_msg
+        "message": sanitized_msg
     });
     let s = serde_json::to_string(&err_obj).unwrap_or_else(|_| "{\"error\":true}".to_string());
-    CString::new(s).unwrap().into_raw()
+    let clean_s = s.replace('\0', " ");
+    CString::new(clean_s)
+        .unwrap_or_else(|_| CString::new("{\"error\":true}").unwrap())
+        .into_raw()
 }
 
 
@@ -264,17 +269,58 @@ pub extern "C" fn rasgapdf_parse_bytes_options(
 /// Funcoes utilitarias de alocacao de memoria para WebAssembly no Browser:
 #[no_mangle]
 pub extern "C" fn wasm_alloc(size: usize) -> *mut u8 {
-    let mut buf = Vec::with_capacity(size);
-    let ptr = buf.as_mut_ptr();
-    std::mem::forget(buf);
-    ptr
+    if size == 0 {
+        return std::ptr::null_mut();
+    }
+    let layout = match Layout::from_size_align(size, 1) {
+        Ok(l) => l,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    unsafe { alloc(layout) }
 }
 
 #[no_mangle]
 pub extern "C" fn wasm_free(ptr: *mut u8, size: usize) {
     if !ptr.is_null() && size > 0 {
-        unsafe {
-            let _ = Vec::from_raw_parts(ptr, 0, size);
+        if let Ok(layout) = Layout::from_size_align(size, 1) {
+            unsafe {
+                dealloc(ptr, layout);
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_error_json_with_null_byte() {
+        let err_ptr = create_error_json("Test error with \0 nul byte inside");
+        assert!(!err_ptr.is_null());
+        let c_str = unsafe { CStr::from_ptr(err_ptr) };
+        let str_slice = c_str.to_str().unwrap();
+        assert!(str_slice.contains("\"error\":true"));
+        assert!(str_slice.contains("Test error with   nul byte inside"));
+        rasgapdf_free_string(err_ptr);
+    }
+
+    #[test]
+    fn test_wasm_alloc_and_free() {
+        // Zero size should return null without UB
+        let null_ptr = wasm_alloc(0);
+        assert!(null_ptr.is_null());
+        wasm_free(null_ptr, 0);
+
+        // Normal allocation
+        let size = 1024;
+        let ptr = wasm_alloc(size);
+        assert!(!ptr.is_null());
+        unsafe {
+            std::ptr::write_bytes(ptr, 0xAA, size);
+            assert_eq!(*ptr, 0xAA);
+            assert_eq!(*ptr.add(size - 1), 0xAA);
+        }
+        wasm_free(ptr, size);
     }
 }

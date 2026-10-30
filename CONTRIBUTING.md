@@ -36,7 +36,7 @@ This project and everyone participating in it is governed by the [Code of Conduc
 ### Building the Project
 ```bash
 # Clone the repository
-git clone https://huggingface.co/martinsmessias/rasgapdf
+git clone https://github.com/MartinsMessias/rasgapdf.git
 cd rasgapdf
 
 # Build Rust library and CLI in release mode
@@ -49,10 +49,10 @@ cargo build --release
 ### Running Tests
 ```bash
 # Rust core tests
-cargo test
+cargo test --lib
 
-# Python binding test
-python3 bindings/python/test_python.py
+# Python integration test suite
+pytest tests/test_integrations.py
 
 # Node.js binding test
 node bindings/nodejs/index.js

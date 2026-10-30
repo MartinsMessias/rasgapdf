@@ -44,6 +44,15 @@ try {
   try {
     ffiLib.extractTextBytes = lib.func('void* rasgapdf_extract_text_bytes(uint8_t*, size_t)');
   } catch (_) {}
+  try {
+    ffiLib.parseRawBytes = lib.func('void* rasgapdf_parse_raw_bytes(uint8_t*, size_t)');
+  } catch (_) {}
+  try {
+    ffiLib.parseBytesOptions = lib.func('void* rasgapdf_parse_bytes_options(uint8_t*, size_t, str)');
+  } catch (_) {}
+  try {
+    ffiLib.extractImagesBytes = lib.func('void* rasgapdf_extract_images_bytes(uint8_t*, size_t, str)');
+  } catch (_) {}
 } catch (e) {
   // FFI lib will report descriptive error on function invocation if not loaded
 }
@@ -55,6 +64,12 @@ function decodeAndFree(ptr) {
   } finally {
     ffiLib.freeString(ptr);
   }
+}
+
+function toBuffer(val) {
+  if (Buffer.isBuffer(val)) return val;
+  if (val instanceof Uint8Array) return Buffer.from(val.buffer, val.byteOffset, val.byteLength);
+  throw new TypeError('Expected input to be a Buffer or Uint8Array');
 }
 
 /**
@@ -78,6 +93,27 @@ function parseRaw(filePath) {
   const rawStr = decodeAndFree(ptr);
   const parsed = JSON.parse(rawStr);
   if (parsed.error) throw new Error(parsed.message || 'Error parsing PDF');
+  return parsed;
+}
+
+/**
+ * ⚡ Modo 1 (Bruto em Memória): Retorna exclusivamente a lista plana de coordenadas X/Y
+ * diretamente de um Buffer em RAM sem I/O de disco.
+ * 
+ * @param {Buffer|Uint8Array} buffer Buffer contendo os bytes do PDF
+ * @returns {object} RawSpatialDocument { file_name, total_pages, total_spans, parse_time_ms, spans: [...] }
+ */
+function parseRawBytes(buffer) {
+  const buf = toBuffer(buffer);
+
+  if (!ffiLib || !ffiLib.parseRawBytes) {
+    throw new Error('RasgaPDF native FFI library not loaded');
+  }
+
+  const ptr = ffiLib.parseRawBytes(buf, buf.length);
+  const rawStr = decodeAndFree(ptr);
+  const parsed = JSON.parse(rawStr);
+  if (parsed.error) throw new Error(parsed.message || 'Error parsing PDF bytes');
   return parsed;
 }
 
@@ -123,6 +159,41 @@ function parsePdf(filePath, options = {}) {
 }
 
 /**
+ * 🎯 Modo 2 (Estruturado em Memória): Processa bytes em RAM e retorna a árvore geométrica hierárquica
+ * com blocos de texto, linhas, spans e tabelas detectadas.
+ *
+ * @param {Buffer|Uint8Array} buffer Buffer contendo os bytes do PDF
+ * @param {object} [options={}] Opções de detecção espacial
+ * @returns {object} SpatialDocument
+ */
+function parsePdfBytes(buffer, options = {}) {
+  const buf = toBuffer(buffer);
+
+  if (!ffiLib || !ffiLib.parseBytesOptions) {
+    throw new Error('RasgaPDF native FFI library not loaded');
+  }
+
+  const defaultOptions = {
+    mode: 'structured',
+    detect_tables: true,
+    min_table_columns: 3,
+    column_tolerance: 16.0,
+    row_tolerance: 6.0,
+    extract_images: false,
+    extract_drawings: false,
+    filter_background_fills: true,
+    ...options
+  };
+
+  const optsJson = JSON.stringify(defaultOptions);
+  const ptr = ffiLib.parseBytesOptions(buf, buf.length, optsJson);
+  const rawStr = decodeAndFree(ptr);
+  const parsed = JSON.parse(rawStr);
+  if (parsed.error) throw new Error(parsed.message || 'Error parsing PDF bytes');
+  return parsed;
+}
+
+/**
  * 🖼️ Extrai os streams originais das imagens embutidas para `outputDir`.
  *
  * Nenhum pixel é decodificado: o stream codificado é copiado como está
@@ -148,6 +219,28 @@ function extractImages(filePath, outputDir) {
   }
 
   const ptr = ffiLib.extractImages(absPath, absOut);
+  const rawStr = decodeAndFree(ptr);
+  const parsed = JSON.parse(rawStr);
+  if (parsed.error) throw new Error(parsed.message || 'Error extracting images');
+  return parsed;
+}
+
+/**
+ * 🖼️ Extrai os streams originais das imagens embutidas diretamente de bytes em RAM para `outputDir`.
+ *
+ * @param {Buffer|Uint8Array} buffer Buffer contendo os bytes do PDF
+ * @param {string} [outputDir='.'] Pasta destino (criada se não existir)
+ * @returns {object} { file_name, total_images, written, images: [{ page, image }] }
+ */
+function extractImagesBytes(buffer, outputDir = '.') {
+  const buf = toBuffer(buffer);
+  const absOut = path.resolve(outputDir || '.');
+
+  if (!ffiLib || !ffiLib.extractImagesBytes) {
+    throw new Error('RasgaPDF native FFI library not loaded');
+  }
+
+  const ptr = ffiLib.extractImagesBytes(buf, buf.length, absOut);
   const rawStr = decodeAndFree(ptr);
   const parsed = JSON.parse(rawStr);
   if (parsed.error) throw new Error(parsed.message || 'Error extracting images');
@@ -214,8 +307,11 @@ function version() {
 
 module.exports = {
   parseRaw,
+  parseRawBytes,
   parsePdf,
+  parsePdfBytes,
   extractText,
   extractImages,
+  extractImagesBytes,
   version
 };

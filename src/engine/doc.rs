@@ -6,7 +6,7 @@ use super::xref::XRefTable;
 use crate::image::{self, ExtractedImageData};
 use crate::table::{RawSpan, TableDetector};
 use crate::types::*;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 #[inline]
 fn get_elapsed_ms(#[allow(unused)] start: Option<std::time::Instant>) -> f64 {
@@ -31,6 +31,9 @@ fn now_instant() -> Option<std::time::Instant> {
         None
     }
 }
+
+pub const MAX_OBJECT_RESOLVE_DEPTH: usize = 64;
+pub const MAX_PAGE_TREE_DEPTH: usize = 32;
 
 /// High-level pure-Rust PDF document parser
 pub struct PurePdfDoc<'a> {
@@ -68,12 +71,33 @@ impl<'a> PurePdfDoc<'a> {
         self.pages.len()
     }
 
-    /// Resolves an indirect object, dereferencing references recursively
+    /// Resolves an indirect object, dereferencing references recursively with bounded recursion and cycle detection
     pub fn resolve(&mut self, obj: &PdfObject) -> Result<PdfObject, String> {
+        self.resolve_depth(obj, 0)
+    }
+
+    /// Resolves an indirect object with explicit depth counter and cycle detection
+    pub fn resolve_depth(&mut self, obj: &PdfObject, depth: usize) -> Result<PdfObject, String> {
+        let mut visited = HashSet::new();
+        self.resolve_internal(obj, depth, &mut visited)
+    }
+
+    fn resolve_internal(
+        &mut self,
+        obj: &PdfObject,
+        depth: usize,
+        visited: &mut HashSet<ObjectId>,
+    ) -> Result<PdfObject, String> {
+        if depth >= MAX_OBJECT_RESOLVE_DEPTH {
+            return Err("Maximum object resolution depth (64) exceeded (possible cycle)".to_string());
+        }
         match obj {
             PdfObject::Reference(id) => {
+                if !visited.insert(*id) {
+                    return Err(format!("Cyclic object reference detected at {}", id));
+                }
                 let resolved = self.xref.get_object(self.data, *id, &mut self.obj_cache)?;
-                self.resolve(&resolved)
+                self.resolve_internal(&resolved, depth + 1, visited)
             }
             _ => Ok(obj.clone()),
         }
@@ -93,11 +117,24 @@ impl<'a> PurePdfDoc<'a> {
             .and_then(|p| p.as_reference())
             .ok_or("Missing /Pages in PDF Catalog")?;
 
-        self.traverse_pages_node(pages_ref)?;
+        let mut visited = HashSet::new();
+        self.traverse_pages_node(pages_ref, 0, &mut visited)?;
         Ok(())
     }
 
-    fn traverse_pages_node(&mut self, node_ref: ObjectId) -> Result<(), String> {
+    fn traverse_pages_node(
+        &mut self,
+        node_ref: ObjectId,
+        depth: usize,
+        visited: &mut HashSet<ObjectId>,
+    ) -> Result<(), String> {
+        if depth >= MAX_PAGE_TREE_DEPTH {
+            return Err("Maximum page tree depth (32) exceeded (possible cycle)".to_string());
+        }
+        if !visited.insert(node_ref) {
+            return Err(format!("Cyclic page tree node detected at {}", node_ref));
+        }
+
         let node = self.xref.get_object(self.data, node_ref, &mut self.obj_cache)?;
         let node_type = node.dict_get("Type").and_then(|t| t.as_name()).unwrap_or("");
 
@@ -105,7 +142,7 @@ impl<'a> PurePdfDoc<'a> {
             if let Some(kids_arr) = node.dict_get("Kids").and_then(|k| k.as_array()) {
                 let kid_refs: Vec<ObjectId> = kids_arr.iter().filter_map(|k| k.as_reference()).collect();
                 for kid in kid_refs {
-                    self.traverse_pages_node(kid)?;
+                    self.traverse_pages_node(kid, depth + 1, visited)?;
                 }
             }
         } else if node_type == "Page" || node.dict_get("MediaBox").is_some() || node.dict_get("Contents").is_some() {
@@ -1025,5 +1062,58 @@ mod tests {
         let bbox = img.image.bbox.as_ref().unwrap();
         assert!((bbox.x0 - 330.0).abs() <= 2.0);
         assert!((bbox.x1 - 530.0).abs() <= 2.0);
+    }
+
+    #[test]
+    fn test_cyclic_reference_does_not_crash() {
+        let mut pdf = Vec::new();
+        pdf.extend_from_slice(b"%PDF-1.4\n");
+        let o1 = pdf.len();
+        pdf.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        let o2 = pdf.len();
+        pdf.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [ 3 0 R ] /Count 1 >>\nendobj\n");
+        let o3 = pdf.len();
+        pdf.extend_from_slice(b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 612 792 ] /Contents 4 0 R >>\nendobj\n");
+        let o4 = pdf.len();
+        pdf.extend_from_slice(b"4 0 obj\n<< /Length 10 >> stream\nET\nendstream\nendobj\n");
+        let o5 = pdf.len();
+        // Object 5 references 6, object 6 references 5 (cycle)
+        pdf.extend_from_slice(b"5 0 obj\n6 0 R\nendobj\n");
+        let o6 = pdf.len();
+        pdf.extend_from_slice(b"6 0 obj\n5 0 R\nendobj\n");
+        let xref_pos = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "xref\n0 7\n0000000000 65535 f \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \ntrailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n{}\n%%EOF",
+                o1, o2, o3, o4, o5, o6, xref_pos
+            )
+            .as_bytes(),
+        );
+
+        let mut doc = PurePdfDoc::from_bytes(&pdf).unwrap();
+        let res = doc.resolve(&PdfObject::Reference(ObjectId::new(5, 0)));
+        assert!(res.is_err(), "Cyclic reference resolution must return Err without overflowing stack");
+    }
+
+    #[test]
+    fn test_cyclic_pages_node_does_not_crash() {
+        let mut pdf = Vec::new();
+        pdf.extend_from_slice(b"%PDF-1.4\n");
+        let o1 = pdf.len();
+        pdf.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        let o2 = pdf.len();
+        // Pages 2 lists itself in Kids (cycle)
+        pdf.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [ 2 0 R ] /Count 1 >>\nendobj\n");
+        let xref_pos = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "xref\n0 3\n0000000000 65535 f \n{:010} 00000 n \n{:010} 00000 n \ntrailer\n<< /Size 3 /Root 1 0 R >>\nstartxref\n{}\n%%EOF",
+                o1, o2, xref_pos
+            )
+            .as_bytes(),
+        );
+
+        let res = PurePdfDoc::from_bytes(&pdf);
+        assert!(res.is_err(), "Cyclic page tree must return Err without overflowing stack");
     }
 }

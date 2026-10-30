@@ -43,7 +43,7 @@ pipeline_tag: document-question-answering
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/MartinsMessias/rasgapdf/badge)](https://securityscorecards.dev/viewer/?uri=github.com/MartinsMessias/rasgapdf)
 [![Commercial License](https://img.shields.io/badge/Commercial%20License-Available-success.svg)](mailto:messiasads2017@gmail.com?subject=RasgaPDF%20Commercial%20License%20Inquiry)
 
-[**GitHub Repo**](https://github.com/MartinsMessias/rasgapdf) • [**Web Visualizer**](https://martinsmessias.github.io/rasgapdf/) • [**HF Space Demo**](https://huggingface.co/spaces/martinsmessias/rasgapdf) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md) • [**llms.txt**](llms.txt)
+[**GitHub Repo**](https://github.com/MartinsMessias/rasgapdf) • [**Web Visualizer**](https://martinsmessias.github.io/rasgapdf/) • [**HF Space Demo**](https://huggingface.co/spaces/martinsmessias/rasgapdf) • [**Docs Map (Diátaxis)**](docs/DIATAXIS.md) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md) • [**llms.txt**](llms.txt)
 
 </div>
 

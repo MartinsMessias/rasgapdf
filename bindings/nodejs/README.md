@@ -22,16 +22,22 @@ npm install rasgapdf
 
 ---
 
-## ⚡ Two Extraction Modes
+## ⚡ Extraction Modes & API
 
 ### ⚡ Mode 1: Flat Physical Coordinates (Raw X/Y)
 Zero-overhead extraction returning exact physical 2D coordinates `[x0, y0, x1, y1]` for every text span (~3-8 ms):
 
 ```javascript
-const { parseRaw } = require('rasgapdf');
+const { parseRaw, parseRawBytes } = require('rasgapdf');
+const fs = require('fs');
 
+// From file path:
 const raw = parseRaw('sample.pdf');
 console.log(`Parsed ${raw.total_spans} spans in ${raw.parse_time_ms.toFixed(2)} ms`);
+
+// Or directly from in-memory Buffer (zero disk I/O):
+const buffer = fs.readFileSync('sample.pdf');
+const rawFromBytes = parseRawBytes(buffer);
 
 // Iterate through raw physical coordinates
 for (const span of raw.spans) {
@@ -43,9 +49,18 @@ for (const span of raw.spans) {
 Extracts visual text blocks, lines, font sizes, and automatically detects matrix tables via column alignment:
 
 ```javascript
-const { parsePdf } = require('rasgapdf');
+const { parsePdf, parsePdfBytes } = require('rasgapdf');
+const fs = require('fs');
 
+// From file path:
 const doc = parsePdf('invoice.pdf', {
+  detect_tables: true,
+  min_table_columns: 3
+});
+
+// Or directly from in-memory Buffer:
+const buffer = fs.readFileSync('invoice.pdf');
+const docFromBytes = parsePdfBytes(buffer, {
   detect_tables: true,
   min_table_columns: 3
 });
@@ -67,12 +82,27 @@ for (const page of doc.pages) {
 
 ---
 
-### 🖼️ Embedded Images & Vector Graphics (opt-in)
-
-Both are **off by default**, so the JSON shape is unchanged unless you ask for them. Image bytes are never inlined: the tree carries metadata (dimensions, colour space, filter, SHA-256, placement `bbox`) and `extractImages()` writes the original streams to disk.
+### 🚀 Fast Plain-Text Extraction
+Extracts reading-order text from either a file path or in-memory Buffer:
 
 ```javascript
-const { parsePdf, extractImages } = require('rasgapdf');
+const { extractText } = require('rasgapdf');
+const fs = require('fs');
+
+const text1 = extractText('sample.pdf');
+const buffer = fs.readFileSync('sample.pdf');
+const text2 = extractText(buffer);
+```
+
+---
+
+### 🖼️ Embedded Images & Vector Graphics (opt-in)
+
+Both are **off by default**, so the JSON shape is unchanged unless you ask for them. Image bytes are never inlined: the tree carries metadata (dimensions, colour space, filter, SHA-256, placement `bbox`) and `extractImages()` / `extractImagesBytes()` writes the original streams to disk.
+
+```javascript
+const { parsePdf, extractImages, extractImagesBytes } = require('rasgapdf');
+const fs = require('fs');
 
 const doc = parsePdf('report.pdf', {
   extract_images: true,
@@ -89,9 +119,13 @@ for (const drawing of page.drawings) {
   console.log(drawing.drawing_id, drawing.drawing_type, drawing.stroke_color);
 }
 
-// Writes page_001_img_001_xref7.jpg (etc.) plus manifest.json
+// Writes page_001_img_001_xref7.jpg (etc.) plus manifest.json from file path:
 const manifest = extractImages('report.pdf', './out');
 console.log(`${manifest.written} of ${manifest.total_images} images written`);
+
+// Or extract directly from in-memory Buffer:
+const buffer = fs.readFileSync('report.pdf');
+const manifestFromBytes = extractImagesBytes(buffer, './out');
 ```
 
 ---

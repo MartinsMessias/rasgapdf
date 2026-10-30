@@ -3,7 +3,7 @@
 > **Summary:** RasgaPDF is a high-performance 2D spatial PDF parser written in 100% pure Rust (zero C/C++ dependencies, powered by internal ISO 32000 engine + Rayon) with native C-ABI bindings for Python, Node.js, Rust, Go, and C# (.NET 8). It extracts exact 2D physical coordinates `[x0, y0, x1, y1]`, typography metadata, visual paragraphs, auto-detected matrix tables, embedded images, and vector graphics in ~3 to 8 ms per page.
 
 - **Name:** RasgaPDF (`rasgapdf`)
-- **Version:** 0.2.6
+- **Version:** 0.3.1
 - **Author:** Messias Martins
 - **License:** AGPL-3.0-or-later
 - **GitHub:** https://github.com/MartinsMessias/rasgapdf
@@ -52,7 +52,7 @@ Measured on Intel Core i7-1365U (10 Cores / 12 Threads, AVX2):
 import rasgapdf
 
 # 1. Version string
-print(rasgapdf.version())  # "0.2.6"
+print(rasgapdf.version())  # "0.3.1"
 
 # 2. Mode 1: Flat Physical Coordinates (Raw X/Y)
 raw_doc = rasgapdf.parse_raw("sample.pdf")
@@ -85,7 +85,7 @@ manifest = rasgapdf.extract_images("sample.pdf", "./extracted_images")
 ```javascript
 const { parseRaw, parsePdf, extractImages, version } = require('rasgapdf');
 
-console.log(version()); // "0.2.6"
+console.log(version()); // "0.3.1"
 
 // Mode 1: Flat Physical Coordinates
 const raw = parseRaw('sample.pdf');
@@ -198,7 +198,7 @@ rasgapdf input.pdf --drawings --keep-backgrounds
       "raw_span_count": 142,
       "text_blocks": [
         {
-          "block_id": 0,
+          "block_id": 1,
           "bbox": { "x0": 72.0, "y0": 70.5, "x1": 520.0, "y1": 115.2 },
           "lines": [
             {
@@ -219,7 +219,7 @@ rasgapdf input.pdf --drawings --keep-backgrounds
       ],
       "tables": [
         {
-          "table_id": 0,
+          "table_id": 1,
           "bbox": { "x0": 72.0, "y0": 200.0, "x1": 520.0, "y1": 340.0 },
           "row_count": 4,
           "col_count": 3,
@@ -237,8 +237,39 @@ rasgapdf input.pdf --drawings --keep-backgrounds
           ]
         }
       ],
-      "images": [],
-      "drawings": []
+      "images": [
+        {
+          "image_id": 1,
+          "name": "Im0",
+          "xref": 7,
+          "bbox": { "x0": 330.0, "y0": 442.0, "x1": 530.0, "y1": 592.0, "width": 200.0, "height": 150.0 },
+          "pixel_width": 400,
+          "pixel_height": 300,
+          "bits_per_component": 8,
+          "color_space": "/DeviceRGB",
+          "filter": "DCTDecode",
+          "byte_length": 14200,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "mime_type": "image/jpeg"
+        }
+      ],
+      "drawings": [
+        {
+          "drawing_id": 1,
+          "bbox": { "x0": 100.0, "y0": 292.0, "x1": 500.0, "y1": 292.0, "width": 400.0, "height": 0.0 },
+          "drawing_type": "stroke",
+          "item_count": 1,
+          "items": [
+            { "kind": "line", "p1": [100.0, 292.0], "p2": [500.0, 292.0] }
+          ],
+          "stroke_color": [0.0, 0.0, 0.0],
+          "fill_color": null,
+          "width": 1.0,
+          "line_join": "miter",
+          "line_cap": "butt",
+          "seqno": 1
+        }
+      ]
     }
   ]
 }

@@ -28,6 +28,7 @@
 - [Crates.io Crate (`rasgapdf`)](https://crates.io/crates/rasgapdf)
 - [npm Package (`rasgapdf`)](https://www.npmjs.com/package/rasgapdf)
 - [Full LLM Context (`llms-full.txt`)](https://martinsmessias.github.io/rasgapdf/llms-full.txt)
+- [Diátaxis Documentation Map](https://github.com/MartinsMessias/rasgapdf/blob/main/docs/DIATAXIS.md)
 - [Spatial JSON Schema Specification](https://github.com/MartinsMessias/rasgapdf/blob/main/docs/SCHEMA.md)
 - [Architecture & Technical Design](https://github.com/MartinsMessias/rasgapdf/blob/main/docs/ARCHITECTURE.md)
 

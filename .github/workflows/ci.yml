@@ -47,7 +47,9 @@ jobs:
 
       - name: Test Node.js Binding
         run: |
-          node -e "const { version } = require('./bindings/nodejs/index.js'); console.log('Node FFI Version:', version());"
+          cd bindings/nodejs
+          npm install
+          node -e "const { version } = require('./index.js'); console.log('Node FFI Version:', version());"
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -57,4 +59,4 @@ jobs:
       - name: Test Go Binding
         run: |
           cd bindings/go
-          go run cmd/main.go || true
+          go run cmd/main.go

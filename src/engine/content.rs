@@ -3,6 +3,8 @@ use super::lexer::{Lexer, Token};
 use crate::types::{BoundingBox, RawCoordSpan, SpatialDrawing, SpatialDrawingItem};
 use std::collections::HashMap;
 
+pub const MAX_GRAPHICS_STATE_DEPTH: usize = 64;
+
 /// 2D Affine Transformation Matrix [a, b, c, d, e, f]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Matrix {
@@ -120,6 +122,10 @@ impl<'a> ContentInterpreter<'a> {
         }
     }
 
+    pub fn state_stack_depth(&self) -> usize {
+        self.state_stack.len()
+    }
+
     /// Interprets a decompressed PDF content stream
     pub fn interpret(&mut self, content_bytes: &[u8]) -> Result<(), String> {
         let mut lexer = Lexer::new(content_bytes);
@@ -158,7 +164,9 @@ impl<'a> ContentInterpreter<'a> {
         match op {
             // --- Graphics state operators ---
             "q" => {
-                self.state_stack.push(self.current_state.clone());
+                if self.state_stack.len() < MAX_GRAPHICS_STATE_DEPTH {
+                    self.state_stack.push(self.current_state.clone());
+                }
             }
             "Q" => {
                 if let Some(st) = self.state_stack.pop() {
@@ -587,5 +595,20 @@ B\n";
         let d = &interp.drawings[0];
         assert_eq!(d.width, Some(2.0));
         assert_eq!(d.fill_color, Some([0.0, 0.0, 1.0]));
+    }
+
+    #[test]
+    fn test_graphics_state_stack_depth_capped() {
+        let mut stream = Vec::new();
+        // Push 100 'q' operations
+        for _ in 0..100 {
+            stream.extend_from_slice(b"q\n");
+        }
+        let fonts = HashMap::new();
+        let mut interp = ContentInterpreter::new(1, 842.0, &fonts);
+        interp.interpret(&stream).unwrap();
+
+        // Stack must be capped at MAX_GRAPHICS_STATE_DEPTH (64)
+        assert_eq!(interp.state_stack_depth(), MAX_GRAPHICS_STATE_DEPTH);
     }
 }

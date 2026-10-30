@@ -11,6 +11,7 @@ dist/
 build/
 .venv/
 env/
+*.whl
 
 # Node.js
 node_modules/
@@ -39,7 +40,13 @@ obj/
 
 .npmrc
 
-# Compiled native shared libraries
+# Compiled native shared libraries & Rust artifacts
 *.so
 *.dll
 *.dylib
+*.pdb
+*.lib
+*.a
+*.rlib
+*.rmeta
+.cargo/config.toml

@@ -39,10 +39,17 @@ pub fn decompress_stream(
     }
 }
 
+pub const MAX_DECOMPRESSED_BYTES: u64 = 128 * 1024 * 1024; // 128 MB
+
 pub fn decompress_zlib(data: &[u8]) -> Result<Vec<u8>, String> {
-    let mut decoder = ZlibDecoder::new(data);
+    decompress_zlib_bounded(data, MAX_DECOMPRESSED_BYTES)
+}
+
+pub fn decompress_zlib_bounded(data: &[u8], max_bytes: u64) -> Result<Vec<u8>, String> {
+    let decoder = ZlibDecoder::new(data);
     let mut decompressed = Vec::new();
     decoder
+        .take(max_bytes)
         .read_to_end(&mut decompressed)
         .map_err(|e| format!("Zlib decompression error: {}", e))?;
     Ok(decompressed)
@@ -179,5 +186,25 @@ mod tests {
 
         let decompressed = decompress_stream(&compressed, &dict).unwrap();
         assert_eq!(decompressed, original);
+    }
+
+    #[test]
+    fn test_zlib_decompression_bomb_capped() {
+        // Compress 2 MB of zeros (expands massively from a few bytes)
+        let uncompressed_size = 2 * 1024 * 1024;
+        let original = vec![0u8; uncompressed_size];
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(&original).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        // 1. Verify bounded decompression caps at 64 KB
+        let cap_64kb = 64 * 1024;
+        let decompressed = decompress_zlib_bounded(&compressed, cap_64kb as u64).unwrap();
+        assert_eq!(decompressed.len(), cap_64kb);
+
+        // 2. Verify standard decompress_zlib is bounded by MAX_DECOMPRESSED_BYTES
+        let decompressed_full = decompress_zlib(&compressed).unwrap();
+        assert_eq!(decompressed_full.len(), uncompressed_size);
+        assert!((decompressed_full.len() as u64) <= MAX_DECOMPRESSED_BYTES);
     }
 }

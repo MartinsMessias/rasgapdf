@@ -16,12 +16,17 @@
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://martinsmessias.github.io/rasgapdf/SCHEMA.html</loc>
+    <loc>https://martinsmessias.github.io/rasgapdf/SCHEMA.md</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://martinsmessias.github.io/rasgapdf/ARCHITECTURE.html</loc>
+    <loc>https://martinsmessias.github.io/rasgapdf/ARCHITECTURE.md</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://martinsmessias.github.io/rasgapdf/DIATAXIS.md</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>

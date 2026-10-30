@@ -5,3 +5,9 @@
 *.png binary
 *.jpg binary
 *.jpeg binary
+*.wasm binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.nupkg binary
+*.whl binary
