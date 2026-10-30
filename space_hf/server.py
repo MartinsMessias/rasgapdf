@@ -6,7 +6,10 @@ import time
 import base64
 from pathlib import Path
 
-import fitz
+try:
+    import fitz
+except ImportError:
+    fitz = None
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware

@@ -194,9 +194,7 @@ documents = reader.load_data('financial_report.pdf')
 
 GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). Copyright (c) 2026 Messias Martins.
 
-RasgaPDF embeds and links against [MuPDF](https://mupdf.com/) (Artifex Software),
-which is distributed under the AGPL-3.0. That is why this project is licensed
-under the same terms.
+RasgaPDF is an independent, 100% pure Rust implementation of the ISO 32000-1 PDF specification. It contains zero external C library dependencies and zero MuPDF bindings. All lexical analysis, cross-reference table/stream decoding, Flate decompression, Type 1/TrueType/Type0 CID font decoding, and 2D spatial coordinate tracking are natively executed in pure Rust.
 
 ---
 
