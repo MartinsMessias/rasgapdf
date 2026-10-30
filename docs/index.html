@@ -687,21 +687,24 @@ async function loadPdfFile(file, name = null) {
       try {
         loadError.classList.add('hidden');
 
-        const arrayBuffer = await file.arrayBuffer();
-        // Uint8Array lets pdf.js copy the bytes instead of adopting a detached buffer.
-        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
-        currentPdfDoc = await loadingTask.promise;
+        const rawBytes = new Uint8Array(await file.arrayBuffer());
+        // Always pass a fresh slice/copy so the buffer is never detached
+        const wasmBytes = rawBytes.slice();
+        const pdfJsBytes = rawBytes.slice();
 
-        // 1. Prioritize Pure Rust WebAssembly in the browser, fallback to local server
+        // 1. Prioritize Pure Rust WebAssembly in the browser!
         currentRustDoc = null;
         if (wasmEngine) {
           try {
-            currentRustDoc = parsePdfWithWasm(new Uint8Array(arrayBuffer));
+            currentRustDoc = parsePdfWithWasm(wasmBytes);
             console.log('⚡ Parsed with Pure Rust WebAssembly Engine in', currentRustDoc.parse_time_ms, 'ms');
           } catch (wErr) {
-            console.warn('WASM parse error, trying server:', wErr);
+            console.warn('WASM parse error:', wErr);
           }
         }
+
+        const loadingTask = pdfjsLib.getDocument({ data: pdfJsBytes });
+        currentPdfDoc = await loadingTask.promise;
 
         if (!currentRustDoc) {
           try {
