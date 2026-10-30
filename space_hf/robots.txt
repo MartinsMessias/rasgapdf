@@ -38,4 +38,4 @@ Allow: /
 User-agent: CCBot
 Allow: /
 
-Sitemap: https://martinsmessias.github.io/rasgapdf/sitemap.xml
+Sitemap: https://huggingface.co/spaces/martinsmessias/rasgapdf/sitemap.xml

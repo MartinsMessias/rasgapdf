@@ -27,10 +27,10 @@ tags:
 
 </div>
 
-### 🚀 Dual-Engine Architecture: Native Rust + Client-Side Fallback
-- **⚡ Native Rust Engine (`librasgapdf.so`):** Powered by the official Rust spatial PDF parser backend. Provides microsecond-level extraction of text spans, tables, bounding boxes, drawings, and images. It needs a Python server, so it only runs when this Space is deployed with the Docker SDK (Hugging Face requires a paid plan for Docker Spaces).
-- **🛡️ Client-Side Fallback:** When that backend is unreachable — as on this free static deploy — the visualizer extracts everything directly inside your browser via PDF.js, with the same overlays and JSON output.
-- **Want to run the native backend on your own Hugging Face hardware quota?** Click the **[Duplicate this Space](https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true)** button, switch the SDK to Docker and allocate your own hardware.
+### 🚀 Client-Side Pure Rust WebAssembly Engine
+- **⚡ Pure Rust WebAssembly Engine (`rasgapdf.wasm`):** Powered by the official Rust spatial PDF parser compiled directly to WebAssembly (`wasm32-unknown-unknown`). Provides microsecond-level extraction of text spans, tables, bounding boxes, drawings, and images directly inside your browser with 100% privacy and zero data transmission to external servers.
+- **🛡️ Zero Server Costs:** Runs 100% locally on your device via client-side WebAssembly with zero API quotas or cloud latency.
+- **Want to run your own instance?** Click the **[Duplicate this Space](https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true)** button.
 
 ### 🧩 Client-side mode: full document, same schema
 The fallback is not a reduced preview — it extracts the **whole document** and exports the same JSON shape as the Rust engine:

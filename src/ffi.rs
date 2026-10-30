@@ -6,12 +6,19 @@ use crate::spatial::{extract_text_bytes, parse_file, parse_raw_bytes, parse_raw_
 
 /// Processa um arquivo PDF e retorna o JSON espacial estruturado como string C.
 /// O chamador deve liberar a memória chamando `rasgapdf_free_string`.
+///
+/// # Safety
+/// O ponteiro `path_ptr` deve ser não-nulo e apontar para uma string C válida terminada em NUL.
 #[no_mangle]
 pub extern "C" fn rasgapdf_parse_file(path_ptr: *const c_char) -> *mut c_char {
     rasgapdf_parse_file_options(path_ptr, std::ptr::null())
 }
 
-/// Modo 1: Retorna exclusivamente a lista plana de coordenadas brutas X/Y
+/// Modo 1: Retorna exclusivamente a lista plana de coordenadas brutas X/Y.
+///
+/// # Safety
+/// O ponteiro `path_ptr` deve ser não-nulo e apontar para uma string C válida terminada em NUL.
+/// O ponteiro retornado deve ser liberado via `rasgapdf_free_string`.
 #[no_mangle]
 pub extern "C" fn rasgapdf_parse_raw(path_ptr: *const c_char) -> *mut c_char {
     if path_ptr.is_null() {
@@ -35,7 +42,11 @@ pub extern "C" fn rasgapdf_parse_raw(path_ptr: *const c_char) -> *mut c_char {
     }
 }
 
-/// Processa um PDF com opções JSON customizadas
+/// Processa um PDF com opções JSON customizadas.
+///
+/// # Safety
+/// `path_ptr` e `options_json_ptr` (se não-nulo) devem apontar para strings C válidas terminadas em NUL.
+/// O ponteiro retornado deve ser liberado via `rasgapdf_free_string`.
 #[no_mangle]
 pub extern "C" fn rasgapdf_parse_file_options(path_ptr: *const c_char, options_json_ptr: *const c_char) -> *mut c_char {
     if path_ptr.is_null() {
@@ -72,7 +83,10 @@ pub extern "C" fn rasgapdf_parse_file_options(path_ptr: *const c_char, options_j
     }
 }
 
-/// Libera a string alocada pelo Rust
+/// Libera a string alocada pelo Rust.
+///
+/// # Safety
+/// `ptr` deve ser um ponteiro previamente retornado por uma função C-ABI do RasgaPDF ou nulo.
 #[no_mangle]
 pub extern "C" fn rasgapdf_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
@@ -132,7 +146,10 @@ pub extern "C" fn rasgapdf_extract_images(path_ptr: *const c_char, dir_ptr: *con
     }
 }
 
-/// Retorna a versão da biblioteca
+/// Retorna a versão da biblioteca.
+///
+/// # Safety
+/// Retorna um ponteiro estático de tempo de vida estático que NUNCA deve ser liberado pelo chamador.
 #[no_mangle]
 pub extern "C" fn rasgapdf_version() -> *const c_char {
     concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr() as *const c_char
