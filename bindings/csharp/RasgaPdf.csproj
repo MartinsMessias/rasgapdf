@@ -17,18 +17,10 @@
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
-    <None Include="..\..\target\release\librasgapdf.so" Condition="Exists('..\..\target\release\librasgapdf.so')" Pack="true" PackagePath="runtimes/linux-x64/native/librasgapdf.so">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\..\target\release\rasgapdf.dll" Condition="Exists('..\..\target\release\rasgapdf.dll')" Pack="true" PackagePath="runtimes/win-x64/native/rasgapdf.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\..\target\release\librasgapdf.dylib" Condition="Exists('..\..\target\release\librasgapdf.dylib')" Pack="true" PackagePath="runtimes/osx-x64/native/librasgapdf.dylib">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\..\target\release\librasgapdf.dylib" Condition="Exists('..\..\target\release\librasgapdf.dylib')" Pack="true" PackagePath="runtimes/osx-arm64/native/librasgapdf.dylib">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <None Include="..\..\target\release\librasgapdf.so" Condition="Exists('..\..\target\release\librasgapdf.so')" Pack="true" PackagePath="runtimes/linux-x64/native/librasgapdf.so" />
+    <None Include="..\..\target\release\rasgapdf.dll" Condition="Exists('..\..\target\release\rasgapdf.dll')" Pack="true" PackagePath="runtimes/win-x64/native/rasgapdf.dll" />
+    <None Include="..\..\target\release\librasgapdf.dylib" Condition="Exists('..\..\target\release\librasgapdf.dylib')" Pack="true" PackagePath="runtimes/osx-x64/native/librasgapdf.dylib" />
+    <None Include="..\..\target\release\librasgapdf.dylib" Condition="Exists('..\..\target\release\librasgapdf.dylib')" Pack="true" PackagePath="runtimes/osx-arm64/native/librasgapdf.dylib" />
   </ItemGroup>
 
 </Project>
