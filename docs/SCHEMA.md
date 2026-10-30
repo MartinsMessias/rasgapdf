@@ -90,7 +90,7 @@ Reconstructs the visual hierarchy into visual paragraphs (`text_blocks`), text l
 | `page_number` | `integer` | 1-based page index |
 | `width` | `float` | Page width in typographical points |
 | `height` | `float` | Page height in typographical points |
-| `rotation` | `integer` | Real page `/Rotate` value (0, 90, 180, 270) reported by MuPDF |
+| `rotation` | `integer` | Real page `/Rotate` value (0, 90, 180, 270) reported by the pure Rust parser |
 | `text_blocks` | `array<SpatialBlock>` | Visual paragraphs |
 | `tables` | `array<SpatialTable>` | Auto-detected matrix tables |
 | `raw_span_count` | `integer` | Number of raw text spans used for table detection |

@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>RasgaPdf</PackageId>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <Authors>Messias Martins</Authors>
     <Description>Ultra-fast 2D spatial PDF parser powered by pure Rust for .NET — extract exact [x0, y0, x1, y1] bounding boxes, text blocks, tables, images &amp; vector paths in milliseconds</Description>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
@@ -16,7 +16,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\target\release\librasgapdf.so" Condition="Exists('..\..\target\release\librasgapdf.so')" Pack="true" PackagePath="runtimes/linux-x64/native/librasgapdf.so">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

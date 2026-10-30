@@ -192,8 +192,7 @@ fn read_ascii_xref_subsections(parser: &mut Parser, table: &mut XRefTable) -> Re
             {
                 let obj_id = first_id + i;
                 if typ == "n" {
-                    table.entries.insert(
-                        obj_id,
+                    table.entries.entry(obj_id).or_insert(
                         XRefEntry::Uncompressed {
                             offset: offset as usize,
                             generation: gen as u16,
@@ -264,8 +263,7 @@ fn read_binary_xref_stream(
             match entry_type {
                 1 => {
                     // Type 1: uncompressed object at file byte offset
-                    table.entries.insert(
-                        obj_id,
+                    table.entries.entry(obj_id).or_insert(
                         XRefEntry::Uncompressed {
                             offset: f1 as usize,
                             generation: f2 as u16,
@@ -274,8 +272,7 @@ fn read_binary_xref_stream(
                 }
                 2 => {
                     // Type 2: object in object stream (f1 = stream obj num, f2 = index)
-                    table.entries.insert(
-                        obj_id,
+                    table.entries.entry(obj_id).or_insert(
                         XRefEntry::Compressed {
                             stream_num: f1 as u32,
                             index: f2 as u16,
@@ -292,7 +289,7 @@ fn read_binary_xref_stream(
 
 fn read_int(bytes: &[u8]) -> u64 {
     let mut val = 0u64;
-    for &b in bytes {
+    for &b in bytes.iter().take(8) {
         val = (val << 8) | (b as u64);
     }
     val

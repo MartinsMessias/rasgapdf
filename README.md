@@ -31,15 +31,16 @@ pipeline_tag: document-question-answering
 *Extract exact physical coordinates (Raw X/Y) or structured blocks & tables at native hardware speeds.*
 
 [![Hugging Face Space](https://img.shields.io/badge/%F0%9F%A4%97%20Space-Live%20Demo-blue)](https://huggingface.co/spaces/martinsmessias/rasgapdf)
-[![Duplicate this Space](https://huggingface.co/datasets/huggingface/badges/resolve/main/duplicate-this-space-md.svg)](https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true)
 [![PyPI version](https://img.shields.io/pypi/v/rasgapdf.svg?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/rasgapdf/)
-[![Crates.io](https://img.shields.io/crates/v/rasgapdf.svg?color=orange&logo=rust)](https://crates.io/crates/rasgapdf)
+[![PyPI Downloads](https://img.shields.io/pepy/dt/rasgapdf?color=blue&logo=pypi&logoColor=white&label=PyPI%20downloads)](https://pypi.org/project/rasgapdf/)
 [![npm version](https://img.shields.io/npm/v/rasgapdf.svg?color=red&logo=npm)](https://www.npmjs.com/package/rasgapdf)
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?logo=github)](https://github.com/MartinsMessias/rasgapdf)
-[![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hub-Model%20Repo-blue)](https://huggingface.co/martinsmessias/rasgapdf)
+[![npm Downloads](https://img.shields.io/npm/dt/rasgapdf?color=red&logo=npm&logoColor=white&label=npm%20downloads)](https://www.npmjs.com/package/rasgapdf)
+[![Crates.io](https://img.shields.io/crates/v/rasgapdf.svg?color=orange&logo=rust)](https://crates.io/crates/rasgapdf)
+[![Crates.io Downloads](https://img.shields.io/crates/d/rasgapdf?color=orange&logo=rust&logoColor=white&label=crates.io%20downloads)](https://crates.io/crates/rasgapdf)
+[![NuGet version](https://img.shields.io/nuget/v/RasgaPdf.svg?color=purple&logo=nuget)](https://www.nuget.org/packages/RasgaPdf/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/RasgaPdf?color=purple&logo=nuget&logoColor=white&label=NuGet%20downloads)](https://www.nuget.org/packages/RasgaPdf/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/MartinsMessias/rasgapdf/badge)](https://securityscorecards.dev/viewer/?uri=github.com/MartinsMessias/rasgapdf)
-[![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg)](SECURITY.md)
 [![Commercial License](https://img.shields.io/badge/Commercial%20License-Available-success.svg)](mailto:messiasads2017@gmail.com?subject=RasgaPDF%20Commercial%20License%20Inquiry)
 
 [**GitHub Repo**](https://github.com/MartinsMessias/rasgapdf) • [**Web Visualizer**](https://martinsmessias.github.io/rasgapdf/) • [**HF Space Demo**](https://huggingface.co/spaces/martinsmessias/rasgapdf) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md) • [**llms.txt**](llms.txt)
@@ -129,7 +130,7 @@ Add `rasgapdf` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rasgapdf = "0.3.0"
+rasgapdf = "0.3.1"
 ```
 
 ### ⚡ Mode 1: Raw Physical Coordinates (Raw X/Y)
@@ -248,12 +249,13 @@ Equivalent CLI flags: `--images`, `--drawings`, `--extract-images DIR`, and `--k
 
 RasgaPDF provides native C-ABI bindings for other languages, each published with its own language-specific package and documentation:
 
-| Language | Registry | Package / Installation | Documentation |
-| :--- | :--- | :--- | :--- |
-| **Python** | [PyPI](https://pypi.org/project/rasgapdf/) | `pip install rasgapdf` | [Python Guide & Examples](bindings/python/README.md) |
-| **Node.js** | [npm](https://www.npmjs.com/package/rasgapdf) | `npm install rasgapdf` | [Node.js Guide & Examples](bindings/nodejs/README.md) |
-| **Go** | Go Module | `bindings/go` | [Go Bindings](bindings/go/) |
-| **C# / .NET** | .NET Class Library | `bindings/csharp` | [C# Bindings](bindings/csharp/) |
+| Language | Registry | Package / Installation | Total Downloads | Documentation |
+| :--- | :--- | :--- | :--- | :--- |
+| 🐍 **Python** | [PyPI](https://pypi.org/project/rasgapdf/) | `pip install rasgapdf` | [![PyPI](https://img.shields.io/pepy/dt/rasgapdf?color=blue&logo=pypi&logoColor=white&label=)](https://pypi.org/project/rasgapdf/) | [Python Guide & Examples](bindings/python/README.md) |
+| 📦 **Node.js** | [npm](https://www.npmjs.com/package/rasgapdf) | `npm install rasgapdf` | [![npm](https://img.shields.io/npm/dt/rasgapdf?color=red&logo=npm&logoColor=white&label=)](https://www.npmjs.com/package/rasgapdf) | [Node.js Guide & Examples](bindings/nodejs/README.md) |
+| 🦀 **Rust** | [crates.io](https://crates.io/crates/rasgapdf) | `cargo add rasgapdf` | [![crates.io](https://img.shields.io/crates/d/rasgapdf?color=orange&logo=rust&logoColor=white&label=)](https://crates.io/crates/rasgapdf) | [docs.rs Reference](https://docs.rs/rasgapdf) |
+| 🔷 **C# / .NET** | [NuGet](https://www.nuget.org/packages/RasgaPdf/) | `dotnet add package RasgaPdf` | [![NuGet](https://img.shields.io/nuget/dt/RasgaPdf?color=purple&logo=nuget&logoColor=white&label=)](https://www.nuget.org/packages/RasgaPdf/) | [C# Guide & Examples](bindings/csharp/README.md) |
+| 🐹 **Go** | Go Module | `go get github.com/MartinsMessias/rasgapdf/bindings/go` | *(via Go Proxy)* | [Go Guide & Examples](bindings/go/README.md) |
 
 ---
 
@@ -309,7 +311,7 @@ print(response)
 ### 🌐 Live Hugging Face Space (Zero Server Quota / Client-Side)
 Test RasgaPDF instantly without installing anything:
 - **Live Demo:** [**https://huggingface.co/spaces/martinsmessias/rasgapdf**](https://huggingface.co/spaces/martinsmessias/rasgapdf)
-- **Zero Server Costs:** Runs directly in your browser using client-side WebAssembly & PDF.js.
+- **Zero Server Costs:** Runs directly in your browser using pure client-side Rust WebAssembly.
 - **Run on Your Personal Quota:** Click [![Duplicate this Space](https://huggingface.co/datasets/huggingface/badges/resolve/main/duplicate-this-space-sm.svg)](https://huggingface.co/spaces/martinsmessias/rasgapdf?duplicate=true) to clone into your own Hugging Face account with your personal compute quota.
 
 ---
@@ -322,12 +324,19 @@ RasgaPDF provides first-class machine-readable documentation following the [llms
 - **Complete Technical Reference (`llms-full.txt`):** [`llms-full.txt`](https://martinsmessias.github.io/rasgapdf/llms-full.txt)
 - **Coding Agent Instructions:** [`AGENTS.md`](AGENTS.md)
 
-### Frequently Asked Questions (FAQ — EN / PT-BR)
+### ❓ Frequently Asked Questions (FAQ)
 
+#### 🇬🇧 English
 - **When should I choose RasgaPDF over PyMuPDF (`fitz`), `pdfplumber`, or `pypdf`?**  
   Choose **RasgaPDF** when you need exact 2D bounding-box coordinates `[x0, y0, x1, y1]`, automatic matrix table reconstruction, opt-in embedded image/vector extraction, or high-throughput multi-threaded Rust speed (~3–8 ms/page — up to 50x faster than `pdfplumber` and 4x faster than `PyMuPDF`) with an identical JSON schema across **Rust, Python, Node.js, Go, and C#**.
-- **Como extrair texto, tabelas e coordenadas X/Y (`bounding boxes`) de PDF rápido em Python, Rust ou Node.js?**  
-  Instale o **RasgaPDF** via `pip install rasgapdf`, `npm install rasgapdf` ou `cargo add rasgapdf`. Use `rasgapdf.parse_raw("arquivo.pdf")` para obter coordenadas físicas `[x0, y0, x1, y1]` em ~3–8 ms por página, ou `rasgapdf.parse_pdf("arquivo.pdf", detect_tables=True, extract_images=True, extract_drawings=True)` para reconstruir blocos de texto, tabelas, imagens embutidas e gráficos vetoriais.
+- **Does RasgaPDF require external C dependencies or PDF.js?**  
+  No. RasgaPDF is 100% pure Rust with zero external C dependencies. The browser visualizer runs on pure client-side WebAssembly compiled from the same Rust codebase.
+
+#### 🇧🇷 Português (Brasil)
+- **Como extrair texto, tabelas e coordenadas X/Y (`bounding boxes`) de PDF rápido em Python, Rust, Node.js ou C#?**  
+  Instale o **RasgaPDF** via `pip install rasgapdf`, `npm install rasgapdf`, `dotnet add package RasgaPdf` ou `cargo add rasgapdf`. Use `parse_raw("arquivo.pdf")` para obter coordenadas físicas `[x0, y0, x1, y1]` em ~3–8 ms por página, ou `parse_pdf("arquivo.pdf", detect_tables=True, extract_images=True, extract_drawings=True)` para reconstruir blocos de texto, tabelas, imagens embutidas e gráficos vetoriais.
+- **O RasgaPDF funciona no navegador em WebAssembly sem servidor?**  
+  Sim. Todo o core em Rust compila diretamente para `wasm32-unknown-unknown`, permitindo processamento 100% local no navegador com segurança e privacidade total (Zero Data Transmission).
 
 ---
 
@@ -344,10 +353,7 @@ Contributions are what make the open-source community thrive!
 RasgaPDF is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).  
 Copyright (c) 2026 Messias Martins.
 
-RasgaPDF links against [MuPDF](https://mupdf.com/) (Artifex Software), which is
-distributed under the AGPL-3.0. As a derivative work, the whole project is licensed
-under the same terms: if you distribute RasgaPDF — or expose it as a network service —
-you must make the complete corresponding source available under the AGPL-3.0.
+RasgaPDF is an independent, 100% pure Rust implementation of the ISO 32000-1 PDF specification. It contains zero external C library dependencies and zero MuPDF bindings. All lexical analysis, cross-reference table/stream decoding, Flate decompression, Type 1/TrueType/Type0 CID font decoding, and 2D spatial coordinate tracking are natively executed in pure Rust.
 
 ---
 

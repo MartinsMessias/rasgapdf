@@ -38,8 +38,10 @@ impl PdfFont {
     }
 
     pub fn add_cid_width_range(&mut self, start_cid: u32, end_cid: u32, width: f32) {
-        for c in start_cid..=end_cid {
-            self.cid_widths.insert(c, width);
+        if start_cid <= end_cid && (end_cid - start_cid) <= 65536 {
+            for c in start_cid..=end_cid {
+                self.cid_widths.insert(c, width);
+            }
         }
     }
 

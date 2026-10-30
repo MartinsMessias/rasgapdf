@@ -53,7 +53,7 @@ The fallback is not a reduced preview — it extracts the **whole document** and
 | `drawings[].seqno` | counts every display-list operation, including text | counts only painted vector paths |
 | `images[].xref` / `filter` | real stream values | `0` / `null` (not exposed by PDF.js) |
 | `images[].sha256` / `byte_length` | digest of the original stream | digest of the normalized PNG rendered by the browser |
-| glyph boxes | MuPDF font metrics | PDF.js font metrics (line/table `bbox` may differ by ~2 pt) |
+| glyph boxes | Pure Rust font metrics | WASM font metrics (line/table `bbox` may differ by ~2 pt) |
 | `images[].mime_type` | detected from the stream | always `image/png` |
 
 These differences are metadata/geometry only: counts, ordering, table structure, colours and the JSON schema are identical.
