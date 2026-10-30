@@ -242,6 +242,29 @@ impl<'a> PurePdfDoc<'a> {
                         }
                     }
 
+                    // /DescendantFonts (for Type0 / CID fonts)
+                    if let Some(desc_obj) = resolved_font.dict_get("DescendantFonts") {
+                        if let Ok(desc_resolved) = self.resolve(desc_obj) {
+                            if let Some(desc_arr) = desc_resolved.as_array() {
+                                if let Some(first_desc) = desc_arr.first() {
+                                    if let Ok(df_resolved) = self.resolve(first_desc) {
+                                        if let Some(dw) = df_resolved.dict_get("DW").and_then(|d| d.as_f64()) {
+                                            pdf_font.default_width = dw as f32;
+                                        }
+
+                                        if let Some(w_obj) = df_resolved.dict_get("W") {
+                                            if let Ok(w_resolved) = self.resolve(w_obj) {
+                                                if let Some(w_arr) = w_resolved.as_array() {
+                                                    self.parse_cid_font_widths(&mut pdf_font, w_arr);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // /ToUnicode CMap
                     if let Some(to_uni_obj) = resolved_font.dict_get("ToUnicode") {
                         if let Ok(tu_resolved) = self.resolve(to_uni_obj) {
@@ -259,6 +282,49 @@ impl<'a> PurePdfDoc<'a> {
         }
 
         Ok(())
+    }
+
+        fn parse_cid_font_widths(&mut self, font: &mut PdfFont, w_arr: &[PdfObject]) {
+        let mut i = 0;
+        while i < w_arr.len() {
+            let start_cid = match self.resolve(&w_arr[i]).ok().and_then(|o| o.as_i64()) {
+                Some(sc) => sc as u32,
+                None => {
+                    i += 1;
+                    continue;
+                }
+            };
+            i += 1;
+            if i >= w_arr.len() {
+                break;
+            }
+
+            let next_resolved = match self.resolve(&w_arr[i]) {
+                Ok(nr) => nr,
+                Err(_) => {
+                    i += 1;
+                    continue;
+                }
+            };
+
+            if let Some(arr) = next_resolved.as_array() {
+                // Format 1: start_cid [ w1 w2 w3 ... ]
+                let widths: Vec<f32> = arr.iter().filter_map(|w| self.resolve(w).ok().and_then(|v| v.as_f64()).map(|v| v as f32)).collect();
+                font.add_cid_width_entry(start_cid, &widths);
+                i += 1;
+            } else if let Some(end_cid) = next_resolved.as_i64() {
+                // Format 2: start_cid end_cid width
+                i += 1;
+                if i < w_arr.len() {
+                    if let Some(width) = self.resolve(&w_arr[i]).ok().and_then(|w| w.as_f64()) {
+                        font.add_cid_width_range(start_cid, end_cid as u32, width as f32);
+                    }
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
     }
 
     fn load_page_contents(&mut self, page_obj: &PdfObject) -> Result<Vec<u8>, String> {

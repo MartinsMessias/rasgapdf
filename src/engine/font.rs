@@ -12,6 +12,7 @@ pub struct PdfFont {
     pub widths: Vec<f32>,
     pub default_width: f32,
     pub to_unicode: HashMap<u32, String>,
+    pub cid_widths: HashMap<u32, f32>,
 }
 
 impl PdfFont {
@@ -25,10 +26,23 @@ impl PdfFont {
             widths: Vec::new(),
             default_width: 500.0,
             to_unicode: HashMap::new(),
+            cid_widths: HashMap::new(),
         }
     }
 
     /// Sets the base font name and updates fallback metrics accordingly
+        pub fn add_cid_width_entry(&mut self, start_cid: u32, widths: &[f32]) {
+        for (i, &w) in widths.iter().enumerate() {
+            self.cid_widths.insert(start_cid + i as u32, w);
+        }
+    }
+
+    pub fn add_cid_width_range(&mut self, start_cid: u32, end_cid: u32, width: f32) {
+        for c in start_cid..=end_cid {
+            self.cid_widths.insert(c, width);
+        }
+    }
+
     pub fn set_base_font(&mut self, base_font: &str) {
         self.base_font = base_font.to_string();
         if self.widths.is_empty() {
@@ -43,6 +57,9 @@ impl PdfFont {
 
     /// Calculates the normalized advance width of a character code in font units (typically 1000 units = 1 em)
     pub fn get_char_width(&self, char_code: u32) -> f32 {
+        if let Some(&w) = self.cid_widths.get(&char_code) {
+            return w;
+        }
         if char_code >= self.first_char && char_code <= self.last_char {
             let idx = (char_code - self.first_char) as usize;
             if idx < self.widths.len() {
