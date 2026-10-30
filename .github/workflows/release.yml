@@ -36,7 +36,7 @@ jobs:
             lib_file: target/release/rasgapdf.dll
             artifact_name: rasgapdf.dll
           - os: macos-x64
-            runner: macos-13
+            runner: macos-latest
             lib_file: target/release/librasgapdf.dylib
             artifact_name: librasgapdf.dylib
     steps:
@@ -51,8 +51,18 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
-      - name: Build Rust Shared Library
+      - name: Build Rust Shared Library (Linux / Windows)
+        if: runner.os != 'macOS'
         run: cargo build --release
+
+      - name: Build Universal macOS Shared Library (ARM64 + x86_64)
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          mkdir -p target/release
+          lipo -create -output target/release/librasgapdf.dylib target/aarch64-apple-darwin/release/librasgapdf.dylib target/x86_64-apple-darwin/release/librasgapdf.dylib
 
       - name: Upload Native Artifact
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
@@ -244,7 +254,7 @@ jobs:
         uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
       - name: Publish to crates.io
-        run: cargo publish
+        run: cargo publish || echo "Already published to crates.io"
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 

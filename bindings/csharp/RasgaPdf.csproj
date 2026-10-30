@@ -26,6 +26,9 @@
     <None Include="..\..\target\release\librasgapdf.dylib" Condition="Exists('..\..\target\release\librasgapdf.dylib')" Pack="true" PackagePath="runtimes/osx-x64/native/librasgapdf.dylib">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\..\target\release\librasgapdf.dylib" Condition="Exists('..\..\target\release\librasgapdf.dylib')" Pack="true" PackagePath="runtimes/osx-arm64/native/librasgapdf.dylib">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>
