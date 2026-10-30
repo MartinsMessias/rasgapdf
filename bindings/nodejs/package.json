@@ -35,7 +35,7 @@
     "rag",
     "llm",
     "document-ai",
-    "rust",
+    "rust"
   ],
   "author": "Messias Martins",
   "license": "AGPL-3.0-or-later",
