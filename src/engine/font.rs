@@ -71,13 +71,49 @@ impl PdfFont {
         self.default_width
     }
 
-    /// Converts a raw character code to Unicode string via /ToUnicode CMap, or fallback to Latin-1/ASCII
+/// Maps Windows-1252 (WinAnsiEncoding) bytes to Unicode chars.
+/// For 0x00..=0x7F and 0xA0..=0xFF, CP-1252 is identical to Latin-1/Unicode.
+/// The range 0x80..=0x9F contains Windows-1252 specific typographical characters.
+pub fn cp1252_to_char(b: u8) -> char {
+    match b {
+        0x80 => '€', // Euro sign
+        0x82 => '‚', // Single low-9 quotation mark
+        0x83 => 'ƒ', // Latin small letter f with hook
+        0x84 => '„', // Double low-9 quotation mark
+        0x85 => '…', // Horizontal ellipsis
+        0x86 => '†', // Dagger
+        0x87 => '‡', // Double dagger
+        0x88 => 'ˆ', // Modifier letter circumflex accent
+        0x89 => '‰', // Per mille sign
+        0x8A => 'Š', // Latin capital letter S with caron
+        0x8B => '‹', // Single left-pointing angle quotation mark
+        0x8C => 'Œ', // Latin capital ligature OE
+        0x8E => 'Ž', // Latin capital letter Z with caron
+        0x91 => '‘', // Left single quotation mark
+        0x92 => '’', // Right single quotation mark
+        0x93 => '“', // Left double quotation mark
+        0x94 => '”', // Right double quotation mark
+        0x95 => '•', // Bullet
+        0x96 => '–', // En dash (U+2013)
+        0x97 => '—', // Em dash (U+2014)
+        0x98 => '˜', // Small tilde
+        0x99 => '™', // Trade mark sign
+        0x9A => 'š', // Latin small letter s with caron
+        0x9B => '›', // Single right-pointing angle quotation mark
+        0x9C => 'œ', // Latin small ligature oe
+        0x9E => 'ž', // Latin small letter z with caron
+        0x9F => 'Ÿ', // Latin capital letter Y with diaeresis
+        _ => b as char, // ASCII (0x00..=0x7F) and Latin-1 supplement (0xA0..=0xFF)
+    }
+}
+
+    /// Converts a raw character code to Unicode string via /ToUnicode CMap, or fallback to Windows-1252 / Latin-1 / ASCII
     pub fn decode_char(&self, char_code: u32) -> String {
         if let Some(s) = self.to_unicode.get(&char_code) {
             return s.clone();
         }
         if char_code < 256 {
-            let c = char_code as u8 as char;
+            let c = Self::cp1252_to_char(char_code as u8);
             return c.to_string();
         }
         char::from_u32(char_code).map(|c| c.to_string()).unwrap_or_default()

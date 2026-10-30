@@ -41,7 +41,7 @@ impl TableDetector {
             } else {
                 if !current_line.is_empty() {
                     current_line.sort_by(|a, b| a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal));
-                    lines.push(current_line);
+                    lines.push(Self::coalesce_line_spans(&current_line, self.col_tolerance));
                 }
                 current_line = vec![span.clone()];
                 current_y = span.y0;
@@ -49,7 +49,7 @@ impl TableDetector {
         }
         if !current_line.is_empty() {
             current_line.sort_by(|a, b| a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal));
-            lines.push(current_line);
+            lines.push(Self::coalesce_line_spans(&current_line, self.col_tolerance));
         }
 
         let mut detected_tables = Vec::new();
@@ -180,5 +180,30 @@ impl TableDetector {
             rows: structured_rows,
             cells,
         }
+    }
+fn coalesce_line_spans(line: &[RawSpan], col_tolerance: f32) -> Vec<RawSpan> {
+        if line.is_empty() {
+            return Vec::new();
+        }
+        let mut items = Vec::new();
+        let mut curr = line[0].clone();
+
+        for span in &line[1..] {
+            let gap = span.x0 - curr.x1;
+            if gap < col_tolerance {
+                if !curr.text.ends_with(' ') && !span.text.starts_with(' ') {
+                    curr.text.push(' ');
+                }
+                curr.text.push_str(&span.text);
+                curr.x1 = curr.x1.max(span.x1);
+                curr.y0 = curr.y0.min(span.y0);
+                curr.y1 = curr.y1.max(span.y1);
+            } else {
+                items.push(curr);
+                curr = span.clone();
+            }
+        }
+        items.push(curr);
+        items
     }
 }

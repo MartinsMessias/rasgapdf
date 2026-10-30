@@ -493,7 +493,7 @@ impl<'a> PurePdfDoc<'a> {
             });
 
             // Cluster touching or sub-character glyph spans on the same baseline
-            let clustered_spans = cluster_touching_spans(&raw_spans, 2.0);
+            let clustered_spans = cluster_touching_spans(&raw_spans);
 
             // Table detection
             let (tables, non_table_spans) = if options.detect_tables {
@@ -694,8 +694,10 @@ fn compute_lines_bbox(lines: &[SpatialLine]) -> BoundingBox {
     }
 }
 
-/// Clusters touching or sub-character glyph spans on the same baseline
-fn cluster_touching_spans(spans: &[RawSpan], char_spacing_limit: f32) -> Vec<RawSpan> {
+/// Clusters touching or sub-character glyph spans on the same baseline.
+/// Uses a dynamic threshold based on font size to distinguish genuine continuation/hyphen
+/// sub-spans (gap <= 0.75pt) from distinct words in small fonts (word spacing >= 1.59pt).
+fn cluster_touching_spans(spans: &[RawSpan]) -> Vec<RawSpan> {
     if spans.is_empty() {
         return Vec::new();
     }
@@ -707,7 +709,25 @@ fn cluster_touching_spans(spans: &[RawSpan], char_spacing_limit: f32) -> Vec<Raw
         let same_baseline = (next_span.y0 - current.y0).abs() <= 3.0;
         let gap = next_span.x0 - current.x1;
 
-        if same_baseline && gap >= -1.0 && gap <= char_spacing_limit {
+        // Dynamic spacing limit based on font size:
+        // Inter-word gaps in 6pt fonts are ~1.59pt, while glyph/continuation gaps are <= 0.75pt.
+        let char_spacing_limit = (current.font_size * 0.10).clamp(0.4, 0.85);
+
+        // Continuation conditions:
+        // 1. Same baseline
+        // 2. Not already separated by an explicit space in the text
+        // 3. Either touching/overlapping (gap >= -1.0 && gap <= char_spacing_limit),
+        //    OR continuing a trailing hyphen/slash (e.g. "NFS-", "0001-") where gap <= 1.2
+        let ends_with_hyphen = current.text.ends_with('-') || current.text.ends_with('/');
+        let allowed_limit = if ends_with_hyphen {
+            char_spacing_limit.max(1.2)
+        } else {
+            char_spacing_limit
+        };
+
+        let has_explicit_space = current.text.ends_with(' ') || next_span.text.starts_with(' ');
+
+        if same_baseline && !has_explicit_space && gap >= -1.0 && gap <= allowed_limit {
             // Merge horizontally touching spans
             current.text.push_str(&next_span.text);
             current.x1 = current.x1.max(next_span.x1);
