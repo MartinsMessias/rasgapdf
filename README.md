@@ -339,6 +339,10 @@ Contributions are what make the open-source community thrive!
 
 ---
 
+## 🧪 Spatial RAG Example
+
+See [`examples/langchain_spatial_rag.ipynb`](examples/langchain_spatial_rag.ipynb) for an end-to-end LangChain tutorial: ingest a PDF with `RasgaPDFLoader(mode='elements')`, embed into ChromaDB/FAISS, and use the returned box metadata to draw highlights on the page.
+
 ## 📄 License
 
 RasgaPDF is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).  
