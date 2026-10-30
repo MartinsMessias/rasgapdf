@@ -3,7 +3,7 @@
 > **Summary:** RasgaPDF is a high-performance 2D spatial PDF parser written in 100% pure Rust (zero C/C++ dependencies, powered by internal ISO 32000 engine + Rayon) with native C-ABI bindings for Python, Node.js, Rust, Go, and C# (.NET 8). It extracts exact 2D physical coordinates `[x0, y0, x1, y1]`, typography metadata, visual paragraphs, auto-detected matrix tables, embedded images, and vector graphics in ~3 to 8 ms per page.
 
 - **Name:** RasgaPDF (`rasgapdf`)
-- **Version:** 0.3.1
+- **Version:** 0.3.2
 - **Author:** Messias Martins
 - **License:** AGPL-3.0-or-later
 - **GitHub:** https://github.com/MartinsMessias/rasgapdf
@@ -52,7 +52,7 @@ Measured on Intel Core i7-1365U (10 Cores / 12 Threads, AVX2):
 import rasgapdf
 
 # 1. Version string
-print(rasgapdf.version())  # "0.3.1"
+print(rasgapdf.version())  # "0.3.2"
 
 # 2. Mode 1: Flat Physical Coordinates (Raw X/Y)
 raw_doc = rasgapdf.parse_raw("sample.pdf")
@@ -85,7 +85,7 @@ manifest = rasgapdf.extract_images("sample.pdf", "./extracted_images")
 ```javascript
 const { parseRaw, parsePdf, extractImages, version } = require('rasgapdf');
 
-console.log(version()); // "0.3.1"
+console.log(version()); // "0.3.2"
 
 // Mode 1: Flat Physical Coordinates
 const raw = parseRaw('sample.pdf');

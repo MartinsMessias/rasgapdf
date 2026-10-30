@@ -302,7 +302,7 @@ function extractText(input) {
 
 function version() {
   if (ffiLib && ffiLib.version) return ffiLib.version();
-  return '0.3.1';
+  return '0.3.2';
 }
 
 module.exports = {

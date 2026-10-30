@@ -5,9 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>RasgaPdf</PackageId>
-    <Version>0.3.1</Version>
+    <Version>0.3.2</Version>
     <Authors>Messias Martins</Authors>
-    <Description>Ultra-fast 2D spatial PDF parser powered by pure Rust for .NET — extract exact [x0, y0, x1, y1] bounding boxes, text blocks, tables, images &amp; vector paths in milliseconds</Description>
+    <Description>Ultra-fast 2D spatial PDF parser powered by pure Rust for .NET — extract exact [x0, y0, x1, y1] bounding boxes, text blocks, tables, images &amp; vector paths in milliseconds across Windows, Linux and macOS</Description>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <PackageProjectUrl>https://martinsmessias.github.io/rasgapdf/</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MartinsMessias/rasgapdf</RepositoryUrl>
@@ -21,6 +21,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="..\..\target\release\rasgapdf.dll" Condition="Exists('..\..\target\release\rasgapdf.dll')" Pack="true" PackagePath="runtimes/win-x64/native/rasgapdf.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\target\release\librasgapdf.dylib" Condition="Exists('..\..\target\release\librasgapdf.dylib')" Pack="true" PackagePath="runtimes/osx-x64/native/librasgapdf.dylib">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
