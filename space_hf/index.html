@@ -332,8 +332,14 @@
 
       <!-- Tab Content 4: JSON Export -->
       <div id="tab-json" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
-        <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs shrink-0">
-          <span class="font-semibold text-slate-300">Raw Spatial Document JSON</span>
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs shrink-0">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-slate-300">JSON Inspection:</span>
+            <div class="inline-flex rounded-lg bg-slate-900 p-0.5 border border-slate-800">
+              <button id="btnJsonStructured" class="px-2.5 py-1 rounded text-xs font-medium bg-cyan-950 text-cyan-300 border border-cyan-800 transition">Structured Layout</button>
+              <button id="btnJsonRaw" class="px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition">Raw X/Y Spans</button>
+            </div>
+          </div>
           <div class="flex items-center gap-2">
             <button id="btnCopyJson" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-xs font-semibold flex items-center gap-1 transition">
               📋 Copy JSON
@@ -1236,20 +1242,35 @@ async function loadPdfFile(file, name = null) {
       pureTextBox.value = flow;
     }
 
+    let currentJsonViewMode = 'structured'; // 'structured' | 'raw'
+    const btnJsonStructured = document.getElementById('btnJsonStructured');
+    const btnJsonRaw = document.getElementById('btnJsonRaw');
+
+    if (btnJsonStructured && btnJsonRaw) {
+      btnJsonStructured.addEventListener('click', () => {
+        currentJsonViewMode = 'structured';
+        btnJsonStructured.className = 'px-2.5 py-1 rounded text-xs font-medium bg-cyan-950 text-cyan-300 border border-cyan-800 transition';
+        btnJsonRaw.className = 'px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition';
+        updateJsonViewer();
+      });
+      btnJsonRaw.addEventListener('click', () => {
+        currentJsonViewMode = 'raw';
+        btnJsonRaw.className = 'px-2.5 py-1 rounded text-xs font-medium bg-cyan-950 text-cyan-300 border border-cyan-800 transition';
+        btnJsonStructured.className = 'px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition';
+        updateJsonViewer();
+      });
+    }
+
     function updateJsonViewer() {
-      if (currentRustDoc && currentRustDoc.structured) {
-        jsonViewer.textContent = JSON.stringify(currentRustDoc.structured, null, 2);
+      if (!currentRustDoc) {
+        jsonViewer.textContent = '{}';
         return;
       }
-      // Client-side model: same schema the native engine emits (pages[], tables,
-      // text_blocks, images with sha256, drawings with items/colours).
-      const doc = buildDocumentJson() || {
-        file_name: docFileName,
-        total_pages: 0,
-        parse_time_ms: 0,
-        pages: []
-      };
-      jsonViewer.textContent = JSON.stringify(doc, null, 2);
+      if (currentJsonViewMode === 'raw' && currentRustDoc.raw) {
+        jsonViewer.textContent = JSON.stringify(currentRustDoc.raw, null, 2);
+      } else {
+        jsonViewer.textContent = JSON.stringify(currentRustDoc.structured || {}, null, 2);
+      }
     }
 
     function escapeHtml(text) {
