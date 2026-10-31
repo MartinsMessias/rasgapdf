@@ -1,0 +1,122 @@
+{
+  "date": "2026-10-31 12:25:18",
+  "rasgapdf_version": "0.3.3",
+  "total_runtime_seconds": 21.19,
+  "subsets": {
+    "2026-q1-tables-only": {
+      "subset": "2026-q1-tables-only",
+      "pdf_count": 100,
+      "ground_truth_totals": {
+        "tables": 451,
+        "formulas": 0,
+        "texts": 585
+      },
+      "engines": {
+        "RasgaPDF": {
+          "count": 100,
+          "mean_ms": 8.73,
+          "std_ms": 1.05,
+          "min_ms": 2.18,
+          "p50_ms": 8.6,
+          "p90_ms": 9.68,
+          "p95_ms": 9.91,
+          "p99_ms": 10.21,
+          "max_ms": 13.64,
+          "total_ms": 873.21,
+          "pages_per_sec": 114.5,
+          "avg_overall_recall": 0.8095,
+          "avg_table_recall": 0.7296,
+          "tables_detected": 406
+        },
+        "PyMuPDF": {
+          "count": 100,
+          "mean_ms": 64.55,
+          "std_ms": 36.24,
+          "min_ms": 10.16,
+          "p50_ms": 56.71,
+          "p90_ms": 106.3,
+          "p95_ms": 131.49,
+          "p99_ms": 191.0,
+          "max_ms": 244.38,
+          "total_ms": 6455.34,
+          "pages_per_sec": 15.5,
+          "avg_overall_recall": 0.8046,
+          "avg_table_recall": 0.7205,
+          "tables_detected": 236
+        },
+        "pypdf": {
+          "count": 100,
+          "mean_ms": 25.88,
+          "std_ms": 9.07,
+          "min_ms": 7.68,
+          "p50_ms": 25.23,
+          "p90_ms": 35.65,
+          "p95_ms": 42.62,
+          "p99_ms": 54.19,
+          "max_ms": 63.71,
+          "total_ms": 2587.7,
+          "pages_per_sec": 38.6,
+          "avg_overall_recall": 0.7991,
+          "avg_table_recall": 0.7146,
+          "tables_detected": 0
+        }
+      }
+    },
+    "2026-q1-formulas-only": {
+      "subset": "2026-q1-formulas-only",
+      "pdf_count": 100,
+      "ground_truth_totals": {
+        "tables": 0,
+        "formulas": 2070,
+        "texts": 2694
+      },
+      "engines": {
+        "RasgaPDF": {
+          "count": 100,
+          "mean_ms": 9.24,
+          "std_ms": 0.87,
+          "min_ms": 7.83,
+          "p50_ms": 9.09,
+          "p90_ms": 10.17,
+          "p95_ms": 10.41,
+          "p99_ms": 11.29,
+          "max_ms": 14.47,
+          "total_ms": 923.94,
+          "pages_per_sec": 108.2,
+          "avg_overall_recall": 0.7968,
+          "avg_formula_recall": 0.4209
+        },
+        "PyMuPDF": {
+          "count": 100,
+          "mean_ms": 53.22,
+          "std_ms": 17.14,
+          "min_ms": 17.8,
+          "p50_ms": 48.92,
+          "p90_ms": 75.35,
+          "p95_ms": 86.17,
+          "p99_ms": 100.53,
+          "max_ms": 104.51,
+          "total_ms": 5322.11,
+          "pages_per_sec": 18.8,
+          "avg_overall_recall": 0.781,
+          "avg_formula_recall": 0.3685
+        },
+        "pypdf": {
+          "count": 100,
+          "mean_ms": 33.01,
+          "std_ms": 9.01,
+          "min_ms": 17.35,
+          "p50_ms": 31.36,
+          "p90_ms": 44.27,
+          "p95_ms": 47.79,
+          "p99_ms": 56.09,
+          "max_ms": 70.79,
+          "total_ms": 3301.23,
+          "pages_per_sec": 30.3,
+          "avg_overall_recall": 0.776,
+          "avg_formula_recall": 0.3603
+        }
+      }
+    }
+  }
+}

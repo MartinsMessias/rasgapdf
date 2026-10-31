@@ -48,5 +48,9 @@ obj/
 *.lib
 *.a
 *.rlib
+
+# Benchmark data cache
+benchmarks/data/
+
 *.rmeta
 .cargo/config.toml
