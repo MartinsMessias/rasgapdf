@@ -25,7 +25,10 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn with_pos(data: &'a [u8], pos: usize) -> Self {
-        Self { data, pos }
+        Self {
+            data,
+            pos: pos.min(data.len()),
+        }
     }
 
     pub fn pos(&self) -> usize {
@@ -37,7 +40,8 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn remaining(&self) -> &'a [u8] {
-        &self.data[self.pos..]
+        let safe_pos = self.pos.min(self.data.len());
+        &self.data[safe_pos..]
     }
 
     pub fn is_eof(&self) -> bool {
@@ -90,8 +94,19 @@ impl<'a> Lexer<'a> {
                 self.pos += 2;
                 return Ok(Some(Token::DictClose));
             } else {
-                return Err(format!("Unexpected '>' at position {}", self.pos));
+                self.pos += 1;
+                return Err(format!("Unexpected '>' at position {}", self.pos - 1));
             }
+        }
+
+        if b == b')' {
+            self.pos += 1;
+            return Err(format!("Unexpected ')' at position {}", self.pos - 1));
+        }
+
+        if b == b'{' || b == b'}' {
+            self.pos += 1;
+            return Ok(Some(Token::Keyword((b as char).to_string())));
         }
 
         if b == b'[' {
@@ -136,10 +151,10 @@ impl<'a> Lexer<'a> {
 
             if b == b'#' && self.pos + 2 < self.data.len() {
                 // Hex-encoded character, e.g. #20 -> space
-                let hex_str = std::str::from_utf8(&self.data[self.pos + 1..self.pos + 3])
-                    .map_err(|e| e.to_string())?;
-                if let Ok(val) = u8::from_str_radix(hex_str, 16) {
-                    name_bytes.push(val);
+                let d1 = self.data[self.pos + 1];
+                let d2 = self.data[self.pos + 2];
+                if let (Some(h1), Some(h2)) = (hex_digit(d1), hex_digit(d2)) {
+                    name_bytes.push((h1 << 4) | h2);
                     self.pos += 3;
                     continue;
                 }
@@ -225,7 +240,7 @@ impl<'a> Lexer<'a> {
 
     fn read_hex_string(&mut self) -> Result<Token, String> {
         self.pos += 1; // skip '<'
-        let mut hex_chars = Vec::new();
+        let mut hex_digits = Vec::new();
 
         while self.pos < self.data.len() {
             let b = self.data[self.pos];
@@ -234,21 +249,22 @@ impl<'a> Lexer<'a> {
             if b == b'>' {
                 break;
             }
-            if !is_whitespace(b) {
-                hex_chars.push(b);
+            if is_whitespace(b) {
+                continue;
+            }
+            if let Some(digit) = hex_digit(b) {
+                hex_digits.push(digit);
             }
         }
 
         // If odd number of hex digits, append '0' per PDF standard
-        if hex_chars.len() % 2 != 0 {
-            hex_chars.push(b'0');
+        if hex_digits.len() % 2 != 0 {
+            hex_digits.push(0);
         }
 
-        let mut bytes = Vec::with_capacity(hex_chars.len() / 2);
-        for chunk in hex_chars.chunks(2) {
-            let s = std::str::from_utf8(chunk).map_err(|e| e.to_string())?;
-            let val = u8::from_str_radix(s, 16).map_err(|e| e.to_string())?;
-            bytes.push(val);
+        let mut bytes = Vec::with_capacity(hex_digits.len() / 2);
+        for chunk in hex_digits.chunks_exact(2) {
+            bytes.push((chunk[0] << 4) | chunk[1]);
         }
 
         Ok(Token::HexString(bytes))
@@ -282,10 +298,17 @@ impl<'a> Lexer<'a> {
             if let Ok(s) = std::str::from_utf8(slice) {
                 if is_real {
                     if let Ok(f) = s.parse::<f64>() {
-                        return (Token::Real(f), true);
+                        if f.is_finite() {
+                            return (Token::Real(f), true);
+                        }
                     }
                 } else if let Ok(i) = s.parse::<i64>() {
                     return (Token::Integer(i), true);
+                } else if let Ok(f) = s.parse::<f64>() {
+                    // Integer overflowed i64, parse as real if finite
+                    if f.is_finite() {
+                        return (Token::Real(f), true);
+                    }
                 }
             }
         }
@@ -305,9 +328,28 @@ impl<'a> Lexer<'a> {
             self.pos += 1;
         }
 
+        if start == self.pos {
+            // Defensively ensure progress if called on an unexpected delimiter or byte
+            if self.pos < self.data.len() {
+                let bad = self.data[self.pos];
+                self.pos += 1;
+                return Err(format!("Unexpected byte 0x{:02X} at position {}", bad, start));
+            }
+            return Ok(Token::Keyword(String::new()));
+        }
+
         let kw_slice = &self.data[start..self.pos];
-        let kw_str = std::str::from_utf8(kw_slice).map_err(|e| e.to_string())?.to_string();
+        let kw_str = String::from_utf8_lossy(kw_slice).to_string();
         Ok(Token::Keyword(kw_str))
+    }
+}
+
+fn hex_digit(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
     }
 }
 
@@ -383,5 +425,62 @@ mod tests {
         assert_eq!(lexer.next_token().unwrap(), Some(Token::ArrayClose));
         assert_eq!(lexer.next_token().unwrap(), Some(Token::DictClose));
         assert_eq!(lexer.next_token().unwrap(), None);
+    }
+
+    #[test]
+    fn test_lexer_unexpected_delimiter_does_not_infinite_loop() {
+        let data = b") } { >";
+        let mut lexer = Lexer::new(data);
+        // Each call should either error or return keyword, but NEVER loop infinitely
+        let mut steps = 0;
+        while lexer.pos() < data.len() && steps < 100 {
+            let _ = lexer.next_token();
+            steps += 1;
+        }
+        assert!(lexer.is_eof());
+    }
+
+    #[test]
+    fn test_lexer_out_of_bounds_pos_and_remaining() {
+        let data = b"abc";
+        let lexer = Lexer::with_pos(data, 100);
+        assert_eq!(lexer.pos(), 3);
+        assert!(lexer.remaining().is_empty());
+        assert!(lexer.is_eof());
+    }
+
+    #[test]
+    fn test_lexer_truncated_and_octal_strings() {
+        // Truncated literal string with backslash at EOF
+        let mut lex1 = Lexer::new(b"(abc\\");
+        assert!(lex1.next_token().is_err());
+
+        // Octal escape sequence overflow mod 256
+        let mut lex2 = Lexer::new(b"(\\777)");
+        let tok = lex2.next_token().unwrap();
+        // 0o777 = 511, 511 & 0xFF = 255
+        assert_eq!(tok, Some(Token::LiteralString(vec![255])));
+
+        // Truncated hex string without '>'
+        let mut lex3 = Lexer::new(b"<4142");
+        assert_eq!(lex3.next_token().unwrap(), Some(Token::HexString(vec![0x41, 0x42])));
+    }
+
+    #[test]
+    fn test_lexer_name_with_invalid_hex() {
+        let mut lex = Lexer::new(b"/Name#ZZ/#/A#20B");
+        assert_eq!(lex.next_token().unwrap(), Some(Token::Name("Name#ZZ".into())));
+        assert_eq!(lex.next_token().unwrap(), Some(Token::Name("#".into())));
+        assert_eq!(lex.next_token().unwrap(), Some(Token::Name("A B".into())));
+    }
+
+    #[test]
+    fn test_lexer_integer_overflow_to_real() {
+        let mut lex = Lexer::new(b"123456789012345678901234567890");
+        let tok = lex.next_token().unwrap();
+        match tok {
+            Some(Token::Real(f)) => assert!(f > 1e20),
+            _ => panic!("Expected Real for overflowing integer, got {:?}", tok),
+        }
     }
 }

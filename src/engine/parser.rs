@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     full_data: &'a [u8],
+    depth: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -12,6 +13,7 @@ impl<'a> Parser<'a> {
         Self {
             lexer: Lexer::new(data),
             full_data: data,
+            depth: 0,
         }
     }
 
@@ -19,6 +21,7 @@ impl<'a> Parser<'a> {
         Self {
             lexer: Lexer::with_pos(data, pos),
             full_data: data,
+            depth: 0,
         }
     }
 
@@ -36,12 +39,18 @@ impl<'a> Parser<'a> {
 
     /// Parses the next PDF object from the stream
     pub fn parse_object(&mut self) -> Result<Option<PdfObject>, String> {
+        if self.depth > 512 {
+            return Err("Exceeded maximum nesting depth in PDF parser".to_string());
+        }
         let tok = match self.lexer.next_token()? {
             Some(t) => t,
             None => return Ok(None),
         };
 
-        self.parse_object_from_token(tok)
+        self.depth += 1;
+        let res = self.parse_object_from_token(tok);
+        self.depth -= 1;
+        res
     }
 
     fn parse_object_from_token(&mut self, tok: Token) -> Result<Option<PdfObject>, String> {
@@ -52,7 +61,7 @@ impl<'a> Parser<'a> {
                 if let Ok(Some(Token::Integer(gen))) = self.lexer.next_token() {
                     let _after_gen_pos = self.lexer.pos();
                     if let Ok(Some(Token::Keyword(kw))) = self.lexer.next_token() {
-                        if kw == "R" {
+                        if kw == "R" && i >= 0 && i <= u32::MAX as i64 && gen >= 0 && gen <= u16::MAX as i64 {
                             return Ok(Some(PdfObject::Reference(ObjectId::new(i as u32, gen as u16))));
                         }
                     }
@@ -96,6 +105,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_array(&mut self) -> Result<PdfObject, String> {
+        if self.depth > 512 {
+            return Err("Exceeded maximum nesting depth in PDF array".to_string());
+        }
         let mut arr = Vec::new();
         loop {
             self.lexer.skip_whitespace_and_comments();
@@ -113,8 +125,12 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            match self.parse_object_from_token(tok)? {
-                Some(obj) => arr.push(obj),
+            self.depth += 1;
+            let obj = self.parse_object_from_token(tok);
+            self.depth -= 1;
+
+            match obj? {
+                Some(o) => arr.push(o),
                 None => return Err("Expected object in array".to_string()),
             }
         }
@@ -122,6 +138,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_dict(&mut self) -> Result<BTreeMap<String, PdfObject>, String> {
+        if self.depth > 512 {
+            return Err("Exceeded maximum nesting depth in PDF dictionary".to_string());
+        }
         let mut dict = BTreeMap::new();
         loop {
             self.lexer.skip_whitespace_and_comments();
@@ -155,7 +174,7 @@ impl<'a> Parser<'a> {
 
     fn read_stream_content(&mut self, dict: &BTreeMap<String, PdfObject>) -> Result<Vec<u8>, String> {
         // Stream keyword must be followed by newline (\r\n or \n)
-        let mut pos = self.lexer.pos();
+        let mut pos = self.lexer.pos().min(self.full_data.len());
         if pos < self.full_data.len() && self.full_data[pos] == b'\r' {
             pos += 1;
         }
@@ -163,17 +182,21 @@ impl<'a> Parser<'a> {
             pos += 1;
         }
 
-        // If /Length is explicitly specified as integer, read exact bytes
+        // If /Length is explicitly specified as non-negative integer, read exact bytes
         if let Some(PdfObject::Integer(len)) = dict.get("Length") {
-            let stream_len = *len as usize;
-            if pos + stream_len <= self.full_data.len() {
-                let stream_bytes = self.full_data[pos..pos + stream_len].to_vec();
-                self.lexer.set_pos(pos + stream_len);
-                // Skip following whitespace / endstream keyword
-                self.lexer.skip_whitespace_and_comments();
-                if let Ok(Some(Token::Keyword(kw))) = self.lexer.next_token() {
-                    if kw == "endstream" {
-                        return Ok(stream_bytes);
+            if *len >= 0 {
+                let stream_len = *len as usize;
+                if let Some(end_pos) = pos.checked_add(stream_len) {
+                    if end_pos <= self.full_data.len() {
+                        let stream_bytes = self.full_data[pos..end_pos].to_vec();
+                        self.lexer.set_pos(end_pos);
+                        // Skip following whitespace / endstream keyword
+                        self.lexer.skip_whitespace_and_comments();
+                        if let Ok(Some(Token::Keyword(kw))) = self.lexer.next_token() {
+                            if kw == "endstream" {
+                                return Ok(stream_bytes);
+                            }
+                        }
                     }
                 }
             }
@@ -191,7 +214,7 @@ impl<'a> Parser<'a> {
                 }
             }
             let stream_bytes = self.full_data[pos..end].to_vec();
-            self.lexer.set_pos(pos + end_offset + 9); // 9 = "endstream".len()
+            self.lexer.set_pos((pos + end_offset + 9).min(self.full_data.len())); // 9 = "endstream".len()
             return Ok(stream_bytes);
         }
 
@@ -245,5 +268,37 @@ mod tests {
         let obj = p.parse_object().unwrap().unwrap();
         let stream = obj.as_stream().unwrap();
         assert_eq!(stream.data, b"Hello World");
+    }
+
+    #[test]
+    fn test_parser_negative_length_stream_does_not_panic() {
+        let data = b"<< /Length -10 >> stream\r\nHello World\nendstream";
+        let mut p = Parser::new(data);
+        let obj = p.parse_object().unwrap().unwrap();
+        let stream = obj.as_stream().unwrap();
+        // Should fallback to scanning for endstream instead of overflowing
+        assert_eq!(stream.data, b"Hello World");
+    }
+
+    #[test]
+    fn test_parser_negative_indirect_reference() {
+        let data = b"-5 0 R";
+        let mut p = Parser::new(data);
+        let obj = p.parse_object().unwrap().unwrap();
+        // Negative number should not be parsed as reference
+        assert_eq!(obj, PdfObject::Integer(-5));
+    }
+
+    #[test]
+    fn test_parser_deeply_nested_structures_capped() {
+        let mut deeply_nested = Vec::new();
+        for _ in 0..600 {
+            deeply_nested.extend_from_slice(b"[ ");
+        }
+        for _ in 0..600 {
+            deeply_nested.extend_from_slice(b"] ");
+        }
+        let mut p = Parser::new(&deeply_nested);
+        assert!(p.parse_object().is_err());
     }
 }

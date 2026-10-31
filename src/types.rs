@@ -12,40 +12,48 @@ pub struct BoundingBox {
 
 impl BoundingBox {
     pub fn new(x0: f32, y0: f32, x1: f32, y1: f32) -> Self {
+        let x0 = if x0.is_finite() { x0 } else { 0.0 };
+        let y0 = if y0.is_finite() { y0 } else { 0.0 };
+        let x1 = if x1.is_finite() { x1 } else { 0.0 };
+        let y1 = if y1.is_finite() { y1 } else { 0.0 };
+        let width = (x1 - x0).abs();
+        let height = (y1 - y0).abs();
         Self {
             x0,
             y0,
             x1,
             y1,
-            width: (x1 - x0).abs(),
-            height: (y1 - y0).abs(),
+            width: if width.is_finite() { width } else { 0.0 },
+            height: if height.is_finite() { height } else { 0.0 },
         }
     }
 
     /// Rotates the bounding box to match a rotated page view (0, 90, 180, 270 degrees clockwise).
     /// `page_width` and `page_height` are the dimensions of the unrotated page.
     pub fn rotate(&self, rotation: i32, page_width: f32, page_height: f32) -> Self {
+        let pw = if page_width.is_finite() { page_width } else { 0.0 };
+        let ph = if page_height.is_finite() { page_height } else { 0.0 };
         let norm_rot = ((rotation % 360) + 360) % 360;
         match norm_rot {
             90 => {
-                let rx0 = page_height - self.y1;
-                let rx1 = page_height - self.y0;
+                let rx0 = ph - self.y1;
+                let rx1 = ph - self.y0;
                 let ry0 = self.x0;
                 let ry1 = self.x1;
                 BoundingBox::new(rx0.min(rx1), ry0.min(ry1), rx0.max(rx1), ry0.max(ry1))
             }
             180 => {
-                let rx0 = page_width - self.x1;
-                let rx1 = page_width - self.x0;
-                let ry0 = page_height - self.y1;
-                let ry1 = page_height - self.y0;
+                let rx0 = pw - self.x1;
+                let rx1 = pw - self.x0;
+                let ry0 = ph - self.y1;
+                let ry1 = ph - self.y0;
                 BoundingBox::new(rx0.min(rx1), ry0.min(ry1), rx0.max(rx1), ry0.max(ry1))
             }
             270 => {
                 let rx0 = self.y0;
                 let rx1 = self.y1;
-                let ry0 = page_width - self.x1;
-                let ry1 = page_width - self.x0;
+                let ry0 = pw - self.x1;
+                let ry1 = pw - self.x0;
                 BoundingBox::new(rx0.min(rx1), ry0.min(ry1), rx0.max(rx1), ry0.max(ry1))
             }
             _ => self.clone(),

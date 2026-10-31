@@ -34,6 +34,11 @@ fn now_instant() -> Option<std::time::Instant> {
 
 pub const MAX_OBJECT_RESOLVE_DEPTH: usize = 64;
 pub const MAX_PAGE_TREE_DEPTH: usize = 32;
+pub const MAX_PAGES_LIMIT: usize = 100_000;
+pub const MAX_PAGE_CONTENTS_BYTES: usize = 64 * 1024 * 1024; // 64 MB cap on page content stream
+pub const MAX_CONTENTS_STREAMS: usize = 256;
+pub const MAX_FORM_XOBJECTS_PER_PAGE: usize = 128;
+pub const MAX_FONTS_PER_PAGE: usize = 1_000;
 
 /// High-level pure-Rust PDF document parser
 pub struct PurePdfDoc<'a> {
@@ -140,14 +145,21 @@ impl<'a> PurePdfDoc<'a> {
             return Err(format!("Cyclic page tree node detected at {}", node_ref));
         }
 
+        if self.pages.len() >= MAX_PAGES_LIMIT {
+            return Err(format!("Exceeded maximum page count limit ({})", MAX_PAGES_LIMIT));
+        }
+
         let node = self.xref.get_object(self.data, node_ref, &mut self.obj_cache)?;
         let node_type = node.dict_get("Type").and_then(|t| t.as_name()).unwrap_or("");
 
-        if node_type == "Pages" {
-            if let Some(kids_arr) = node.dict_get("Kids").and_then(|k| k.as_array()) {
-                let kid_refs: Vec<ObjectId> = kids_arr.iter().filter_map(|k| k.as_reference()).collect();
-                for kid in kid_refs {
-                    self.traverse_pages_node(kid, depth + 1, visited)?;
+        if node_type == "Pages" || (node_type.is_empty() && node.dict_get("Kids").is_some()) {
+            if let Some(kids_obj) = node.dict_get("Kids") {
+                let resolved_kids = self.resolve(kids_obj)?;
+                if let Some(kids_arr) = resolved_kids.as_array() {
+                    let kid_refs: Vec<ObjectId> = kids_arr.iter().filter_map(|k| k.as_reference()).collect();
+                    for kid in kid_refs {
+                        self.traverse_pages_node(kid, depth + 1, visited)?;
+                    }
                 }
             }
         } else if node_type == "Page" || node.dict_get("MediaBox").is_some() || node.dict_get("Contents").is_some() {
@@ -185,10 +197,19 @@ impl<'a> PurePdfDoc<'a> {
         let min_y = effective_box[1].min(effective_box[3]);
         let max_y = effective_box[1].max(effective_box[3]);
 
-        let width = max_x - min_x;
-        let height = max_y - min_y;
-        let origin_x = min_x;
-        let origin_y = min_y;
+        let width = if (max_x - min_x).is_finite() && (max_x - min_x) > 0.0 {
+            max_x - min_x
+        } else {
+            595.28
+        };
+        let height = if (max_y - min_y).is_finite() && (max_y - min_y) > 0.0 {
+            max_y - min_y
+        } else {
+            841.89
+        };
+        let origin_x = if min_x.is_finite() { min_x } else { 0.0 };
+        let origin_y = if min_y.is_finite() { min_y } else { 0.0 };
+        let max_y = if max_y.is_finite() { max_y } else { origin_y + height };
 
         // Resources (/Font)
         let fonts = self.load_page_fonts(&page_obj)?;
@@ -213,11 +234,18 @@ impl<'a> PurePdfDoc<'a> {
 
     fn get_inherited_page_attribute(&mut self, page_obj: &PdfObject, key: &str) -> Result<Option<PdfObject>, String> {
         let mut curr = page_obj.clone();
-        for _ in 0..10 {
+        let mut visited_parents = HashSet::new();
+
+        for _ in 0..MAX_PAGE_TREE_DEPTH {
             if let Some(val) = curr.dict_get(key) {
                 return Ok(Some(self.resolve(val)?));
             }
             if let Some(parent_ref) = curr.dict_get("Parent") {
+                if let Some(id) = parent_ref.as_reference() {
+                    if !visited_parents.insert(id) {
+                        return Err(format!("Cyclic /Parent reference detected at {}", id));
+                    }
+                }
                 curr = self.resolve(parent_ref)?;
             } else {
                 break;
@@ -234,10 +262,10 @@ impl<'a> PurePdfDoc<'a> {
         let resolved = self.resolve(b)?;
         if let Some(arr) = resolved.as_array() {
             if arr.len() >= 4 {
-                let x0 = arr[0].as_f64().unwrap_or(0.0) as f32;
-                let y0 = arr[1].as_f64().unwrap_or(0.0) as f32;
-                let x1 = arr[2].as_f64().unwrap_or(595.28) as f32;
-                let y1 = arr[3].as_f64().unwrap_or(841.89) as f32;
+                let x0 = arr[0].as_f64().filter(|v| v.is_finite()).unwrap_or(0.0) as f32;
+                let y0 = arr[1].as_f64().filter(|v| v.is_finite()).unwrap_or(0.0) as f32;
+                let x1 = arr[2].as_f64().filter(|v| v.is_finite()).unwrap_or(595.28) as f32;
+                let y1 = arr[3].as_f64().filter(|v| v.is_finite()).unwrap_or(841.89) as f32;
                 return Ok(Some([x0, y0, x1, y1]));
             }
         }
@@ -357,12 +385,12 @@ impl<'a> PurePdfDoc<'a> {
         Ok(())
     }
 
-        fn parse_cid_font_widths(&mut self, font: &mut PdfFont, w_arr: &[PdfObject]) {
+    fn parse_cid_font_widths(&mut self, font: &mut PdfFont, w_arr: &[PdfObject]) {
         let mut i = 0;
         while i < w_arr.len() {
             let start_cid = match self.resolve(&w_arr[i]).ok().and_then(|o| o.as_i64()) {
-                Some(sc) => sc as u32,
-                None => {
+                Some(sc) if (0..=65535).contains(&sc) => sc as u32,
+                _ => {
                     i += 1;
                     continue;
                 }
@@ -388,7 +416,7 @@ impl<'a> PurePdfDoc<'a> {
             } else if let Some(end_cid) = next_resolved.as_i64() {
                 // Format 2: start_cid end_cid width
                 i += 1;
-                if i < w_arr.len() {
+                if i < w_arr.len() && end_cid >= (start_cid as i64) && end_cid <= 65535 {
                     if let Some(width) = self.resolve(&w_arr[i]).ok().and_then(|w| w.as_f64()) {
                         font.add_cid_width_range(start_cid, end_cid as u32, width as f32);
                     }
@@ -402,22 +430,43 @@ impl<'a> PurePdfDoc<'a> {
 
     fn load_page_contents(&mut self, page_obj: &PdfObject) -> Result<Vec<u8>, String> {
         let mut full_contents = Vec::new();
+        let mut visited_streams = HashSet::new();
 
         if let Some(contents_obj) = page_obj.dict_get("Contents") {
             if let Ok(c) = self.resolve(contents_obj) {
                 match c {
                     PdfObject::Stream(s) => {
                         if let Ok(decompressed) = decompress_stream(&s.data, &s.dict) {
-                            full_contents.extend_from_slice(&decompressed);
-                            full_contents.push(b'\n');
+                            if decompressed.len() <= MAX_PAGE_CONTENTS_BYTES {
+                                full_contents.extend_from_slice(&decompressed);
+                                full_contents.push(b'\n');
+                            } else {
+                                full_contents.extend_from_slice(&decompressed[..MAX_PAGE_CONTENTS_BYTES]);
+                                full_contents.push(b'\n');
+                            }
                         }
                     }
                     PdfObject::Array(arr) => {
-                        for item in arr {
-                            if let Ok(resolved_stream) = self.resolve(&item) {
+                        let stream_count = arr.len().min(MAX_CONTENTS_STREAMS);
+                        for item in &arr[..stream_count] {
+                            if let Some(id) = item.as_reference() {
+                                if !visited_streams.insert(id) {
+                                    continue;
+                                }
+                            }
+                            if let Ok(resolved_stream) = self.resolve(item) {
                                 if let Some(s) = resolved_stream.as_stream() {
                                     if let Ok(decompressed) = decompress_stream(&s.data, &s.dict) {
-                                        full_contents.extend_from_slice(&decompressed);
+                                        let current_len = full_contents.len();
+                                        if current_len >= MAX_PAGE_CONTENTS_BYTES {
+                                            break;
+                                        }
+                                        let allowed = MAX_PAGE_CONTENTS_BYTES - current_len;
+                                        if decompressed.len() <= allowed {
+                                            full_contents.extend_from_slice(&decompressed);
+                                        } else {
+                                            full_contents.extend_from_slice(&decompressed[..allowed]);
+                                        }
                                         full_contents.push(b'\n');
                                     }
                                 }
@@ -431,21 +480,42 @@ impl<'a> PurePdfDoc<'a> {
 
         // If the page delegates rendering to a Form XObject (/Subtype /Form) via /Do
         // append the Form stream so the interpreter parses all text and vector graphics seamlessly!
-        if let Some(res_obj) = page_obj.dict_get("Resources") {
-            if let Ok(res) = self.resolve(res_obj) {
-                if let Some(xobj_entry) = res.dict_get("XObject") {
-                    if let Ok(xobjs) = self.resolve(xobj_entry) {
-                        if let Some(xdict) = xobjs.as_dict() {
-                            let mut names: Vec<_> = xdict.keys().cloned().collect();
-                            names.sort();
-                            for name in names {
-                                if let Ok(entry) = self.resolve(&xdict[&name]) {
-                                    if let Some(stream) = entry.as_stream() {
-                                        let subtype = stream.dict.get("Subtype").and_then(|s| s.as_name()).unwrap_or("");
-                                        if subtype == "Form" {
-                                            if let Ok(decompressed) = decompress_stream(&stream.data, &stream.dict) {
-                                                full_contents.extend_from_slice(&decompressed);
-                                                full_contents.push(b'\n');
+        if full_contents.len() < MAX_PAGE_CONTENTS_BYTES {
+            if let Some(res_obj) = page_obj.dict_get("Resources") {
+                if let Ok(res) = self.resolve(res_obj) {
+                    if let Some(xobj_entry) = res.dict_get("XObject") {
+                        if let Ok(xobjs) = self.resolve(xobj_entry) {
+                            if let Some(xdict) = xobjs.as_dict() {
+                                let mut names: Vec<_> = xdict.keys().cloned().collect();
+                                names.sort();
+                                let mut forms_processed = 0;
+                                for name in names {
+                                    if forms_processed >= MAX_FORM_XOBJECTS_PER_PAGE || full_contents.len() >= MAX_PAGE_CONTENTS_BYTES {
+                                        break;
+                                    }
+                                    let entry = &xdict[&name];
+                                    if let Some(id) = entry.as_reference() {
+                                        if !visited_streams.insert(id) {
+                                            continue;
+                                        }
+                                    }
+                                    if let Ok(resolved) = self.resolve(entry) {
+                                        if let Some(stream) = resolved.as_stream() {
+                                            let subtype = stream.dict.get("Subtype").and_then(|s| s.as_name()).unwrap_or("");
+                                            if subtype == "Form" {
+                                                forms_processed += 1;
+                                                if let Ok(decompressed) = decompress_stream(&stream.data, &stream.dict) {
+                                                    let current_len = full_contents.len();
+                                                    let allowed = MAX_PAGE_CONTENTS_BYTES.saturating_sub(current_len);
+                                                    if allowed > 0 {
+                                                        if decompressed.len() <= allowed {
+                                                            full_contents.extend_from_slice(&decompressed);
+                                                        } else {
+                                                            full_contents.extend_from_slice(&decompressed[..allowed]);
+                                                        }
+                                                        full_contents.push(b'\n');
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -576,7 +646,7 @@ impl<'a> PurePdfDoc<'a> {
             options.row_tolerance,
         );
 
-        let mut pages = Vec::with_capacity(total_pages);
+        let mut pages = Vec::with_capacity(total_pages.min(MAX_PAGES_LIMIT));
 
         for p in 0..total_pages {
             let page_info = self.load_page(p)?;
@@ -1159,5 +1229,88 @@ mod tests {
 
         let res = PurePdfDoc::from_bytes(&pdf);
         assert!(res.is_err(), "Cyclic page tree must return Err without overflowing stack");
+    }
+
+    #[test]
+    fn test_cyclic_parent_page_attribute_does_not_loop() {
+        let mut pdf = Vec::new();
+        pdf.extend_from_slice(b"%PDF-1.4\n");
+        let o1 = pdf.len();
+        pdf.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        let o2 = pdf.len();
+        pdf.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [ 3 0 R ] /Count 1 /Parent 3 0 R >>\nendobj\n");
+        let o3 = pdf.len();
+        // Page 3 references 2 as Parent, but 2 references 3 as Parent (cycle in /Parent)
+        pdf.extend_from_slice(b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 612 792 ] >>\nendobj\n");
+        let xref_pos = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "xref\n0 4\n0000000000 65535 f \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n{}\n%%EOF",
+                o1, o2, o3, xref_pos
+            )
+            .as_bytes(),
+        );
+
+        let mut doc = PurePdfDoc::from_bytes(&pdf).unwrap();
+        let page_obj = doc.xref.get_object(doc.data, ObjectId::new(3, 0), &mut doc.obj_cache).unwrap();
+        // Querying an attribute that doesn't exist on page 3 will traverse Parent into 2 then back to 3
+        let res = doc.get_inherited_page_attribute(&page_obj, "NonExistentKey");
+        assert!(res.is_err(), "Cyclic /Parent chain must be detected and return Err");
+    }
+
+    #[test]
+    fn test_load_page_contents_capped_and_deduplicated() {
+        let mut pdf = Vec::new();
+        pdf.extend_from_slice(b"%PDF-1.4\n");
+        let o1 = pdf.len();
+        pdf.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        let o2 = pdf.len();
+        pdf.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [ 3 0 R ] /Count 1 >>\nendobj\n");
+        let o3 = pdf.len();
+        // Contents has duplicate reference to stream 4 five times: [ 4 0 R 4 0 R 4 0 R 4 0 R 4 0 R ]
+        pdf.extend_from_slice(b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 612 792 ] /Contents [ 4 0 R 4 0 R 4 0 R 4 0 R 4 0 R ] >>\nendobj\n");
+        let o4 = pdf.len();
+        pdf.extend_from_slice(b"4 0 obj\n<< /Length 12 >> stream\nq 1 0 0 1 Q\n\nendstream\nendobj\n");
+        let xref_pos = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "xref\n0 5\n0000000000 65535 f \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \ntrailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{}\n%%EOF",
+                o1, o2, o3, o4, xref_pos
+            )
+            .as_bytes(),
+        );
+
+        let mut doc = PurePdfDoc::from_bytes(&pdf).unwrap();
+        let page_info = doc.load_page(0).unwrap();
+        // Since stream 4 0 R is repeated 5 times, deduplication must include it only once
+        let stream_text = std::str::from_utf8(&page_info.contents).unwrap();
+        let occurrences = stream_text.matches("q 1 0 0 1 Q").count();
+        assert_eq!(occurrences, 1, "Duplicate content stream references in array must be deduplicated");
+    }
+
+    #[test]
+    fn test_box_array_nan_and_infinite_sanitization() {
+        let mut doc = PurePdfDoc {
+            data: b"",
+            xref: XRefTable::new(),
+            obj_cache: HashMap::new(),
+            pages: Vec::new(),
+        };
+
+        // Construct array with NaN and Infinity
+        let bad_array = PdfObject::Array(vec![
+            PdfObject::Real(f64::NAN),
+            PdfObject::Real(f64::INFINITY),
+            PdfObject::Real(612.0),
+            PdfObject::Real(792.0),
+        ]);
+
+        let parsed = doc.parse_box_array(Some(&bad_array)).unwrap().unwrap();
+        assert!(parsed[0].is_finite());
+        assert!(parsed[1].is_finite());
+        assert_eq!(parsed[0], 0.0);
+        assert_eq!(parsed[1], 0.0);
+        assert_eq!(parsed[2], 612.0);
+        assert_eq!(parsed[3], 792.0);
     }
 }

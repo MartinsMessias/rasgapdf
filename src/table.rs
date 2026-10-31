@@ -19,23 +19,37 @@ pub struct TableDetector {
 impl TableDetector {
     pub fn new(min_cols: usize, col_tolerance: f32, row_tolerance: f32) -> Self {
         Self {
-            min_cols,
-            col_tolerance,
-            row_tolerance,
+            min_cols: min_cols.max(1),
+            col_tolerance: if col_tolerance.is_finite() && col_tolerance >= 0.0 {
+                col_tolerance
+            } else {
+                3.0
+            },
+            row_tolerance: if row_tolerance.is_finite() && row_tolerance >= 0.0 {
+                row_tolerance
+            } else {
+                2.0
+            },
         }
     }
 
     pub fn extract_tables(&self, spans: &[RawSpan], table_id_start: usize) -> (Vec<SpatialTable>, Vec<RawSpan>) {
-        if spans.is_empty() {
+        let valid_spans: Vec<RawSpan> = spans
+            .iter()
+            .filter(|s| s.x0.is_finite() && s.y0.is_finite() && s.x1.is_finite() && s.y1.is_finite())
+            .cloned()
+            .collect();
+
+        if valid_spans.is_empty() {
             return (Vec::new(), Vec::new());
         }
 
         // Agrupa spans por linha horizontal (y bucket)
         let mut lines: Vec<Vec<RawSpan>> = Vec::new();
         let mut current_line: Vec<RawSpan> = Vec::new();
-        let mut current_y = spans[0].y0;
+        let mut current_y = valid_spans[0].y0;
 
-        for span in spans {
+        for span in &valid_spans {
             if (span.y0 - current_y).abs() <= self.row_tolerance {
                 current_line.push(span.clone());
             } else {
@@ -77,7 +91,7 @@ impl TableDetector {
                         if active_table_rows.len() >= 2 {
                             let table = self.build_table(&active_table_rows, &active_cols, table_counter);
                             detected_tables.push(table);
-                            table_counter += 1;
+                            table_counter = table_counter.saturating_add(1);
                         } else {
                             for r in active_table_rows.drain(..) {
                                 non_table_spans.extend(r);
@@ -93,7 +107,7 @@ impl TableDetector {
                     if active_table_rows.len() >= 2 {
                         let table = self.build_table(&active_table_rows, &active_cols, table_counter);
                         detected_tables.push(table);
-                        table_counter += 1;
+                        table_counter = table_counter.saturating_add(1);
                     } else {
                         for r in active_table_rows.drain(..) {
                             non_table_spans.extend(r);
@@ -120,39 +134,57 @@ impl TableDetector {
     }
 
     fn build_table(&self, rows_raw: &[Vec<RawSpan>], cols_x: &[f32], table_id: usize) -> SpatialTable {
+        let num_cols = cols_x.len();
+        if num_cols == 0 || rows_raw.is_empty() {
+            return SpatialTable {
+                table_id,
+                bbox: BoundingBox::new(0.0, 0.0, 0.0, 0.0),
+                col_count: 0,
+                row_count: 0,
+                headers: Vec::new(),
+                rows: Vec::new(),
+                cells: Vec::new(),
+            };
+        }
+
         let mut min_x = f32::MAX;
         let mut min_y = f32::MAX;
         let mut max_x = f32::MIN;
         let mut max_y = f32::MIN;
+        let mut has_points = false;
 
-        let num_cols = cols_x.len();
-        let mut structured_rows: Vec<Vec<String>> = Vec::new();
+        let mut structured_rows: Vec<Vec<String>> = Vec::with_capacity(rows_raw.len());
         let mut cells: Vec<SpatialCell> = Vec::new();
 
         for (row_idx, row_spans) in rows_raw.iter().enumerate() {
             let mut row_strings = vec![String::new(); num_cols];
 
             for span in row_spans {
-                min_x = min_x.min(span.x0);
-                min_y = min_y.min(span.y0);
-                max_x = max_x.max(span.x1);
-                max_y = max_y.max(span.y1);
+                if span.x0.is_finite() && span.y0.is_finite() && span.x1.is_finite() && span.y1.is_finite() {
+                    min_x = min_x.min(span.x0);
+                    min_y = min_y.min(span.y0);
+                    max_x = max_x.max(span.x1);
+                    max_y = max_y.max(span.y1);
+                    has_points = true;
+                }
 
                 // Encontra melhor coluna
                 let mut best_col = 0;
                 let mut min_dist = f32::MAX;
                 for (c_idx, &cx) in cols_x.iter().enumerate() {
                     let d = (cx - span.x0).abs();
-                    if d < min_dist {
+                    if d.is_finite() && d < min_dist {
                         min_dist = d;
                         best_col = c_idx;
                     }
                 }
 
-                if !row_strings[best_col].is_empty() {
-                    row_strings[best_col].push(' ');
+                if best_col < num_cols {
+                    if !row_strings[best_col].is_empty() {
+                        row_strings[best_col].push(' ');
+                    }
+                    row_strings[best_col].push_str(span.text.trim());
                 }
-                row_strings[best_col].push_str(span.text.trim());
 
                 cells.push(SpatialCell {
                     row: row_idx,
@@ -171,9 +203,15 @@ impl TableDetector {
             Vec::new()
         };
 
+        let bbox = if has_points && min_x <= max_x && min_y <= max_y {
+            BoundingBox::new(min_x, min_y, max_x, max_y)
+        } else {
+            BoundingBox::new(0.0, 0.0, 0.0, 0.0)
+        };
+
         SpatialTable {
             table_id,
-            bbox: BoundingBox::new(min_x, min_y, max_x, max_y),
+            bbox,
             col_count: num_cols,
             row_count: rows_raw.len(),
             headers,
@@ -181,7 +219,8 @@ impl TableDetector {
             cells,
         }
     }
-fn coalesce_line_spans(line: &[RawSpan], col_tolerance: f32) -> Vec<RawSpan> {
+
+    fn coalesce_line_spans(line: &[RawSpan], col_tolerance: f32) -> Vec<RawSpan> {
         if line.is_empty() {
             return Vec::new();
         }
@@ -190,7 +229,7 @@ fn coalesce_line_spans(line: &[RawSpan], col_tolerance: f32) -> Vec<RawSpan> {
 
         for span in &line[1..] {
             let gap = span.x0 - curr.x1;
-            if gap < col_tolerance {
+            if gap.is_finite() && gap < col_tolerance {
                 if !curr.text.ends_with(' ') && !span.text.starts_with(' ') {
                     curr.text.push(' ');
                 }
@@ -205,5 +244,94 @@ fn coalesce_line_spans(line: &[RawSpan], col_tolerance: f32) -> Vec<RawSpan> {
         }
         items.push(curr);
         items
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_table_detector_defaults_and_zero_min_cols() {
+        let detector = TableDetector::new(0, f32::NAN, -5.0);
+        assert_eq!(detector.min_cols, 1);
+        assert_eq!(detector.col_tolerance, 3.0);
+        assert_eq!(detector.row_tolerance, 2.0);
+
+        // Empty spans returns empty results
+        let (tables, non_tables) = detector.extract_tables(&[], 1);
+        assert!(tables.is_empty());
+        assert!(non_tables.is_empty());
+    }
+
+    #[test]
+    fn test_table_detector_with_nan_and_inf_coordinates() {
+        let detector = TableDetector::new(2, 5.0, 5.0);
+        let spans = vec![
+            RawSpan {
+                x0: f32::NAN,
+                y0: 10.0,
+                x1: 50.0,
+                y1: 20.0,
+                font_size: 10.0,
+                text: "NaN Col".into(),
+            },
+            RawSpan {
+                x0: 10.0,
+                y0: f32::INFINITY,
+                x1: 50.0,
+                y1: 20.0,
+                font_size: 10.0,
+                text: "Inf Row".into(),
+            },
+            RawSpan {
+                x0: 10.0,
+                y0: 100.0,
+                x1: 50.0,
+                y1: 110.0,
+                font_size: 10.0,
+                text: "Valid 1".into(),
+            },
+            RawSpan {
+                x0: 60.0,
+                y0: 100.0,
+                x1: 100.0,
+                y1: 110.0,
+                font_size: 10.0,
+                text: "Valid 2".into(),
+            },
+            RawSpan {
+                x0: 10.0,
+                y0: 120.0,
+                x1: 50.0,
+                y1: 130.0,
+                font_size: 10.0,
+                text: "Valid 3".into(),
+            },
+            RawSpan {
+                x0: 60.0,
+                y0: 120.0,
+                x1: 100.0,
+                y1: 130.0,
+                font_size: 10.0,
+                text: "Valid 4".into(),
+            },
+        ];
+
+        let (tables, _) = detector.extract_tables(&spans, 1);
+        assert_eq!(tables.len(), 1);
+        assert_eq!(tables[0].col_count, 2);
+        assert_eq!(tables[0].row_count, 2);
+        assert!(tables[0].bbox.width > 0.0);
+        assert!(tables[0].bbox.width.is_finite());
+    }
+
+    #[test]
+    fn test_build_table_empty_safeguard() {
+        let detector = TableDetector::new(2, 5.0, 5.0);
+        let table = detector.build_table(&[], &[], 1);
+        assert_eq!(table.col_count, 0);
+        assert_eq!(table.row_count, 0);
+        assert_eq!(table.bbox.width, 0.0);
     }
 }

@@ -30,8 +30,14 @@ impl XRefTable {
         let mut table = XRefTable::new();
         let startxref_offset = find_startxref(data)?;
         let mut current_offset = Some(startxref_offset);
+        let mut visited_offsets = std::collections::HashSet::new();
 
         while let Some(offset) = current_offset {
+            if offset >= data.len() || !visited_offsets.insert(offset) {
+                // Break out on out-of-bounds or cyclic /Prev reference
+                break;
+            }
+
             let mut parser = Parser::with_pos(data, offset);
             let first_tok = parser.next_token()?;
 
@@ -44,7 +50,11 @@ impl XRefTable {
                         if tr_kw == "trailer" {
                             if let Ok(Some(PdfObject::Dictionary(tr_dict))) = parser.parse_object() {
                                 // Chain previous xref table if /Prev exists
-                                let prev = tr_dict.get("Prev").and_then(|p| p.as_i64()).map(|i| i as usize);
+                                let prev = tr_dict
+                                    .get("Prev")
+                                    .and_then(|p| p.as_i64())
+                                    .filter(|&i| i >= 0 && (i as usize) < data.len())
+                                    .map(|i| i as usize);
                                 for (k, v) in tr_dict {
                                     table.trailer.entry(k).or_insert(v);
                                 }
@@ -58,7 +68,7 @@ impl XRefTable {
                 Some(Token::Integer(_obj_num)) => {
                     // PDF 1.5+ Cross-Reference Stream: obj_num gen obj << /Type /XRef ... >> stream
                     let _gen_num = match parser.next_token()? {
-                        Some(Token::Integer(g)) => g as u16,
+                        Some(Token::Integer(g)) if g >= 0 => g as u16,
                         _ => return Err("Expected generation number in XRef stream".into()),
                     };
                     match parser.next_token()? {
@@ -74,7 +84,12 @@ impl XRefTable {
                     let decompressed = decompress_stream(&xref_stream_obj.data, &xref_stream_obj.dict)?;
                     read_binary_xref_stream(&decompressed, &xref_stream_obj.dict, &mut table)?;
 
-                    let prev = xref_stream_obj.dict.get("Prev").and_then(|p| p.as_i64()).map(|i| i as usize);
+                    let prev = xref_stream_obj
+                        .dict
+                        .get("Prev")
+                        .and_then(|p| p.as_i64())
+                        .filter(|&i| i >= 0 && (i as usize) < data.len())
+                        .map(|i| i as usize);
                     for (k, v) in xref_stream_obj.dict {
                         table.trailer.entry(k).or_insert(v);
                     }
@@ -101,6 +116,9 @@ impl XRefTable {
 
         match entry {
             XRefEntry::Uncompressed { offset, .. } => {
+                if *offset >= data.len() {
+                    return Err(format!("Offset {} beyond EOF for object {}", offset, id));
+                }
                 let mut parser = Parser::with_pos(data, *offset);
                 // Expect: num gen obj
                 let obj_num = parser.next_token()?;
@@ -119,6 +137,14 @@ impl XRefTable {
                 }
             }
             XRefEntry::Compressed { stream_num, index: _ } => {
+                if *stream_num == id.number {
+                    return Err(format!("Cyclic object stream reference for object {}", id));
+                }
+                // Disallow nested object streams per ISO 32000-1 section 7.5.7
+                if let Some(XRefEntry::Compressed { .. }) = self.entries.get(stream_num) {
+                    return Err(format!("Nested object stream detected for stream {}", stream_num));
+                }
+
                 if !obj_stream_cache.contains_key(stream_num) {
                     let stream_obj = self.get_object(data, ObjectId::new(*stream_num, 0), obj_stream_cache)?;
                     let parsed_objects = parse_object_stream(&stream_obj)?;
@@ -135,9 +161,12 @@ impl XRefTable {
     }
 }
 
-/// Locates the `startxref` keyword in the last 1024 bytes of the PDF
+/// Locates the `startxref` keyword in the last 4096 bytes of the PDF
 fn find_startxref(data: &[u8]) -> Result<usize, String> {
-    let scan_len = data.len().min(1024);
+    if data.is_empty() {
+        return Err("Cannot find startxref in empty data".into());
+    }
+    let scan_len = data.len().min(4096);
     let start = data.len() - scan_len;
     let window = &data[start..];
 
@@ -146,7 +175,9 @@ fn find_startxref(data: &[u8]) -> Result<usize, String> {
         let abs_pos = start + pos + pattern.len();
         let mut lexer = Lexer::with_pos(data, abs_pos);
         if let Ok(Some(Token::Integer(offset))) = lexer.next_token() {
-            return Ok(offset as usize);
+            if offset >= 0 && (offset as usize) < data.len() {
+                return Ok(offset as usize);
+            }
         }
     }
 
@@ -170,7 +201,7 @@ fn read_ascii_xref_subsections(parser: &mut Parser, table: &mut XRefTable) -> Re
         }
 
         let first_id = match tok1 {
-            Token::Integer(i) => i as u32,
+            Token::Integer(i) if i >= 0 && i <= u32::MAX as i64 => i as u32,
             _ => {
                 parser.set_pos(saved_pos);
                 break;
@@ -178,26 +209,33 @@ fn read_ascii_xref_subsections(parser: &mut Parser, table: &mut XRefTable) -> Re
         };
 
         let count = match parser.next_token()? {
-            Some(Token::Integer(c)) => c as u32,
+            Some(Token::Integer(c)) if c >= 0 && c <= u32::MAX as i64 => c as u32,
             _ => return Err("Expected count in xref subsection".into()),
         };
 
         for i in 0..count {
             let offset_tok = parser.next_token()?;
+            if offset_tok.is_none() {
+                break;
+            }
             let gen_tok = parser.next_token()?;
             let type_tok = parser.next_token()?;
 
             if let (Some(Token::Integer(offset)), Some(Token::Integer(gen)), Some(Token::Keyword(typ))) =
                 (offset_tok, gen_tok, type_tok)
             {
-                let obj_id = first_id + i;
-                if typ == "n" {
-                    table.entries.entry(obj_id).or_insert(
-                        XRefEntry::Uncompressed {
-                            offset: offset as usize,
-                            generation: gen as u16,
-                        },
-                    );
+                if offset < 0 || gen < 0 || gen > u16::MAX as i64 {
+                    continue;
+                }
+                if let Some(obj_id) = first_id.checked_add(i) {
+                    if typ == "n" {
+                        table.entries.entry(obj_id).or_insert(
+                            XRefEntry::Uncompressed {
+                                offset: offset as usize,
+                                generation: gen as u16,
+                            },
+                        );
+                    }
                 }
             }
         }
@@ -220,10 +258,22 @@ fn read_binary_xref_stream(
         return Err("Invalid /W array length in XRef stream".into());
     }
 
-    let w0 = w_array[0].as_i64().unwrap_or(0) as usize;
-    let w1 = w_array[1].as_i64().unwrap_or(0) as usize;
-    let w2 = w_array[2].as_i64().unwrap_or(0) as usize;
-    let entry_size = w0 + w1 + w2;
+    let w0 = match w_array[0].as_i64() {
+        Some(w) if w >= 0 => w as usize,
+        _ => return Err("Invalid W[0] in XRef stream".into()),
+    };
+    let w1 = match w_array[1].as_i64() {
+        Some(w) if w >= 0 => w as usize,
+        _ => return Err("Invalid W[1] in XRef stream".into()),
+    };
+    let w2 = match w_array[2].as_i64() {
+        Some(w) if w >= 0 => w as usize,
+        _ => return Err("Invalid W[2] in XRef stream".into()),
+    };
+    let entry_size = w0
+        .checked_add(w1)
+        .and_then(|s| s.checked_add(w2))
+        .ok_or("Entry size overflow in XRef stream")?;
     if entry_size == 0 {
         return Err("XRef stream entry size is 0".into());
     }
@@ -247,7 +297,10 @@ fn read_binary_xref_stream(
 
     let mut stream_pos = 0;
     for (first_id, count) in index_ranges {
-        for i in 0..count {
+        let max_possible = (stream_data.len().saturating_sub(stream_pos)) / entry_size;
+        let safe_count = (count as usize).min(max_possible) as u32;
+
+        for i in 0..safe_count {
             if stream_pos + entry_size > stream_data.len() {
                 break;
             }
@@ -259,27 +312,28 @@ fn read_binary_xref_stream(
             let f1 = read_int(&entry_bytes[w0..w0 + w1]);
             let f2 = read_int(&entry_bytes[w0 + w1..entry_size]);
 
-            let obj_id = first_id + i;
-            match entry_type {
-                1 => {
-                    // Type 1: uncompressed object at file byte offset
-                    table.entries.entry(obj_id).or_insert(
-                        XRefEntry::Uncompressed {
-                            offset: f1 as usize,
-                            generation: f2 as u16,
-                        },
-                    );
+            if let Some(obj_id) = first_id.checked_add(i) {
+                match entry_type {
+                    1 => {
+                        // Type 1: uncompressed object at file byte offset
+                        table.entries.entry(obj_id).or_insert(
+                            XRefEntry::Uncompressed {
+                                offset: f1 as usize,
+                                generation: f2 as u16,
+                            },
+                        );
+                    }
+                    2 => {
+                        // Type 2: object in object stream (f1 = stream obj num, f2 = index)
+                        table.entries.entry(obj_id).or_insert(
+                            XRefEntry::Compressed {
+                                stream_num: f1 as u32,
+                                index: f2 as u16,
+                            },
+                        );
+                    }
+                    _ => {} // Type 0: free object
                 }
-                2 => {
-                    // Type 2: object in object stream (f1 = stream obj num, f2 = index)
-                    table.entries.entry(obj_id).or_insert(
-                        XRefEntry::Compressed {
-                            stream_num: f1 as u32,
-                            index: f2 as u16,
-                        },
-                    );
-                }
-                _ => {} // Type 0: free object
             }
         }
     }
@@ -300,19 +354,25 @@ fn parse_object_stream(stream_obj: &PdfObject) -> Result<BTreeMap<u32, PdfObject
     let stream = stream_obj.as_stream().ok_or("Expected stream for ObjStm")?;
     let decompressed = decompress_stream(&stream.data, &stream.dict)?;
 
-    let num_objects = stream.dict.get("N").and_then(|n| n.as_i64()).unwrap_or(0) as usize;
-    let first_offset = stream.dict.get("First").and_then(|f| f.as_i64()).unwrap_or(0) as usize;
+    let raw_n = stream.dict.get("N").and_then(|n| n.as_i64()).unwrap_or(0);
+    let raw_first = stream.dict.get("First").and_then(|f| f.as_i64()).unwrap_or(0);
+    if raw_n <= 0 || raw_first < 0 {
+        return Ok(BTreeMap::new());
+    }
+    let num_objects = raw_n as usize;
+    let first_offset = raw_first as usize;
 
     let mut parser = Parser::new(&decompressed);
-    let mut index_entries = Vec::with_capacity(num_objects);
+    let safe_capacity = num_objects.min(decompressed.len() / 2).min(100_000);
+    let mut index_entries = Vec::with_capacity(safe_capacity);
 
     for _ in 0..num_objects {
         let obj_num = match parser.next_token()? {
-            Some(Token::Integer(n)) => n as u32,
+            Some(Token::Integer(n)) if n >= 0 => n as u32,
             _ => return Err("Failed to read object number in ObjStm index".into()),
         };
         let rel_offset = match parser.next_token()? {
-            Some(Token::Integer(o)) => o as usize,
+            Some(Token::Integer(o)) if o >= 0 => o as usize,
             _ => return Err("Failed to read relative offset in ObjStm index".into()),
         };
         index_entries.push((obj_num, rel_offset));
@@ -320,10 +380,13 @@ fn parse_object_stream(stream_obj: &PdfObject) -> Result<BTreeMap<u32, PdfObject
 
     let mut result = BTreeMap::new();
     for (obj_num, rel_offset) in index_entries {
-        let abs_pos = first_offset + rel_offset;
-        let mut obj_parser = Parser::with_pos(&decompressed, abs_pos);
-        if let Some(obj) = obj_parser.parse_object()? {
-            result.insert(obj_num, obj);
+        if let Some(abs_pos) = first_offset.checked_add(rel_offset) {
+            if abs_pos < decompressed.len() {
+                let mut obj_parser = Parser::with_pos(&decompressed, abs_pos);
+                if let Some(obj) = obj_parser.parse_object()? {
+                    result.insert(obj_num, obj);
+                }
+            }
         }
     }
 
@@ -362,5 +425,70 @@ mod tests {
         let mut cache = HashMap::new();
         let cat = table.get_object(&pdf, ObjectId::new(1, 0), &mut cache).unwrap();
         assert_eq!(cat.dict_get("Type").unwrap().as_name(), Some("Catalog"));
+    }
+
+    #[test]
+    fn test_xref_cyclic_prev_does_not_infinite_loop() {
+        let mut pdf = Vec::new();
+        pdf.extend_from_slice(b"%PDF-1.4\n");
+        let xref_pos = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 /Prev {} >>\nstartxref\n{}\n%%EOF",
+                xref_pos, xref_pos
+            )
+            .as_bytes(),
+        );
+
+        // Must terminate quickly rather than hanging in infinite loop
+        let table = XRefTable::parse(&pdf);
+        assert!(table.is_ok());
+    }
+
+    #[test]
+    fn test_xref_corrupt_negative_prev() {
+        let mut pdf = Vec::new();
+        pdf.extend_from_slice(b"%PDF-1.4\n");
+        let xref_pos = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 /Prev -500 >>\nstartxref\n{}\n%%EOF",
+                xref_pos
+            )
+            .as_bytes(),
+        );
+
+        let table = XRefTable::parse(&pdf);
+        assert!(table.is_ok());
+    }
+
+    #[test]
+    fn test_xref_negative_w_array_rejected() {
+        let mut dict = BTreeMap::new();
+        let w_arr = vec![
+            PdfObject::Integer(-1),
+            PdfObject::Integer(2),
+            PdfObject::Integer(1),
+        ];
+        dict.insert("W".into(), PdfObject::Array(w_arr));
+        let mut table = XRefTable::new();
+        let res = read_binary_xref_stream(&[0u8; 16], &dict, &mut table);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_xref_self_referential_objstm_prevented() {
+        let mut table = XRefTable::new();
+        table.entries.insert(
+            5,
+            XRefEntry::Compressed {
+                stream_num: 5,
+                index: 0,
+            },
+        );
+        let mut cache = HashMap::new();
+        let res = table.get_object(b"", ObjectId::new(5, 0), &mut cache);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("Cyclic object stream"));
     }
 }

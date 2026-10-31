@@ -29,26 +29,37 @@ impl Matrix {
     }
 
     pub fn new(a: f32, b: f32, c: f32, d: f32, e: f32, f: f32) -> Self {
-        Self { a, b, c, d, e, f }
+        Self {
+            a: if a.is_finite() { a } else { 0.0 },
+            b: if b.is_finite() { b } else { 0.0 },
+            c: if c.is_finite() { c } else { 0.0 },
+            d: if d.is_finite() { d } else { 0.0 },
+            e: if e.is_finite() { e } else { 0.0 },
+            f: if f.is_finite() { f } else { 0.0 },
+        }
     }
 
     /// Multiplies self by other (self * other)
     pub fn concat(&self, other: &Matrix) -> Matrix {
-        Matrix {
-            a: self.a * other.a + self.b * other.c,
-            b: self.a * other.b + self.b * other.d,
-            c: self.c * other.a + self.d * other.c,
-            d: self.c * other.b + self.d * other.d,
-            e: self.e * other.a + self.f * other.c + other.e,
-            f: self.e * other.b + self.f * other.d + other.f,
-        }
+        let a = self.a * other.a + self.b * other.c;
+        let b = self.a * other.b + self.b * other.d;
+        let c = self.c * other.a + self.d * other.c;
+        let d = self.c * other.b + self.d * other.d;
+        let e = self.e * other.a + self.f * other.c + other.e;
+        let f = self.e * other.b + self.f * other.d + other.f;
+        Matrix::new(a, b, c, d, e, f)
     }
 
     /// Transforms a point (x, y) through this matrix
     pub fn transform_point(&self, x: f32, y: f32) -> (f32, f32) {
+        let x = if x.is_finite() { x } else { 0.0 };
+        let y = if y.is_finite() { y } else { 0.0 };
         let tx = self.a * x + self.c * y + self.e;
         let ty = self.b * x + self.d * y + self.f;
-        (tx, ty)
+        (
+            if tx.is_finite() { tx } else { 0.0 },
+            if ty.is_finite() { ty } else { 0.0 },
+        )
     }
 }
 
@@ -117,9 +128,9 @@ impl<'a> ContentInterpreter<'a> {
     ) -> Self {
         Self {
             page_num,
-            origin_x,
-            max_y,
-            page_height,
+            origin_x: if origin_x.is_finite() { origin_x } else { 0.0 },
+            max_y: if max_y.is_finite() { max_y } else { 0.0 },
+            page_height: if page_height.is_finite() { page_height } else { 0.0 },
             fonts,
             state_stack: Vec::new(),
             current_state: GraphicsState::new(),
@@ -203,22 +214,23 @@ impl<'a> ContentInterpreter<'a> {
             }
             "w" => {
                 if let Some(t) = args.last() {
-                    self.current_state.line_width = get_num(t);
+                    let w = get_num(t);
+                    self.current_state.line_width = if w >= 0.0 { w } else { 1.0 };
                 }
             }
             "rg" => {
                 if args.len() >= 3 {
-                    let r = get_num(&args[args.len() - 3]);
-                    let g = get_num(&args[args.len() - 2]);
-                    let b = get_num(&args[args.len() - 1]);
+                    let r = get_num(&args[args.len() - 3]).clamp(0.0, 1.0);
+                    let g = get_num(&args[args.len() - 2]).clamp(0.0, 1.0);
+                    let b = get_num(&args[args.len() - 1]).clamp(0.0, 1.0);
                     self.current_state.fill_color = Some([r, g, b]);
                 }
             }
             "RG" => {
                 if args.len() >= 3 {
-                    let r = get_num(&args[args.len() - 3]);
-                    let g = get_num(&args[args.len() - 2]);
-                    let b = get_num(&args[args.len() - 1]);
+                    let r = get_num(&args[args.len() - 3]).clamp(0.0, 1.0);
+                    let g = get_num(&args[args.len() - 2]).clamp(0.0, 1.0);
+                    let b = get_num(&args[args.len() - 1]).clamp(0.0, 1.0);
                     self.current_state.stroke_color = Some([r, g, b]);
                 }
             }
@@ -237,7 +249,8 @@ impl<'a> ContentInterpreter<'a> {
                     if let Token::Name(ref fn_name) = args[args.len() - 2] {
                         self.current_font_name = fn_name.clone();
                     }
-                    self.current_font_size = get_num(&args[args.len() - 1]);
+                    let sz = get_num(&args[args.len() - 1]);
+                    self.current_font_size = if sz > 0.0 { sz } else { sz.abs().max(1.0) };
                 }
             }
             "Tm" => {
@@ -295,11 +308,13 @@ impl<'a> ContentInterpreter<'a> {
                         }
                         Token::Integer(k) => {
                             let kern = (*k as f32) / 1000.0 * self.current_font_size;
+                            let kern = if kern.is_finite() { kern } else { 0.0 };
                             let delta = Matrix::new(1.0, 0.0, 0.0, 1.0, -kern, 0.0);
                             self.text_matrix = delta.concat(&self.text_matrix);
                         }
                         Token::Real(k) => {
                             let kern = (*k as f32) / 1000.0 * self.current_font_size;
+                            let kern = if kern.is_finite() { kern } else { 0.0 };
                             let delta = Matrix::new(1.0, 0.0, 0.0, 1.0, -kern, 0.0);
                             self.text_matrix = delta.concat(&self.text_matrix);
                         }
@@ -415,7 +430,7 @@ impl<'a> ContentInterpreter<'a> {
 
                     self.image_placements.insert(
                         xname.clone(),
-                        BoundingBox::new(min_x, y0, max_x, y1),
+                        BoundingBox::new(round_coord(min_x), round_coord(y0), round_coord(max_x), round_coord(y1)),
                     );
                 }
             }
@@ -515,13 +530,13 @@ impl<'a> ContentInterpreter<'a> {
             }
         }
 
-        let bbox = if min_x < max_x && min_y < max_y {
-            BoundingBox::new(min_x, min_y, max_x, max_y)
+        let bbox = if min_x < max_x && min_y < max_y && min_x.is_finite() && min_y.is_finite() && max_x.is_finite() && max_y.is_finite() {
+            BoundingBox::new(round_coord(min_x), round_coord(min_y), round_coord(max_x), round_coord(max_y))
         } else {
             BoundingBox::new(0.0, 0.0, 0.0, 0.0)
         };
 
-        self.seqno_counter += 1;
+        self.seqno_counter = self.seqno_counter.saturating_add(1);
         let items = std::mem::take(&mut self.current_path);
         let item_count = items.len();
 
@@ -548,15 +563,24 @@ impl<'a> ContentInterpreter<'a> {
 }
 
 fn get_num(tok: &Token) -> f32 {
-    match tok {
+    let val = match tok {
         Token::Integer(i) => *i as f32,
         Token::Real(f) => *f as f32,
         _ => 0.0,
+    };
+    if val.is_finite() {
+        val
+    } else {
+        0.0
     }
 }
 
 fn round_coord(v: f32) -> f32 {
-    (v * 100.0).round() / 100.0
+    if !v.is_finite() {
+        return 0.0;
+    }
+    let clamped = v.clamp(-1e7, 1e7);
+    (clamped * 100.0).round() / 100.0
 }
 
 #[cfg(test)]
@@ -568,6 +592,35 @@ mod tests {
         let m = Matrix::new(1.0, 0.0, 0.0, 1.0, 50.0, 100.0);
         let (x, y) = m.transform_point(10.0, 20.0);
         assert_eq!((x, y), (60.0, 120.0));
+    }
+
+    #[test]
+    fn test_matrix_nan_and_inf_resilience() {
+        let m_bad = Matrix::new(f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 1.0, 0.0, 0.0);
+        assert_eq!(m_bad.a, 0.0);
+        assert_eq!(m_bad.b, 0.0);
+        assert_eq!(m_bad.c, 0.0);
+
+        let m1 = Matrix::new(1e30, 0.0, 0.0, 1e30, 0.0, 0.0);
+        let m2 = Matrix::new(1e30, 0.0, 0.0, 1e30, 0.0, 0.0);
+        let m3 = m1.concat(&m2);
+        // Overflow to infinity should be sanitized to 0.0
+        assert_eq!(m3.a, 0.0);
+        assert_eq!(m3.d, 0.0);
+
+        let (tx, ty) = m1.transform_point(f32::NAN, f32::INFINITY);
+        assert_eq!(tx, 0.0);
+        assert_eq!(ty, 0.0);
+    }
+
+    #[test]
+    fn test_round_coord_robustness() {
+        assert_eq!(round_coord(f32::NAN), 0.0);
+        assert_eq!(round_coord(f32::INFINITY), 0.0);
+        assert_eq!(round_coord(-f32::INFINITY), 0.0);
+        assert_eq!(round_coord(1e20), 1e7);
+        assert_eq!(round_coord(-1e20), -1e7);
+        assert_eq!(round_coord(42.567), 42.57);
     }
 
     #[test]
@@ -626,5 +679,30 @@ B\n";
 
         // Stack must be capped at MAX_GRAPHICS_STATE_DEPTH (64)
         assert_eq!(interp.state_stack_depth(), MAX_GRAPHICS_STATE_DEPTH);
+    }
+
+    #[test]
+    fn test_operator_extreme_values_do_not_crash() {
+        let stream = b"-999 w\n\
+1000 -50 2 rg\n\
+1e38 1e38 0 0 1e38 1e38 cm\n\
+/F1 -50 Tf\n\
+1e38 1e38 m\n\
+1e38 1e38 l\n\
+1e38 1e38 1e38 1e38 re\n\
+B\n";
+        let fonts = HashMap::new();
+        let mut interp = ContentInterpreter::new(1, 842.0, &fonts);
+        let res = interp.interpret(stream);
+        assert!(res.is_ok());
+        // Verify drawings produced do not contain NaN or Inf
+        for d in &interp.drawings {
+            assert!(d.bbox.x0.is_finite());
+            assert!(d.bbox.y0.is_finite());
+            assert!(d.bbox.x1.is_finite());
+            assert!(d.bbox.y1.is_finite());
+            assert!(d.bbox.width.is_finite());
+            assert!(d.bbox.height.is_finite());
+        }
     }
 }
