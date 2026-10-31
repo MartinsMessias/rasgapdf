@@ -171,6 +171,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             extract_images: args.images || args.extract_images.is_some(),
             extract_drawings: args.drawings,
             filter_background_fills: !args.keep_backgrounds,
+            apply_rotation: false,
         };
 
         let doc = match parse_file(&args.input, &options) {

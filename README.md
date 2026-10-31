@@ -83,6 +83,13 @@ Reconstructs the visual hierarchy into visual paragraphs (`text_blocks`), text l
 - **Latency:** ~8 to 15 ms per page
 - **Output:** Hierarchical tree `SpatialDocument` -> `pages` -> `text_blocks` -> `lines` -> `tables`.
 
+### 📐 Deterministic Coordinate Contract (CropBox & Rotation Aware)
+Every bounding box `[x0, y0, x1, y1]` emitted by RasgaPDF obeys an explicit, mathematically deterministic coordinate contract:
+- **Origin `(0, 0)`:** Normalized to the **Top-Left** of the visible page viewport (`CropBox` with automatic fallback to `MediaBox`), matching web DOM and HTML5 Canvas standards. $+X$ points right, $+Y$ points downward.
+- **Units:** Standard PostScript / PDF typographic points ($1/72$ inch).
+- **Non-zero CropBox Offsets:** Correctly subtracted ($	ext{norm\_x} = x - 	ext{origin\_x}$, $	ext{norm\_y} = 	ext{max\_y} - y$), so citations map to true visible screen pixels without drift.
+- **Rotation Awareness:** Pages expose native `rotation` (0, 90, 180, 270). You can also set `apply_rotation=True` (or call `.with_applied_rotation()`) to get pre-rotated bounding boxes that align directly with rotated document canvases.
+
 ---
 
 ## ⚡ Performance Benchmark
@@ -277,7 +284,15 @@ for doc in docs:
     print(f"Page {doc.metadata['page']} (Tables: {doc.metadata['table_count']})")
     print(doc.page_content)
 
-# Mode 2: "elements" (Spatial RAG — 1 Document per text block/table with exact bounding box!)
+# Mode 2: "chunks" (Dense RAG Chunking — preserves multi-rect bounding boxes per chunk!)
+chunk_loader = RasgaPDFLoader("paper.pdf", mode="chunks", chunk_max_chars=1200, chunk_overlap_blocks=1)
+chunks = chunk_loader.load()
+for ch in chunks:
+    # Rich semantic text for embedding models + full list of constituent boxes for visual citation!
+    print(f"Page {ch.metadata['page']} | BBoxes: {len(ch.metadata['bboxes'])} | Overall: {ch.metadata['overall_bbox']}")
+    print(ch.page_content)
+
+# Mode 3: "elements" (Spatial RAG — 1 Document per text block/table with exact bounding box!)
 spatial_loader = RasgaPDFLoader("invoice.pdf", mode="elements")
 elements = spatial_loader.load()
 for el in elements:
@@ -302,6 +317,23 @@ index = VectorStoreIndex.from_documents(documents)
 query_engine = index.as_query_engine()
 response = query_engine.query("What was the net profit in table 3?")
 print(response)
+```
+
+### 🧩 Native Spatial Chunking (`rasgapdf.to_spatial_chunks`)
+
+For custom RAG pipelines, extract semantic chunks with preserved multi-rect highlight boundaries in one call:
+
+```python
+import rasgapdf
+
+doc = rasgapdf.parse_pdf("annual_report.pdf")
+chunks = rasgapdf.to_spatial_chunks(doc, max_chars=1200, overlap_blocks=1)
+
+for ch in chunks:
+    # Embed ch["text"] into vector database (Pinecone, Qdrant, Chroma, pgvector)
+    # Store ch["bboxes"] in metadata -> frontend draws multi-rect highlights upon retrieval!
+    print(f"Chunk #{ch['chunk_id']} (Page {ch['page_number']}) — {ch['block_count']} blocks, {ch['token_estimate']} tokens")
+    print(f"Highlight quads: {ch['bboxes']}")
 ```
 
 ---

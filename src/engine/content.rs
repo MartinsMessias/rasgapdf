@@ -75,6 +75,9 @@ impl GraphicsState {
 /// Content stream interpreter that extracts 2D atomic spans and vector drawings
 pub struct ContentInterpreter<'a> {
     page_num: usize,
+    origin_x: f32,
+    max_y: f32,
+    #[allow(dead_code)]
     page_height: f32,
     fonts: &'a HashMap<String, PdfFont>,
     state_stack: Vec<GraphicsState>,
@@ -101,8 +104,21 @@ pub struct ContentInterpreter<'a> {
 
 impl<'a> ContentInterpreter<'a> {
     pub fn new(page_num: usize, page_height: f32, fonts: &'a HashMap<String, PdfFont>) -> Self {
+        Self::with_viewport(page_num, 0.0, page_height, page_height, fonts)
+    }
+
+    pub fn with_viewport(
+        page_num: usize,
+        origin_x: f32,
+        max_y: f32,
+        #[allow(dead_code)]
+    page_height: f32,
+        fonts: &'a HashMap<String, PdfFont>,
+    ) -> Self {
         Self {
             page_num,
+            origin_x,
+            max_y,
             page_height,
             fonts,
             state_stack: Vec::new(),
@@ -308,7 +324,7 @@ impl<'a> ContentInterpreter<'a> {
                     let x = get_num(&args[args.len() - 2]);
                     let y = get_num(&args[args.len() - 1]);
                     let (tx, ty) = self.current_state.ctm.transform_point(x, y);
-                    self.current_point = (tx, self.page_height - ty);
+                    self.current_point = (tx - self.origin_x, self.max_y - ty);
                 }
             }
             "l" => {
@@ -316,7 +332,7 @@ impl<'a> ContentInterpreter<'a> {
                     let x = get_num(&args[args.len() - 2]);
                     let y = get_num(&args[args.len() - 1]);
                     let (tx, ty) = self.current_state.ctm.transform_point(x, y);
-                    let p2 = (tx, self.page_height - ty);
+                    let p2 = (tx - self.origin_x, self.max_y - ty);
                     self.current_path.push(SpatialDrawingItem::Line {
                         p1: [self.current_point.0, self.current_point.1],
                         p2: [p2.0, p2.1],
@@ -332,10 +348,10 @@ impl<'a> ContentInterpreter<'a> {
                     let h = get_num(&args[args.len() - 1]);
                     let (p0_x, p0_y) = self.current_state.ctm.transform_point(x, y + h);
                     let (p1_x, p1_y) = self.current_state.ctm.transform_point(x + w, y);
-                    let rx0 = p0_x.min(p1_x);
-                    let ry0 = (self.page_height - p0_y).min(self.page_height - p1_y);
-                    let rx1 = p0_x.max(p1_x);
-                    let ry1 = (self.page_height - p0_y).max(self.page_height - p1_y);
+                    let rx0 = (p0_x - self.origin_x).min(p1_x - self.origin_x);
+                    let ry0 = (self.max_y - p0_y).min(self.max_y - p1_y);
+                    let rx1 = (p0_x - self.origin_x).max(p1_x - self.origin_x);
+                    let ry1 = (self.max_y - p0_y).max(self.max_y - p1_y);
                     self.current_path.push(SpatialDrawingItem::Rect {
                         bbox: BoundingBox::new(rx0, ry0, rx1, ry1),
                         orientation: 1,
@@ -353,11 +369,11 @@ impl<'a> ContentInterpreter<'a> {
                     let (p2x, p2y) = self.current_state.ctm.transform_point(x1, y1);
                     let (p3x, p3y) = self.current_state.ctm.transform_point(x2, y2);
                     let (p4x, p4y) = self.current_state.ctm.transform_point(x3, y3);
-                    let p4 = (p4x, self.page_height - p4y);
+                    let p4 = (p4x - self.origin_x, self.max_y - p4y);
                     self.current_path.push(SpatialDrawingItem::Curve {
                         p1: [self.current_point.0, self.current_point.1],
-                        p2: [p2x, self.page_height - p2y],
-                        p3: [p3x, self.page_height - p3y],
+                        p2: [p2x - self.origin_x, self.max_y - p2y],
+                        p3: [p3x - self.origin_x, self.max_y - p3y],
                         p4: [p4.0, p4.1],
                     });
                     self.current_point = p4;
@@ -389,13 +405,13 @@ impl<'a> ContentInterpreter<'a> {
                     let (p2_x, p2_y) = self.current_state.ctm.transform_point(1.0, 0.0);
                     let (p3_x, p3_y) = self.current_state.ctm.transform_point(0.0, 1.0);
 
-                    let min_x = p0_x.min(p1_x).min(p2_x).min(p3_x);
-                    let max_x = p0_x.max(p1_x).max(p2_x).max(p3_x);
+                    let min_x = p0_x.min(p1_x).min(p2_x).min(p3_x) - self.origin_x;
+                    let max_x = p0_x.max(p1_x).max(p2_x).max(p3_x) - self.origin_x;
                     let min_y = p0_y.min(p1_y).min(p2_y).min(p3_y);
                     let max_y = p0_y.max(p1_y).max(p2_y).max(p3_y);
 
-                    let y0 = (self.page_height - max_y).min(self.page_height - min_y);
-                    let y1 = (self.page_height - max_y).max(self.page_height - min_y);
+                    let y0 = (self.max_y - max_y).min(self.max_y - min_y);
+                    let y1 = (self.max_y - max_y).max(self.max_y - min_y);
 
                     self.image_placements.insert(
                         xname.clone(),
@@ -432,10 +448,10 @@ impl<'a> ContentInterpreter<'a> {
         let (bl_x, bl_y) = eff_matrix.transform_point(0.0, descent);
         let (tr_x, tr_y) = eff_matrix.transform_point(word_width, ascent);
 
-        let x0 = bl_x.min(tr_x);
-        let x1 = bl_x.max(tr_x);
-        let y0 = (self.page_height - tr_y).min(self.page_height - bl_y);
-        let y1 = (self.page_height - tr_y).max(self.page_height - bl_y);
+        let x0 = (bl_x - self.origin_x).min(tr_x - self.origin_x);
+        let x1 = (bl_x - self.origin_x).max(tr_x - self.origin_x);
+        let y0 = (self.max_y - tr_y).min(self.max_y - bl_y);
+        let y1 = (self.max_y - tr_y).max(self.max_y - bl_y);
 
         // Only emit spans with non-whitespace text to avoid emitting blank bounding boxes
         let trimmed = combined_text.trim_matches(|c: char| c.is_whitespace() || c == '\u{00A0}');

@@ -131,6 +131,7 @@ def parse_pdf(
     extract_images: bool = False,
     extract_drawings: bool = False,
     keep_background_fills: bool = False,
+    apply_rotation: bool = False,
 ) -> Dict[str, Any]:
     """
     🎯 Modo 2 (Estruturado): Processa o PDF e retorna o layout espacial hierárquico
@@ -165,6 +166,7 @@ def parse_pdf(
         "extract_images": extract_images,
         "extract_drawings": extract_drawings,
         "filter_background_fills": not keep_background_fills,
+        "apply_rotation": apply_rotation,
     }
 
     path_bytes = os.path.abspath(file_path).encode("utf-8")
@@ -340,6 +342,103 @@ def extract_images_bytes(data: bytes, output_dir: str) -> Dict[str, Any]:
     finally:
         _lib.rasgapdf_free_string(res_ptr)
 
+
+def to_spatial_chunks(
+    doc_or_page: Dict[str, Any],
+    max_chars: int = 1500,
+    overlap_blocks: int = 1,
+) -> List[Dict[str, Any]]:
+    """
+    Agrupa blocos espaciais em chunks semânticos para RAG, preservando
+    a lista completa de bboxes individuais para citação visual precisa.
+
+    Args:
+        doc_or_page: Dicionário do documento (SpatialDocument) ou página (SpatialPage).
+        max_chars: Limite aproximado de caracteres por chunk (padrão: 1500).
+        overlap_blocks: Quantidade de blocos preservados como sobreposição (padrão: 1).
+
+    Returns:
+        Lista de dicionários de chunks contendo:
+        - text: Texto semântico concatenado.
+        - bboxes: Lista de [[x0, y0, x1, y1], ...] de todos os blocos no chunk.
+        - overall_bbox: [x0, y0, x1, y1] da área total envolvente.
+        - page_number: Número da página (1-based).
+        - block_count: Número de blocos agrupados.
+        - token_estimate: Estimativa aproximada de tokens.
+    """
+    def _bbox_to_list(b: Any) -> List[float]:
+        if isinstance(b, dict):
+            return [float(b.get("x0", 0.0)), float(b.get("y0", 0.0)), float(b.get("x1", 0.0)), float(b.get("y1", 0.0))]
+        if isinstance(b, (list, tuple)) and len(b) >= 4:
+            return [float(b[0]), float(b[1]), float(b[2]), float(b[3])]
+        return [0.0, 0.0, 0.0, 0.0]
+
+    def _chunk_page(page: Dict[str, Any], start_id: int) -> List[Dict[str, Any]]:
+        page_num = page.get("page_number", 1)
+        blocks = page.get("text_blocks", [])
+        if not blocks:
+            return []
+
+        chunks = []
+        curr_blocks = []
+        curr_len = 0
+        cid = start_id
+
+        for b in blocks:
+            lines = [l.get("text", "") for l in b.get("lines", []) if l.get("text")]
+            b_text = "\n".join(lines).strip()
+            if not b_text:
+                continue
+
+            b_len = len(b_text) + 1
+            if curr_blocks and (curr_len + b_len > max_chars):
+                chunks.append(_emit_chunk(page_num, cid, curr_blocks))
+                cid += 1
+                if overlap_blocks > 0 and len(curr_blocks) > overlap_blocks:
+                    curr_blocks = curr_blocks[-overlap_blocks:]
+                    curr_len = sum(len(cb["text"]) + 1 for cb in curr_blocks)
+                elif overlap_blocks == 0:
+                    curr_blocks = []
+                    curr_len = 0
+
+            curr_blocks.append({"block": b, "text": b_text, "bbox": _bbox_to_list(b.get("bbox", {}))})
+            curr_len += b_len
+
+        if curr_blocks:
+            chunks.append(_emit_chunk(page_num, cid, curr_blocks))
+
+        return chunks
+
+    def _emit_chunk(page_num: int, chunk_id: int, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        texts = [item["text"] for item in items]
+        bboxes = [item["bbox"] for item in items]
+        min_x0 = min(bb[0] for bb in bboxes) if bboxes else 0.0
+        min_y0 = min(bb[1] for bb in bboxes) if bboxes else 0.0
+        max_x1 = max(bb[2] for bb in bboxes) if bboxes else 0.0
+        max_y1 = max(bb[3] for bb in bboxes) if bboxes else 0.0
+        full_text = "\n\n".join(texts)
+        return {
+            "chunk_id": chunk_id,
+            "page_number": page_num,
+            "text": full_text,
+            "bboxes": bboxes,
+            "overall_bbox": [min_x0, min_y0, max_x1, max_y1],
+            "block_count": len(items),
+            "token_estimate": (len(full_text) + 3) // 4,
+        }
+
+    if "pages" in doc_or_page:
+        result = []
+        c_counter = 1
+        for p in doc_or_page.get("pages", []):
+            page_chunks = _chunk_page(p, c_counter)
+            c_counter += len(page_chunks)
+            result.extend(page_chunks)
+        return result
+    else:
+        return _chunk_page(doc_or_page, 1)
+
+
 def __getattr__(name: str):
     if name == "RasgaPDFLoader":
         from .integrations.langchain import RasgaPDFLoader
@@ -358,6 +457,7 @@ __all__ = [
     "extract_images",
     "extract_images_bytes",
     "version",
+    "to_spatial_chunks",
     "RasgaPDFLoader",
     "RasgaPDFReader",
 ]

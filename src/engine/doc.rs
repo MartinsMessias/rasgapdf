@@ -50,6 +50,11 @@ pub struct PageInfo {
     pub fonts: HashMap<String, PdfFont>,
     pub contents: Vec<u8>,
     pub raw_page_obj: PdfObject,
+    pub media_box: Option<[f32; 4]>,
+    pub crop_box: Option<[f32; 4]>,
+    pub origin_x: f32,
+    pub origin_y: f32,
+    pub max_y: f32,
 }
 
 impl<'a> PurePdfDoc<'a> {
@@ -161,14 +166,29 @@ impl<'a> PurePdfDoc<'a> {
         let page_ref = self.pages[page_idx];
         let page_obj = self.xref.get_object(self.data, page_ref, &mut self.obj_cache)?;
 
-        // Page dimensions (/MediaBox or /CropBox)
-        let (width, height) = self.get_page_dimensions(&page_obj)?;
+        // MediaBox, CropBox, and Rotate (with page tree inheritance support)
+        let media_box_obj = self.get_inherited_page_attribute(&page_obj, "MediaBox")?;
+        let crop_box_obj = self.get_inherited_page_attribute(&page_obj, "CropBox")?;
+        let rotate_obj = self.get_inherited_page_attribute(&page_obj, "Rotate")?;
 
-        // Page rotation (/Rotate)
-        let rotation = page_obj
-            .dict_get("Rotate")
+        let media_box = self.parse_box_array(media_box_obj.as_ref())?;
+        let crop_box = self.parse_box_array(crop_box_obj.as_ref())?;
+
+        let rotation = rotate_obj
             .and_then(|r| r.as_i64())
             .unwrap_or(0) as i32;
+
+        // Effective visible viewport: CropBox takes precedence over MediaBox
+        let effective_box = crop_box.or(media_box).unwrap_or([0.0, 0.0, 595.28, 841.89]);
+        let min_x = effective_box[0].min(effective_box[2]);
+        let max_x = effective_box[0].max(effective_box[2]);
+        let min_y = effective_box[1].min(effective_box[3]);
+        let max_y = effective_box[1].max(effective_box[3]);
+
+        let width = max_x - min_x;
+        let height = max_y - min_y;
+        let origin_x = min_x;
+        let origin_y = min_y;
 
         // Resources (/Font)
         let fonts = self.load_page_fonts(&page_obj)?;
@@ -183,29 +203,45 @@ impl<'a> PurePdfDoc<'a> {
             fonts,
             contents,
             raw_page_obj: page_obj,
+            media_box,
+            crop_box,
+            origin_x,
+            origin_y,
+            max_y,
         })
     }
 
-    fn get_page_dimensions(&mut self, page_obj: &PdfObject) -> Result<(f32, f32), String> {
-        let box_obj = page_obj
-            .dict_get("MediaBox")
-            .or_else(|| page_obj.dict_get("CropBox"));
-
-        if let Some(b) = box_obj {
-            let resolved = self.resolve(b)?;
-            if let Some(arr) = resolved.as_array() {
-                if arr.len() >= 4 {
-                    let x0 = arr[0].as_f64().unwrap_or(0.0) as f32;
-                    let y0 = arr[1].as_f64().unwrap_or(0.0) as f32;
-                    let x1 = arr[2].as_f64().unwrap_or(595.28) as f32;
-                    let y1 = arr[3].as_f64().unwrap_or(841.89) as f32;
-                    return Ok(((x1 - x0).abs(), (y1 - y0).abs()));
-                }
+    fn get_inherited_page_attribute(&mut self, page_obj: &PdfObject, key: &str) -> Result<Option<PdfObject>, String> {
+        let mut curr = page_obj.clone();
+        for _ in 0..10 {
+            if let Some(val) = curr.dict_get(key) {
+                return Ok(Some(self.resolve(val)?));
+            }
+            if let Some(parent_ref) = curr.dict_get("Parent") {
+                curr = self.resolve(parent_ref)?;
+            } else {
+                break;
             }
         }
+        Ok(None)
+    }
 
-        // Default to standard A4 dimensions
-        Ok((595.28, 841.89))
+    fn parse_box_array(&mut self, obj: Option<&PdfObject>) -> Result<Option<[f32; 4]>, String> {
+        let b = match obj {
+            Some(o) => o,
+            None => return Ok(None),
+        };
+        let resolved = self.resolve(b)?;
+        if let Some(arr) = resolved.as_array() {
+            if arr.len() >= 4 {
+                let x0 = arr[0].as_f64().unwrap_or(0.0) as f32;
+                let y0 = arr[1].as_f64().unwrap_or(0.0) as f32;
+                let x1 = arr[2].as_f64().unwrap_or(595.28) as f32;
+                let y1 = arr[3].as_f64().unwrap_or(841.89) as f32;
+                return Ok(Some([x0, y0, x1, y1]));
+            }
+        }
+        Ok(None)
     }
 
     fn load_page_fonts(&mut self, page_obj: &PdfObject) -> Result<HashMap<String, PdfFont>, String> {
@@ -432,7 +468,7 @@ impl<'a> PurePdfDoc<'a> {
 
         for p in 0..total_pages {
             let page_info = self.load_page(p)?;
-            let mut interp = ContentInterpreter::new(p + 1, page_info.height, &page_info.fonts);
+            let mut interp = ContentInterpreter::with_viewport(p + 1, page_info.origin_x, page_info.max_y, page_info.height, &page_info.fonts);
             interp.interpret(&page_info.contents)?;
             all_spans.extend(interp.spans);
         }
@@ -456,7 +492,7 @@ impl<'a> PurePdfDoc<'a> {
 
         for p in 0..total_pages {
             let page_info = self.load_page(p)?;
-            let mut interp = ContentInterpreter::new(p + 1, page_info.height, &page_info.fonts);
+            let mut interp = ContentInterpreter::with_viewport(p + 1, page_info.origin_x, page_info.max_y, page_info.height, &page_info.fonts);
             let _ = interp.interpret(&page_info.contents);
 
             let res_obj = match page_info.raw_page_obj.dict_get("Resources") {
@@ -544,7 +580,7 @@ impl<'a> PurePdfDoc<'a> {
 
         for p in 0..total_pages {
             let page_info = self.load_page(p)?;
-            let mut interp = ContentInterpreter::new(p + 1, page_info.height, &page_info.fonts);
+            let mut interp = ContentInterpreter::with_viewport(p + 1, page_info.origin_x, page_info.max_y, page_info.height, &page_info.fonts);
             interp.interpret(&page_info.contents)?;
 
             let raw_coord_spans = interp.spans;
@@ -728,17 +764,25 @@ impl<'a> PurePdfDoc<'a> {
                 raw_span_count: raw_spans.len(),
                 images,
                 drawings,
+                media_box: page_info.media_box,
+                crop_box: page_info.crop_box,
             });
         }
 
         let elapsed = get_elapsed_ms(start);
 
-        Ok(SpatialDocument {
+        let mut doc = SpatialDocument {
             file_name: file_name.to_string(),
             total_pages,
             parse_time_ms: (elapsed * 100.0).round() / 100.0,
             pages,
-        })
+        };
+
+        if options.apply_rotation {
+            doc = doc.with_applied_rotation();
+        }
+
+        Ok(doc)
     }
 }
 

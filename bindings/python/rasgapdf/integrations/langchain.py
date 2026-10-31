@@ -29,6 +29,7 @@ class RasgaPDFLoader(BaseLoader):
         file_path_or_bytes: Path to PDF file or raw bytes of a PDF.
         mode: Extraction granularity:
             - "pages" (default): One Document per page with layout-preserved text & markdown tables.
+            - "chunks": Semantic chunks with full list of exact multi-rect bboxes for citations.
             - "elements": One Document per spatial element (blocks and tables) with exact 2D bounding boxes.
             - "text": A single Document containing the entire normalized text stream.
         detect_tables: Whether to detect and reconstruct physical 2D tables. Default True.
@@ -41,11 +42,15 @@ class RasgaPDFLoader(BaseLoader):
         mode: str = "pages",
         detect_tables: bool = True,
         markdown_tables: bool = True,
+        chunk_max_chars: int = 1500,
+        chunk_overlap_blocks: int = 1,
     ):
         self.file_input = file_path_or_bytes
         self.mode = mode
         self.detect_tables = detect_tables
         self.markdown_tables = markdown_tables
+        self.chunk_max_chars = chunk_max_chars
+        self.chunk_overlap_blocks = chunk_overlap_blocks
         self.source = str(file_path_or_bytes) if not isinstance(file_path_or_bytes, (bytes, bytearray)) else "bytes_stream"
 
     def lazy_load(self) -> Iterator[Document]:
@@ -61,6 +66,23 @@ class RasgaPDFLoader(BaseLoader):
 
         doc = rasgapdf.parse_pdf(self.file_input, detect_tables=self.detect_tables)
         pages = doc.get("pages", [])
+
+        if self.mode == "chunks":
+            chunks = rasgapdf.to_spatial_chunks(doc, max_chars=self.chunk_max_chars, overlap_blocks=self.chunk_overlap_blocks)
+            for chunk in chunks:
+                yield Document(
+                    page_content=chunk["text"],
+                    metadata={
+                        "source": self.source,
+                        "page": chunk["page_number"],
+                        "chunk_id": chunk["chunk_id"],
+                        "bboxes": chunk["bboxes"],
+                        "overall_bbox": chunk["overall_bbox"],
+                        "block_count": chunk["block_count"],
+                        "token_estimate": chunk["token_estimate"],
+                    },
+                )
+            return
 
         if self.mode == "elements":
             for page in pages:

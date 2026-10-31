@@ -51,7 +51,7 @@ def run_test(test_id, name, func):
 
 print("=" * 80)
 mode_label = "OFFICIAL BENCHMARKS" if USE_BENCHMARKS else "STANDALONE FIXTURES"
-print(f"🧪 EXECUTANDO BATERIA DE 25 CASOS DE TESTE — RASGAPDF SPATIAL AI ENGINE ({mode_label})")
+print(f"🧪 EXECUTANDO BATERIA DE 28 CASOS DE TESTE — RASGAPDF SPATIAL AI ENGINE ({mode_label})")
 print("=" * 80)
 
 # =========================================================================
@@ -275,11 +275,48 @@ def t25_memory_safety_repeatability():
         docs = loader.load()
         assert len(docs) == len(doc_astro["pages"])
 
+def t26_spatial_chunks_preserve_all_bboxes():
+    chunks = rasgapdf.to_spatial_chunks(doc_astro, max_chars=1200, overlap_blocks=1)
+    assert len(chunks) > 0, "Deveria gerar chunks espaciais"
+    for ch in chunks:
+        assert "text" in ch and len(ch["text"]) > 0
+        assert "bboxes" in ch and isinstance(ch["bboxes"], list)
+        assert len(ch["bboxes"]) == ch["block_count"], "Cada bloco constituinte deve manter sua bbox"
+        assert "overall_bbox" in ch and len(ch["overall_bbox"]) == 4
+        # overall_bbox must enclose all constituent bboxes
+        ob = ch["overall_bbox"]
+        for b in ch["bboxes"]:
+            assert b[0] >= ob[0] - 0.01
+            assert b[1] >= ob[1] - 0.01
+            assert b[2] <= ob[2] + 0.01
+            assert b[3] <= ob[3] + 0.01
+
+def t27_langchain_loader_chunks_mode():
+    loader = RasgaPDFLoader(str(pdf_astro), mode="chunks", chunk_max_chars=1000)
+    docs = loader.load()
+    assert len(docs) > 0, "Modo chunks no LangChain deve produzir Documents"
+    for d in docs:
+        assert "bboxes" in d.metadata
+        assert "overall_bbox" in d.metadata
+        assert len(d.metadata["bboxes"]) >= 1
+
+def t28_coordinate_contract_and_cropbox():
+    # Verify crop_box / media_box in parsed doc
+    p0 = doc_astro["pages"][0]
+    assert "width" in p0 and "height" in p0
+    assert "rotation" in p0
+    # Test apply_rotation option
+    doc_rot = rasgapdf.parse_pdf(str(pdf_astro), apply_rotation=True)
+    assert len(doc_rot["pages"]) == len(doc_astro["pages"])
+
 run_test(21, "Ordem de leitura sequencial consistente em 100% das páginas", t21_reading_order_sequential)
 run_test(22, "Ancoragem de citação espacial com localização de dados científicos", t22_spatial_citation_exact_data_match)
 run_test(23, "Ausência de poluição acidental de espaços em branco em linhas", t23_zero_accidental_whitespace_pollution)
 run_test(24, "Throughput do motor espacial: 12 páginas em menos de 100 ms", t24_high_throughput_sub_50ms)
 run_test(25, "Estabilidade de memória FFI e repetibilidade de execução em loop", t25_memory_safety_repeatability)
+run_test(26, "RAG Spatial Chunking: preservação estrita de múltiplas bboxes por chunk", t26_spatial_chunks_preserve_all_bboxes)
+run_test(27, "LangChain Loader: modo 'chunks' integrado com multi-rect highlighting", t27_langchain_loader_chunks_mode)
+run_test(28, "Contrato de coordenadas: CropBox/MediaBox e suporte a rotação visual", t28_coordinate_contract_and_cropbox)
 
 # =========================================================================
 # RELATÓRIO FINAL
@@ -288,7 +325,7 @@ passed = sum(1 for _, _, status, _ in test_results if status == "PASSED")
 failed = sum(1 for _, _, status, _ in test_results if status != "PASSED")
 
 print("\n" + "=" * 80)
-print(f"📊 RESULTADO FINAL: {passed}/25 PASSARAM ({failed} falhas)")
+print(f"📊 RESULTADO FINAL: {passed}/28 PASSARAM ({failed} falhas)")
 print("=" * 80)
 if failed == 0:
     print("🏆 100% DOS CASOS DE TESTE FORAM APROVADOS COM SUCESSO!")
