@@ -20,13 +20,19 @@ pub fn decompress_stream(
     let filter = dict.get("Filter");
 
     match filter {
-        Some(PdfObject::Name(name)) if name == "FlateDecode" => {
+        Some(PdfObject::Name(name)) if name == "FlateDecode" || name == "Fl" => {
             let decompressed = decompress_zlib(data)?;
             if let Some(decode_parms) = dict.get("DecodeParms").and_then(|p| p.as_dict()) {
                 apply_predictor(&decompressed, decode_parms)
             } else {
                 Ok(decompressed)
             }
+        }
+        Some(PdfObject::Name(name)) if name == "ASCII85Decode" || name == "A85" => {
+            decode_ascii85(data)
+        }
+        Some(PdfObject::Name(name)) if name == "ASCIIHexDecode" || name == "AHx" => {
+            decode_ascii_hex(data)
         }
         Some(PdfObject::Array(filters)) => {
             if filters.len() > MAX_FILTER_CHAIN_DEPTH {
@@ -40,11 +46,20 @@ pub fn decompress_stream(
             let mut current_data = data.to_vec();
             for f in filters {
                 if let Some(name) = f.as_name() {
-                    if name == "FlateDecode" {
-                        current_data = decompress_zlib(&current_data)?;
-                        if (current_data.len() as u64) > MAX_DECOMPRESSED_BYTES {
-                            return Err("Decompressed stream in filter pipeline exceeds maximum size".into());
+                    match name {
+                        "FlateDecode" | "Fl" => {
+                            current_data = decompress_zlib(&current_data)?;
                         }
+                        "ASCII85Decode" | "A85" => {
+                            current_data = decode_ascii85(&current_data)?;
+                        }
+                        "ASCIIHexDecode" | "AHx" => {
+                            current_data = decode_ascii_hex(&current_data)?;
+                        }
+                        _ => {}
+                    }
+                    if (current_data.len() as u64) > MAX_DECOMPRESSED_BYTES {
+                        return Err("Decompressed stream in filter pipeline exceeds maximum size".into());
                     }
                 }
             }
@@ -77,6 +92,117 @@ pub fn decompress_zlib_bounded(data: &[u8], max_bytes: u64) -> Result<Vec<u8>, S
         .read_to_end(&mut decompressed)
         .map_err(|e| format!("Zlib decompression error: {}", e))?;
     Ok(decompressed)
+}
+
+/// Decodes an ASCII85 (Base85) encoded stream (ISO 32000-1, Section 7.4.3)
+pub fn decode_ascii85(data: &[u8]) -> Result<Vec<u8>, String> {
+    if data.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut out = Vec::with_capacity(data.len());
+    let mut tuple: u32 = 0;
+    let mut count = 0;
+    let mut i = 0;
+
+    while i < data.len() {
+        let b = data[i];
+        i += 1;
+
+        if b == b'<' && i < data.len() && data[i] == b'~' {
+            i += 1;
+            continue;
+        }
+        if b == b'~' {
+            if i < data.len() && data[i] == b'>' {
+                break;
+            }
+        }
+        if b.is_ascii_whitespace() || b == 0 {
+            continue;
+        }
+        if b == b'z' {
+            if count != 0 {
+                return Err("Unexpected 'z' inside ASCII85 5-tuple".into());
+            }
+            out.extend_from_slice(&[0, 0, 0, 0]);
+            continue;
+        }
+        if !(b'!'..=b'u').contains(&b) {
+            // Stray characters outside ASCII85 character set are ignored
+            continue;
+        }
+
+        tuple = tuple.saturating_mul(85).saturating_add((b - b'!') as u32);
+        count += 1;
+
+        if count == 5 {
+            out.push((tuple >> 24) as u8);
+            out.push((tuple >> 16) as u8);
+            out.push((tuple >> 8) as u8);
+            out.push(tuple as u8);
+            tuple = 0;
+            count = 0;
+        }
+    }
+
+    if count > 1 {
+        // Pad with 'u' (value 84) to complete the 5-tuple
+        for _ in count..5 {
+            tuple = tuple.saturating_mul(85).saturating_add(84);
+        }
+        let bytes_to_write = count - 1;
+        let b0 = (tuple >> 24) as u8;
+        let b1 = (tuple >> 16) as u8;
+        let b2 = (tuple >> 8) as u8;
+        if bytes_to_write >= 1 { out.push(b0); }
+        if bytes_to_write >= 2 { out.push(b1); }
+        if bytes_to_write >= 3 { out.push(b2); }
+    } else if count == 1 {
+        return Err("Invalid trailing character in ASCII85 stream".into());
+    }
+
+    Ok(out)
+}
+
+/// Decodes an ASCIIHex encoded stream (ISO 32000-1, Section 7.4.2)
+pub fn decode_ascii_hex(data: &[u8]) -> Result<Vec<u8>, String> {
+    if data.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut out = Vec::with_capacity(data.len() / 2);
+    let mut first_nibble: Option<u8> = None;
+
+    for &b in data {
+        if b == b'>' {
+            break;
+        }
+        if b.is_ascii_whitespace() || b == 0 {
+            continue;
+        }
+        let nibble = match b {
+            b'0'..=b'9' => b - b'0',
+            b'a'..=b'f' => b - b'a' + 10,
+            b'A'..=b'F' => b - b'A' + 10,
+            _ => continue,
+        };
+        match first_nibble {
+            Some(high) => {
+                out.push((high << 4) | nibble);
+                first_nibble = None;
+            }
+            None => {
+                first_nibble = Some(nibble);
+            }
+        }
+    }
+
+    if let Some(high) = first_nibble {
+        out.push(high << 4);
+    }
+
+    Ok(out)
 }
 
 /// Applies PNG/TIFF predictor decoding (ISO 32000-1, Section 7.4.4.4)
@@ -320,5 +446,40 @@ mod tests {
         let dummy_data = vec![1, 2, 3];
         let res = decompress_stream(&dummy_data, &dict);
         assert!(res.is_err(), "Exceeding filter pipeline depth must error safely");
+    }
+
+    #[test]
+    fn test_decode_ascii85_standard_and_zero_compression() {
+        let input = b"<~9jqo^BlbD-BleB1DJ+*+F(f,q/0JhKF<GL>Cj@.4Gp$d7F!,L7@<6@)/0JDEF<C~>";
+        let decoded = decode_ascii85(input).unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&decoded),
+            "Man is distinguished, not only by his reason, but "
+        );
+
+        // 'z' zero-byte compression
+        let zero_input = b"z~>";
+        let zero_decoded = decode_ascii85(zero_input).unwrap();
+        assert_eq!(zero_decoded, vec![0, 0, 0, 0]);
+
+        // Empty
+        assert!(decode_ascii85(b"").unwrap().is_empty());
+        assert!(decode_ascii85(b"~>").unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_decode_ascii_hex_standard() {
+        let input = b"48656C6C6F20576F726C64> ";
+        let decoded = decode_ascii_hex(input).unwrap();
+        assert_eq!(String::from_utf8_lossy(&decoded), "Hello World");
+
+        // Odd number of digits: trailing 'A' becomes 0xA0
+        let odd_input = b"48656CA>";
+        let odd_decoded = decode_ascii_hex(odd_input).unwrap();
+        assert_eq!(odd_decoded, vec![0x48, 0x65, 0x6C, 0xA0]);
+
+        // Empty
+        assert!(decode_ascii_hex(b"").unwrap().is_empty());
+        assert!(decode_ascii_hex(b">").unwrap().is_empty());
     }
 }
