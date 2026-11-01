@@ -29,7 +29,6 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="⚡ RasgaPDF — 2D Spatial PDF Parser in Pure Rust">
   <meta name="twitter:description" content="Extract exact [x0, y0, x1, y1] bounding boxes, tables, images &amp; vector paths at ~3-8 ms/page. Available on PyPI, npm, and Crates.io.">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com blob: data:;">
 
   <!-- Schema.org Structured Data (JSON-LD) for Google & LLMs -->
   <script type="application/ld+json">
@@ -108,7 +107,7 @@
     ]
   }
   </script>
-  <script src="https://cdn.tailwindcss.com/3.4.16" crossorigin="anonymous"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
   <style>
     /* Monospace numerical coordinates */
@@ -1345,22 +1344,9 @@ async function loadPdfFile(file, name = null) {
     });
 
     // Navigation Controls
-    function debounce(fn, wait) {
-      let timeout;
-      return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => fn.apply(this, args), wait);
-      };
-    }
-    const debouncedRenderCurrentPage = debounce(() => renderCurrentPage(), 75);
-
     btnPrevPage.addEventListener('click', () => { if (currentPageNum > 1) { currentPageNum--; renderCurrentPage(); } });
     btnNextPage.addEventListener('click', () => { if (currentPdfDoc && currentPageNum < currentPdfDoc.numPages) { currentPageNum++; renderCurrentPage(); } });
-    pageSlider.addEventListener('input', (e) => {
-      currentPageNum = parseInt(e.target.value);
-      pageIndicator.textContent = `Page ${currentPageNum} of ${currentPdfDoc ? currentPdfDoc.numPages : 1}`;
-      debouncedRenderCurrentPage();
-    });
+    pageSlider.addEventListener('input', (e) => { currentPageNum = parseInt(e.target.value); renderCurrentPage(); });
     chkShowBoxes.addEventListener('change', () => {
       drawCanvas(hoveredSpan);
     });
