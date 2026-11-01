@@ -650,7 +650,7 @@
     let wasmEngine = null;
     async function initWasmEngine() {
       try {
-        const wasmRes = await fetch('rasgapdf.wasm');
+        const wasmRes = await fetch('rasgapdf.wasm?v=0.3.3-' + Date.now());
         if (wasmRes.ok) {
           const wasmBytes = await wasmRes.arrayBuffer();
           const { instance } = await WebAssembly.instantiate(wasmBytes);

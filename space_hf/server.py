@@ -73,7 +73,11 @@ def get_sample():
 def get_wasm():
     wasm_path = HERE / "rasgapdf.wasm"
     if wasm_path.exists():
-        return FileResponse(str(wasm_path), media_type="application/wasm")
+        return FileResponse(
+            str(wasm_path),
+            media_type="application/wasm",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+        )
     return JSONResponse(status_code=404, content={"error": "rasgapdf.wasm not found"})
 
 @app.get("/api/status")
