@@ -343,6 +343,22 @@ impl<'a> PurePdfDoc<'a> {
                         }
                     }
 
+                    // /FontDescriptor (Ascent / Descent)
+                    if let Some(fd_obj) = resolved_font.dict_get("FontDescriptor") {
+                        if let Ok(fd_resolved) = self.resolve(fd_obj) {
+                            if let Some(ascent) = fd_resolved.dict_get("Ascent").and_then(|a| a.as_f64()) {
+                                if ascent.abs() > 0.0 {
+                                    pdf_font.ascent = (ascent as f32 / 1000.0).abs();
+                                }
+                            }
+                            if let Some(descent) = fd_resolved.dict_get("Descent").and_then(|d| d.as_f64()) {
+                                if descent.abs() > 0.0 {
+                                    pdf_font.descent = -(descent as f32 / 1000.0).abs();
+                                }
+                            }
+                        }
+                    }
+
                     // /DescendantFonts (for Type0 / CID fonts)
                     if let Some(desc_obj) = resolved_font.dict_get("DescendantFonts") {
                         if let Ok(desc_resolved) = self.resolve(desc_obj) {

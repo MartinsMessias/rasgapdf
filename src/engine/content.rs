@@ -462,8 +462,8 @@ impl<'a> ContentInterpreter<'a> {
 
         let eff_matrix = self.text_matrix.concat(&self.current_state.ctm);
 
-        let ascent = 0.85 * self.current_font_size;
-        let descent = -0.25 * self.current_font_size;
+        let ascent = font.ascent * self.current_font_size;
+        let descent = font.descent * self.current_font_size;
 
         let (bl_x, bl_y) = eff_matrix.transform_point(0.0, descent);
         let (tr_x, tr_y) = eff_matrix.transform_point(word_width, ascent);
