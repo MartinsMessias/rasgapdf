@@ -52,5 +52,10 @@ obj/
 # Benchmark data cache
 benchmarks/data/
 
+# Audit and internal review reports
+*AUDIT*.md
+*audit*.md
+*auditoria*.md
+
 *.rmeta
 .cargo/config.toml
