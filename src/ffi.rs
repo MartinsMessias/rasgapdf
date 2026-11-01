@@ -205,7 +205,7 @@ pub extern "C" fn rasgapdf_parse_raw_bytes(bytes_ptr: *const u8, len: usize) -> 
     .unwrap_or_else(|_| create_error_json("Panic caught across FFI boundary in rasgapdf_parse_raw_bytes"))
 }
 
-/// Extrai texto puro paralelizado via Rayon diretamente de um slice de bytes em RAM.
+/// Extrai texto puro em ordem natural de leitura diretamente de um slice de bytes em RAM.
 #[no_mangle]
 pub extern "C" fn rasgapdf_extract_text_bytes(bytes_ptr: *const u8, len: usize) -> *mut c_char {
     catch_unwind(AssertUnwindSafe(|| {

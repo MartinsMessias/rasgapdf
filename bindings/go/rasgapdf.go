@@ -10,6 +10,7 @@ import "C"
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"unsafe"
@@ -50,6 +51,8 @@ type Options struct {
 	// FilterBackgroundFills drops fills covering the whole page. nil keeps the
 	// native default (true); set to a pointer to false to keep backgrounds.
 	FilterBackgroundFills *bool `json:"filter_background_fills,omitempty"`
+	// ApplyRotation transforms visual coordinates into the rotated viewport.
+	ApplyRotation bool `json:"apply_rotation"`
 }
 
 // DefaultOptions returns standard parsing options
@@ -60,10 +63,11 @@ func DefaultOptions() Options {
 		MinTableColumns: 3,
 		ColumnTolerance: 16.0,
 		RowTolerance:    6.0,
+		ApplyRotation:   false,
 	}
 }
 
-// BoundingBox holds physical 2D coordinates
+// BoundingBox holds physical 2D coordinates in typographical points (1/72 inch)
 type BoundingBox struct {
 	X0     float32 `json:"x0"`
 	Y0     float32 `json:"y0"`
@@ -97,14 +101,23 @@ type SpatialBlock struct {
 	Lines     []SpatialLine `json:"lines"`
 }
 
+// SpatialCell represents a single cell in an extracted table
+type SpatialCell struct {
+	Row  int         `json:"row"`
+	Col  int         `json:"col"`
+	Text string      `json:"text"`
+	BBox BoundingBox `json:"bbox"`
+}
+
 // SpatialTable represents an extracted table
 type SpatialTable struct {
-	TableID  int         `json:"table_id"`
-	BBox     BoundingBox `json:"bbox"`
-	ColCount int         `json:"col_count"`
-	RowCount int         `json:"row_count"`
-	Headers  []string    `json:"headers"`
-	Rows     [][]string  `json:"rows"`
+	TableID  int           `json:"table_id"`
+	BBox     BoundingBox   `json:"bbox"`
+	ColCount int           `json:"col_count"`
+	RowCount int           `json:"row_count"`
+	Headers  []string      `json:"headers"`
+	Rows     [][]string    `json:"rows"`
+	Cells    []SpatialCell `json:"cells,omitempty"`
 }
 
 // SpatialImage represents an embedded image (/Subtype /Image) referenced by a page.
@@ -179,6 +192,8 @@ type SpatialPage struct {
 	Width        float32          `json:"width"`
 	Height       float32          `json:"height"`
 	Rotation     int              `json:"rotation"`
+	MediaBox     *BoundingBox     `json:"media_box,omitempty"`
+	CropBox      *BoundingBox     `json:"crop_box,omitempty"`
 	TextBlocks   []SpatialBlock   `json:"text_blocks"`
 	Tables       []SpatialTable   `json:"tables"`
 	RawSpanCount int              `json:"raw_span_count"`
@@ -192,6 +207,24 @@ type SpatialDocument struct {
 	TotalPages  int           `json:"total_pages"`
 	ParseTimeMs float64       `json:"parse_time_ms"`
 	Pages       []SpatialPage `json:"pages"`
+}
+
+// checkNativeError checks if the returned JSON represents an error object
+func checkNativeError(data []byte) error {
+	var errObj struct {
+		Error   interface{} `json:"error"`
+		Message string      `json:"message"`
+	}
+	if err := json.Unmarshal(data, &errObj); err == nil {
+		if errObj.Error == true || errObj.Message != "" {
+			msg := errObj.Message
+			if msg == "" {
+				msg = fmt.Sprintf("%v", errObj.Error)
+			}
+			return fmt.Errorf("rasgapdf native error: %s", msg)
+		}
+	}
+	return nil
 }
 
 // ParseRaw parses a PDF and returns pure raw X/Y coordinate spans without block grouping
@@ -214,10 +247,38 @@ func ParseRaw(path string) (*RawSpatialDocument, error) {
 	}
 	defer C.rasgapdf_free_string(cRes)
 
-	goStr := C.GoString(cRes)
+	bytes := []byte(C.GoString(cRes))
+	if err := checkNativeError(bytes); err != nil {
+		return nil, err
+	}
 
 	var doc RawSpatialDocument
-	if err := json.Unmarshal([]byte(goStr), &doc); err != nil {
+	if err := json.Unmarshal(bytes, &doc); err != nil {
+		return nil, err
+	}
+
+	return &doc, nil
+}
+
+// ParseRawBytes parses PDF directly from a byte slice in RAM
+func ParseRawBytes(data []byte) (*RawSpatialDocument, error) {
+	if len(data) == 0 {
+		return nil, errors.New("empty PDF byte slice")
+	}
+
+	cRes := C.rasgapdf_parse_raw_bytes((*C.uint8_t)(unsafe.Pointer(&data[0])), C.size_t(len(data)))
+	if cRes == nil {
+		return nil, errors.New("rasgapdf native parser returned null")
+	}
+	defer C.rasgapdf_free_string(cRes)
+
+	bytes := []byte(C.GoString(cRes))
+	if err := checkNativeError(bytes); err != nil {
+		return nil, err
+	}
+
+	var doc RawSpatialDocument
+	if err := json.Unmarshal(bytes, &doc); err != nil {
 		return nil, err
 	}
 
@@ -251,19 +312,46 @@ func ParseFile(path string, opts *Options) (*SpatialDocument, error) {
 	}
 	defer C.rasgapdf_free_string(cRes)
 
-	goStr := C.GoString(cRes)
+	bytes := []byte(C.GoString(cRes))
+	if err := checkNativeError(bytes); err != nil {
+		return nil, err
+	}
 
 	var doc SpatialDocument
-	if err := json.Unmarshal([]byte(goStr), &doc); err != nil {
+	if err := json.Unmarshal(bytes, &doc); err != nil {
 		return nil, err
 	}
 
 	return &doc, nil
 }
 
+// ParsePdf is an alias to ParseFile for parity across language bindings
+func ParsePdf(path string, opts *Options) (*SpatialDocument, error) {
+	return ParseFile(path, opts)
+}
+
+// ExtractTextBytes extracts natural reading-order text directly from bytes in RAM
+func ExtractTextBytes(data []byte) (string, error) {
+	if len(data) == 0 {
+		return "", errors.New("empty PDF byte slice")
+	}
+
+	cRes := C.rasgapdf_extract_text_bytes((*C.uint8_t)(unsafe.Pointer(&data[0])), C.size_t(len(data)))
+	if cRes == nil {
+		return "", errors.New("rasgapdf native text extractor returned null")
+	}
+	defer C.rasgapdf_free_string(cRes)
+
+	return C.GoString(cRes), nil
+}
+
 // Version returns the native RasgaPDF library version
 func Version() string {
-	return C.GoString(C.rasgapdf_version())
+	cVer := C.rasgapdf_version()
+	if cVer == nil {
+		return "0.3.3"
+	}
+	return C.GoString(cVer)
 }
 
 // ExtractImages writes the original encoded streams of every embedded image to
@@ -296,8 +384,46 @@ func ExtractImages(path string, outputDir string) (*ImageManifest, error) {
 	}
 	defer C.rasgapdf_free_string(cRes)
 
+	bytes := []byte(C.GoString(cRes))
+	if err := checkNativeError(bytes); err != nil {
+		return nil, err
+	}
+
 	var manifest ImageManifest
-	if err := json.Unmarshal([]byte(C.GoString(cRes)), &manifest); err != nil {
+	if err := json.Unmarshal(bytes, &manifest); err != nil {
+		return nil, err
+	}
+
+	return &manifest, nil
+}
+
+// ExtractImagesBytes extracts original encoded image streams directly from RAM bytes to outputDir
+func ExtractImagesBytes(data []byte, outputDir string) (*ImageManifest, error) {
+	if len(data) == 0 {
+		return nil, errors.New("empty PDF byte slice")
+	}
+
+	absOut, err := filepath.Abs(outputDir)
+	if err != nil {
+		return nil, err
+	}
+
+	cOut := C.CString(absOut)
+	defer C.free(unsafe.Pointer(cOut))
+
+	cRes := C.rasgapdf_extract_images_bytes((*C.uint8_t)(unsafe.Pointer(&data[0])), C.size_t(len(data)), cOut)
+	if cRes == nil {
+		return nil, errors.New("rasgapdf native parser returned null")
+	}
+	defer C.rasgapdf_free_string(cRes)
+
+	bytes := []byte(C.GoString(cRes))
+	if err := checkNativeError(bytes); err != nil {
+		return nil, err
+	}
+
+	var manifest ImageManifest
+	if err := json.Unmarshal(bytes, &manifest); err != nil {
 		return nil, err
 	}
 

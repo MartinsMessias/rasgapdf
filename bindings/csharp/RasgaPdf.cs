@@ -61,6 +61,10 @@ namespace RasgaPdf
         /// <summary>Drop fills covering the whole page (backgrounds).</summary>
         [JsonPropertyName("filter_background_fills")]
         public bool FilterBackgroundFills { get; set; } = true;
+
+        /// <summary>Transforms coordinates to align with the visual display rotation viewport.</summary>
+        [JsonPropertyName("apply_rotation")]
+        public bool ApplyRotation { get; set; } = false;
     }
 
     public class BoundingBox
@@ -97,6 +101,14 @@ namespace RasgaPdf
         [JsonPropertyName("lines")] public SpatialLine[] Lines { get; set; } = Array.Empty<SpatialLine>();
     }
 
+    public class SpatialCell
+    {
+        [JsonPropertyName("row")] public int Row { get; set; }
+        [JsonPropertyName("col")] public int Col { get; set; }
+        [JsonPropertyName("text")] public string Text { get; set; } = string.Empty;
+        [JsonPropertyName("bbox")] public BoundingBox BBox { get; set; } = new();
+    }
+
     public class SpatialTable
     {
         [JsonPropertyName("table_id")] public int TableId { get; set; }
@@ -105,6 +117,7 @@ namespace RasgaPdf
         [JsonPropertyName("row_count")] public int RowCount { get; set; }
         [JsonPropertyName("headers")] public string[] Headers { get; set; } = Array.Empty<string>();
         [JsonPropertyName("rows")] public string[][] Rows { get; set; } = Array.Empty<string[]>();
+        [JsonPropertyName("cells")] public SpatialCell[] Cells { get; set; } = Array.Empty<SpatialCell>();
     }
 
     /// <summary>
@@ -189,6 +202,8 @@ namespace RasgaPdf
         [JsonPropertyName("width")] public float Width { get; set; }
         [JsonPropertyName("height")] public float Height { get; set; }
         [JsonPropertyName("rotation")] public int Rotation { get; set; }
+        [JsonPropertyName("media_box")] public BoundingBox? MediaBox { get; set; }
+        [JsonPropertyName("crop_box")] public BoundingBox? CropBox { get; set; }
         [JsonPropertyName("text_blocks")] public SpatialBlock[] TextBlocks { get; set; } = Array.Empty<SpatialBlock>();
         [JsonPropertyName("tables")] public SpatialTable[] Tables { get; set; } = Array.Empty<SpatialTable>();
         [JsonPropertyName("raw_span_count")] public int RawSpanCount { get; set; }
@@ -208,11 +223,16 @@ namespace RasgaPdf
     {
         private const string LibName = "rasgapdf";
 
-        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        private static extern IntPtr rasgapdf_parse_raw(string path);
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr rasgapdf_parse_raw([MarshalAs(UnmanagedType.LPUTF8Str)] string path);
 
-        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        private static extern IntPtr rasgapdf_parse_file_options(string path, string? optionsJson);
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr rasgapdf_parse_raw_bytes(byte[] bytesPtr, nuint len);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr rasgapdf_parse_file_options(
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string path,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string? optionsJson);
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void rasgapdf_free_string(IntPtr ptr);
@@ -220,12 +240,42 @@ namespace RasgaPdf
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr rasgapdf_version();
 
-        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        private static extern IntPtr rasgapdf_extract_images(string path, string outputDir);
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr rasgapdf_extract_images(
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string path,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string outputDir);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr rasgapdf_extract_images_bytes(
+            byte[] bytesPtr,
+            nuint len,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string outputDir);
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr rasgapdf_extract_text_bytes(byte[] bytesPtr, nuint len);
 
+        private static void ThrowIfNativeError(string jsonStr)
+        {
+            if (string.IsNullOrWhiteSpace(jsonStr)) return;
+            try
+            {
+                using var doc = JsonDocument.Parse(jsonStr);
+                if (doc.RootElement.TryGetProperty("error", out var errProp))
+                {
+                    bool isError = (errProp.ValueKind == JsonValueKind.True) ||
+                                   (errProp.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(errProp.GetString()));
+                    if (isError)
+                    {
+                        var msg = doc.RootElement.TryGetProperty("message", out var msgProp) ? msgProp.GetString() : "Native error";
+                        throw new InvalidOperationException($"RasgaPDF Error: {msg}");
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Not an error object
+            }
+        }
 
         /// <summary>
         /// 🚀 Extrai o texto completo do PDF preservando a ordem natural de colunas e blocos de leitura.
@@ -258,11 +308,7 @@ namespace RasgaPdf
                 {
                     try
                     {
-                        var text = Marshal.PtrToStringUTF8(resultPtr);
-                        if (!string.IsNullOrEmpty(text))
-                        {
-                            return text;
-                        }
+                        return Marshal.PtrToStringUTF8(resultPtr) ?? string.Empty;
                     }
                     finally
                     {
@@ -272,7 +318,7 @@ namespace RasgaPdf
             }
             catch (EntryPointNotFoundException)
             {
-                // Fallback via Parse estruturado
+                // Fallback
             }
 
             return string.Empty;
@@ -281,11 +327,12 @@ namespace RasgaPdf
         public static string GetVersion()
         {
             var ptr = rasgapdf_version();
-            return Marshal.PtrToStringAnsi(ptr) ?? "0.3.0";
+            if (ptr == IntPtr.Zero) return "0.3.3";
+            return Marshal.PtrToStringUTF8(ptr) ?? "0.3.3";
         }
 
         /// <summary>
-        /// ⚡ Modo 1 (Bruto): Retorna exclusivamente a lista plana de coordenadas X/Y
+        /// ⚡ Modo 1 (Bruto): Retorna exclusivamente a lista plana de coordenadas X/Y de um arquivo
         /// </summary>
         public static RawSpatialDocument ParseRaw(string filePath)
         {
@@ -308,6 +355,48 @@ namespace RasgaPdf
                 {
                     throw new InvalidOperationException("Empty response from rasgapdf parser");
                 }
+
+                ThrowIfNativeError(jsonStr);
+
+                var doc = JsonSerializer.Deserialize<RawSpatialDocument>(jsonStr);
+                if (doc == null)
+                {
+                    throw new JsonException("Failed to deserialize RawSpatialDocument");
+                }
+
+                return doc;
+            }
+            finally
+            {
+                rasgapdf_free_string(resultPtr);
+            }
+        }
+
+        /// <summary>
+        /// ⚡ Modo 1 (Bruto Memória): Retorna lista plana de coordenadas X/Y diretamente de bytes em RAM
+        /// </summary>
+        public static RawSpatialDocument ParseRaw(byte[] pdfBytes)
+        {
+            if (pdfBytes == null || pdfBytes.Length == 0)
+            {
+                throw new ArgumentException("PDF bytes array cannot be null or empty", nameof(pdfBytes));
+            }
+
+            var resultPtr = rasgapdf_parse_raw_bytes(pdfBytes, (nuint)pdfBytes.Length);
+            if (resultPtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Native rasgapdf parser returned null");
+            }
+
+            try
+            {
+                var jsonStr = Marshal.PtrToStringUTF8(resultPtr);
+                if (string.IsNullOrEmpty(jsonStr))
+                {
+                    throw new InvalidOperationException("Empty response from rasgapdf parser");
+                }
+
+                ThrowIfNativeError(jsonStr);
 
                 var doc = JsonSerializer.Deserialize<RawSpatialDocument>(jsonStr);
                 if (doc == null)
@@ -351,6 +440,8 @@ namespace RasgaPdf
                     throw new InvalidOperationException("Empty response from rasgapdf parser");
                 }
 
+                ThrowIfNativeError(jsonStr);
+
                 var doc = JsonSerializer.Deserialize<SpatialDocument>(jsonStr);
                 if (doc == null)
                 {
@@ -366,9 +457,15 @@ namespace RasgaPdf
         }
 
         /// <summary>
-        /// 🖼️ Writes the original encoded streams of every embedded image to
-        /// <paramref name="outputDir"/> (plus a <c>manifest.json</c>) and returns the manifest.
-        /// Streams are copied verbatim (e.g. <c>DCTDecode</c> becomes a <c>.jpg</c>); no pixels are decoded.
+        /// 🎯 Alias ergonômico para <see cref="Parse(string, ParserOptions?)"/>
+        /// </summary>
+        public static SpatialDocument ParsePdf(string filePath, ParserOptions? options = null)
+        {
+            return Parse(filePath, options);
+        }
+
+        /// <summary>
+        /// 🖼️ Writes original image streams of every embedded image to <paramref name="outputDir"/>
         /// </summary>
         public static ImageManifest ExtractImages(string filePath, string outputDir)
         {
@@ -394,6 +491,8 @@ namespace RasgaPdf
                     throw new InvalidOperationException("Empty response from rasgapdf parser");
                 }
 
+                ThrowIfNativeError(jsonStr);
+
                 var manifest = JsonSerializer.Deserialize<ImageManifest>(jsonStr);
                 if (manifest == null)
                 {
@@ -407,5 +506,63 @@ namespace RasgaPdf
                 rasgapdf_free_string(resultPtr);
             }
         }
+
+        /// <summary>
+        /// 🖼️ Writes original image streams directly from RAM bytes to <paramref name="outputDir"/>
+        /// </summary>
+        public static ImageManifest ExtractImages(byte[] pdfBytes, string outputDir)
+        {
+            if (pdfBytes == null || pdfBytes.Length == 0)
+            {
+                throw new ArgumentException("PDF bytes array cannot be null or empty", nameof(pdfBytes));
+            }
+
+            var fullOutputDir = Path.GetFullPath(outputDir);
+
+            var resultPtr = rasgapdf_extract_images_bytes(pdfBytes, (nuint)pdfBytes.Length, fullOutputDir);
+            if (resultPtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Native rasgapdf parser returned null");
+            }
+
+            try
+            {
+                var jsonStr = Marshal.PtrToStringUTF8(resultPtr);
+                if (string.IsNullOrEmpty(jsonStr))
+                {
+                    throw new InvalidOperationException("Empty response from rasgapdf parser");
+                }
+
+                ThrowIfNativeError(jsonStr);
+
+                var manifest = JsonSerializer.Deserialize<ImageManifest>(jsonStr);
+                if (manifest == null)
+                {
+                    throw new JsonException("Failed to deserialize ImageManifest");
+                }
+
+                return manifest;
+            }
+            finally
+            {
+                rasgapdf_free_string(resultPtr);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Alias de compatibilidade com a documentação para <see cref="SpatialPdf"/>
+    /// </summary>
+    public static class PdfParser
+    {
+        public static RawSpatialDocument ParseRaw(string filePath) => SpatialPdf.ParseRaw(filePath);
+        public static RawSpatialDocument ParseRaw(byte[] pdfBytes) => SpatialPdf.ParseRaw(pdfBytes);
+        public static SpatialDocument Parse(string filePath, ParserOptions? options = null) => SpatialPdf.Parse(filePath, options);
+        public static SpatialDocument ParsePdf(string filePath, ParserOptions? options = null) => SpatialPdf.ParsePdf(filePath, options);
+        public static string ExtractText(string filePath) => SpatialPdf.ExtractText(filePath);
+        public static string ExtractText(byte[] pdfBytes) => SpatialPdf.ExtractText(pdfBytes);
+        public static ImageManifest ExtractImages(string filePath, string outputDir) => SpatialPdf.ExtractImages(filePath, outputDir);
+        public static ImageManifest ExtractImages(byte[] pdfBytes, string outputDir) => SpatialPdf.ExtractImages(pdfBytes, outputDir);
+        public static string GetVersion() => SpatialPdf.GetVersion();
     }
 }

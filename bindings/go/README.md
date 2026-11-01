@@ -17,10 +17,10 @@
 ## 🚀 Installation
 
 ```bash
-go get github.com/MartinsMessias/rasgapdf/bindings/go
+go get github.com/MartinsMessias/rasgapdf/bindings/go@v0.3.3
 ```
 
-*Requires the compiled `librasgapdf.so` / `rasgapdf.dll` in your library path or project root.*
+*Requires the compiled `librasgapdf.so` (Linux), `rasgapdf.dll` (Windows), or `librasgapdf.dylib` (macOS) in your system library path or executable directory.*
 
 ---
 
@@ -53,7 +53,7 @@ func main() {
 
 ---
 
-### 🎯 Mode 2: Hierarchical Structured Document
+### 🎯 Mode 2: Hierarchical Structured Document & Tables
 
 ```go
 package main
@@ -67,19 +67,53 @@ import (
 func main() {
 	options := rasgapdf.DefaultOptions()
 	options.DetectTables = true
+	options.MinTableColumns = 3
+	options.ApplyRotation = true
 
-	doc, err := rasgapdf.ParsePdf("invoice.pdf", options)
+	doc, err := rasgapdf.ParsePdf("invoice.pdf", &options)
 	if err != nil {
 		log.Fatalf("Error: %v", err)
 	}
 
 	fmt.Printf("Parsed %d pages in %.2f ms\n", doc.TotalPages, doc.ParseTimeMs)
 	for _, page := range doc.Pages {
+		fmt.Printf("--- Page %d (%.1f x %.1f pt) ---\n", page.PageNumber, page.Width, page.Height)
 		for _, block := range page.TextBlocks {
 			for _, line := range block.Lines {
-				fmt.Println(line.Text)
+				fmt.Printf("[%s] (%.1f, %.1f): %s\n", block.BlockType, line.BBox.X0, line.BBox.Y0, line.Text)
+			}
+		}
+
+		for _, table := range page.Tables {
+			fmt.Printf("Table #%d (%d rows x %d cols)\n", table.TableID, table.RowCount, table.ColCount)
+			for _, row := range table.Rows {
+				fmt.Println(row)
 			}
 		}
 	}
 }
 ```
+
+---
+
+### 🚀 Zero I/O Memory Extraction (Raw Bytes in RAM)
+
+```go
+data, err := os.ReadFile("document.pdf")
+if err != nil {
+    log.Fatal(err)
+}
+
+// Extract natural reading order text in RAM
+text, err := rasgapdf.ExtractTextBytes(data)
+
+// Extract raw coordinates directly from memory buffer
+rawDoc, err := rasgapdf.ParseRawBytes(data)
+```
+
+---
+
+## 📄 License & Commercial Options
+
+- **Open Source:** Licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](https://www.gnu.org/licenses/agpl-3.0).
+- **Commercial Exemption:** A commercial proprietary license is available for closed-source software without AGPL copyleft requirements. Contact: [messiasads2017@gmail.com](mailto:messiasads2017@gmail.com).

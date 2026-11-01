@@ -243,3 +243,47 @@ fn text_only_page_is_unaffected() {
     assert!(page.images.is_empty(), "não há imagem nesta fixture");
     assert!(page.drawings.is_empty(), "não há vetor nesta fixture");
 }
+
+#[test]
+fn image_only_page_has_no_text_and_extracts_image() {
+    let doc = structured("image_only.pdf", true, false);
+    let page = &doc.pages[0];
+
+    // Página sem nenhum texto não deve inventar blocos fantasmas
+    assert!(page.text_blocks.is_empty(), "página com apenas imagem não deve ter text_blocks: {:?}", page.text_blocks);
+    assert_eq!(page.raw_span_count, 0, "raw_span_count deve ser 0");
+    // Mas deve detectar a imagem embutida
+    assert_eq!(page.images.len(), 1, "deve encontrar 1 imagem embutida na fixture image_only.pdf");
+    assert_eq!(page.images[0].pixel_width, 400);
+
+    // Modo raw também deve reportar 0 spans sem falhar
+    let raw = parse_raw_file(&fixture("image_only.pdf")).expect("parse_raw_file em image_only não deve falhar");
+    assert_eq!(raw.total_spans, 0);
+    assert!(raw.spans.is_empty());
+}
+
+#[test]
+fn malformed_pdfs_return_clean_errors_without_panic() {
+    use rasgapdf::{extract_text_bytes, parse_bytes, parse_raw_bytes};
+
+    // 1. Buffer vazio (0 bytes)
+    let empty_res = parse_bytes(&[], &ParserOptions::default());
+    assert!(empty_res.is_err(), "0-byte buffer deve retornar erro");
+
+    // 2. Lixo aleatório (sem assinatura %PDF)
+    let garbage_res = parse_bytes(b"THIS_IS_DEFINITELY_NOT_A_PDF_DOCUMENT_1234567890", &ParserOptions::default());
+    assert!(garbage_res.is_err(), "Lixo arbitrário deve retornar erro");
+
+    // 3. Cabeçalho PDF truncado abruptamente
+    let truncated_res = parse_bytes(b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\n", &ParserOptions::default());
+    assert!(truncated_res.is_err(), "PDF truncado deve retornar erro sem panic");
+
+    // 4. Raw bytes em buffer corrompido
+    let raw_err = parse_raw_bytes(b"corrupted raw stream");
+    assert!(raw_err.is_err());
+
+    // 5. Extração de texto pura em buffer malformado
+    let txt_err = extract_text_bytes(b"corrupted stream << >>");
+    assert!(txt_err.is_err() || txt_err.unwrap().is_empty());
+}
+

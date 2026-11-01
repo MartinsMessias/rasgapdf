@@ -29,6 +29,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="⚡ RasgaPDF — 2D Spatial PDF Parser in Pure Rust">
   <meta name="twitter:description" content="Extract exact [x0, y0, x1, y1] bounding boxes, tables, images &amp; vector paths at ~3-8 ms/page. Available on PyPI, npm, and Crates.io.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com blob: data:;">
 
   <!-- Schema.org Structured Data (JSON-LD) for Google & LLMs -->
   <script type="application/ld+json">
@@ -83,7 +84,7 @@
             "name": "What is RasgaPDF and how fast is it?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "RasgaPDF is an open-source 2D spatial PDF parser written in pure Rust (powered by pure Rust and Rayon SIMD parallelism). It extracts exact [x0, y0, x1, y1] bounding boxes in ~3 to 8 ms per page—roughly 4x faster than PyMuPDF, 12x faster than pypdf, and over 50x faster than pdfplumber."
+              "text": "RasgaPDF is an open-source 2D spatial PDF parser written in pure Rust (powered by zero-overhead pure Rust and SIMD layout acceleration). It extracts exact [x0, y0, x1, y1] bounding boxes in ~3 to 8 ms per page—roughly 4x faster than PyMuPDF, 12x faster than pypdf, and over 50x faster than pdfplumber."
             }
           },
           {
@@ -107,7 +108,7 @@
     ]
   }
   </script>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.tailwindcss.com/3.4.16" crossorigin="anonymous"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
   <style>
     /* Monospace numerical coordinates */
@@ -254,26 +255,26 @@
     <section class="flex-1 h-full min-h-[550px] lg:min-h-0 flex flex-col gap-3 overflow-hidden">
 
       <!-- Navigation Tabs -->
-      <div class="flex border-b border-slate-800 gap-1 overflow-x-auto pb-1 text-xs font-semibold shrink-0">
-        <button data-tab="tab-visual" class="tab-btn px-4 py-2 border-b-2 border-cyan-400 text-cyan-300 font-bold flex items-center gap-1.5 transition">
+      <div role="tablist" aria-label="Document visualization views" class="flex border-b border-slate-800 gap-1 overflow-x-auto pb-1 text-xs font-semibold shrink-0">
+        <button role="tab" aria-selected="true" aria-controls="tab-visual" id="tab-btn-visual" data-tab="tab-visual" class="tab-btn px-4 py-2 border-b-2 border-cyan-400 text-cyan-300 font-bold flex items-center gap-1.5 transition">
           👁️ 1. 2D Canvas Overlay
         </button>
-        <button data-tab="tab-coords" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+        <button role="tab" aria-selected="false" aria-controls="tab-coords" id="tab-btn-coords" data-tab="tab-coords" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
           ⚡ 2. Raw Coordinates (X/Y Table)
         </button>
-        <button data-tab="tab-text" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+        <button role="tab" aria-selected="false" aria-controls="tab-text" id="tab-btn-text" data-tab="tab-text" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
           📝 3. Pure Plain Text
         </button>
-        <button data-tab="tab-json" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+        <button role="tab" aria-selected="false" aria-controls="tab-json" id="tab-btn-json" data-tab="tab-json" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
           📄 4. Raw JSON Export
         </button>
-        <button data-tab="tab-images" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+        <button role="tab" aria-selected="false" aria-controls="tab-images" id="tab-btn-images" data-tab="tab-images" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
           🖼️ 5. Embedded Images
         </button>
       </div>
 
       <!-- Tab Content 1: 2D Visual Overlay (Primary Tab, Full Height & Width) -->
-      <div id="tab-visual" class="tab-panel flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+      <div id="tab-visual" role="tabpanel" aria-labelledby="tab-btn-visual" class="tab-panel flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
         <div class="p-2.5 sm:p-3 bg-slate-950 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs shrink-0">
           <div class="flex items-center gap-2 min-w-0">
             <span class="font-semibold text-slate-200 whitespace-nowrap">Rendered Canvas Overlay</span>
@@ -291,13 +292,13 @@
         <!-- Canvas Scroll Area: Starts from Top (y=0), Full Screen Scrollable -->
         <div id="canvasScrollArea" class="flex-1 w-full h-full min-h-0 overflow-auto p-4 sm:p-6 bg-slate-950/80">
           <div id="canvasWrapper" class="shadow-2xl border border-slate-700/80 rounded bg-white transition-all mx-auto w-max">
-            <canvas id="pdfCanvas" class="block cursor-crosshair"></canvas>
+            <canvas id="pdfCanvas" role="img" aria-label="PDF Document Page Render with 2D Spatial Overlays" tabindex="0" class="block cursor-crosshair"></canvas>
           </div>
         </div>
       </div>
 
       <!-- Tab Content 2: Raw Coordinates Table -->
-      <div id="tab-coords" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+      <div id="tab-coords" role="tabpanel" aria-labelledby="tab-btn-coords" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
         <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs shrink-0">
           <span class="font-semibold text-slate-300">Exact Physical Coordinates Matrix</span>
           <span id="tableCount" class="text-slate-500 font-mono">0 spans displayed</span>
@@ -326,7 +327,7 @@
       </div>
 
       <!-- Tab Content 3: Pure Plain Text -->
-      <div id="tab-text" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+      <div id="tab-text" role="tabpanel" aria-labelledby="tab-btn-text" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
         <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center text-xs shrink-0">
           <span class="font-semibold text-slate-300">Pure Text Stream & Raw Coordinates Dump</span>
           <button id="btnCopyText" class="px-3 py-1 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 rounded text-xs font-semibold flex items-center gap-1 transition">
@@ -337,7 +338,7 @@
       </div>
 
       <!-- Tab Content 4: JSON Export -->
-      <div id="tab-json" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+      <div id="tab-json" role="tabpanel" aria-labelledby="tab-btn-json" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
         <div class="p-3 bg-slate-950 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs shrink-0">
           <div class="flex items-center gap-2">
             <span class="font-semibold text-slate-300">JSON Inspection:</span>
@@ -359,7 +360,7 @@
       </div>
 
       <!-- Tab Content 5: Embedded Images -->
-      <div id="tab-images" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
+      <div id="tab-images" role="tabpanel" aria-labelledby="tab-btn-images" class="tab-panel hidden flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-1 h-full min-h-0">
         <div class="p-3 bg-slate-950 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs shrink-0">
           <span class="font-semibold text-slate-300">Embedded Images (decoded client-side from the content stream)</span>
           <span id="imagesCount" class="text-slate-500 font-mono">0 images on page 1</span>
@@ -388,7 +389,7 @@
   </div>
 
   <!-- Embedded image lightbox -->
-  <div id="imageLightbox" class="fixed inset-0 z-50 bg-slate-950/90 items-center justify-center p-6" style="display: none;">
+  <div id="imageLightbox" role="dialog" aria-modal="true" aria-label="Embedded image inspection preview" class="fixed inset-0 z-50 bg-slate-950/90 items-center justify-center p-6" style="display: none;">
     <div class="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col max-w-full max-h-full overflow-hidden">
       <div class="flex items-start justify-between gap-6 px-4 py-2.5 bg-slate-950 border-b border-slate-800">
         <div class="flex flex-col min-w-0">
@@ -398,7 +399,7 @@
         <button id="lightboxClose" class="shrink-0 text-slate-400 hover:text-slate-100 text-base leading-none px-2 py-1 rounded hover:bg-slate-800 transition" title="Close (Esc)">✕</button>
       </div>
       <div class="overflow-auto bg-slate-950 flex items-center justify-center p-4">
-        <canvas id="lightboxCanvas" class="shadow-lg"></canvas>
+        <canvas id="lightboxCanvas" role="img" aria-label="Embedded image full resolution render" class="shadow-lg"></canvas>
       </div>
       <div class="px-4 py-2 bg-slate-950 border-t border-slate-800 text-[11px] text-slate-400 font-mono flex items-center justify-between gap-4">
         <span id="lightboxSize">-</span>
@@ -489,9 +490,11 @@
         document.querySelectorAll('.tab-btn').forEach(b => {
           b.classList.remove('border-cyan-400', 'text-cyan-300', 'font-bold');
           b.classList.add('border-transparent', 'text-slate-400');
+          b.setAttribute('aria-selected', 'false');
         });
         btn.classList.add('border-cyan-400', 'text-cyan-300', 'font-bold');
         btn.classList.remove('border-transparent', 'text-slate-400');
+        btn.setAttribute('aria-selected', 'true');
 
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
         const targetPanel = document.getElementById(btn.dataset.tab);
@@ -588,6 +591,12 @@
 
     // File selection
     dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fileInput.click();
+      }
+    });
     dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('border-cyan-400'); });
     dropzone.addEventListener('dragleave', () => dropzone.classList.remove('border-cyan-400'));
     dropzone.addEventListener('drop', (e) => {
@@ -1336,9 +1345,22 @@ async function loadPdfFile(file, name = null) {
     });
 
     // Navigation Controls
+    function debounce(fn, wait) {
+      let timeout;
+      return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => fn.apply(this, args), wait);
+      };
+    }
+    const debouncedRenderCurrentPage = debounce(() => renderCurrentPage(), 75);
+
     btnPrevPage.addEventListener('click', () => { if (currentPageNum > 1) { currentPageNum--; renderCurrentPage(); } });
     btnNextPage.addEventListener('click', () => { if (currentPdfDoc && currentPageNum < currentPdfDoc.numPages) { currentPageNum++; renderCurrentPage(); } });
-    pageSlider.addEventListener('input', (e) => { currentPageNum = parseInt(e.target.value); renderCurrentPage(); });
+    pageSlider.addEventListener('input', (e) => {
+      currentPageNum = parseInt(e.target.value);
+      pageIndicator.textContent = `Page ${currentPageNum} of ${currentPdfDoc ? currentPdfDoc.numPages : 1}`;
+      debouncedRenderCurrentPage();
+    });
     chkShowBoxes.addEventListener('change', () => {
       drawCanvas(hoveredSpan);
     });

@@ -1,5 +1,5 @@
 """
-Suite rigorosa de 25 casos de teste para o RasgaPDF + Integrações de IA (Spatial RAG).
+Suite rigorosa de 30 casos de teste para o RasgaPDF + Integrações de IA (Spatial RAG).
 
 Executa validações reais:
 - Geometria 2D e Bounding Boxes válidas (sem coordenadas degeneradas)
@@ -14,6 +14,10 @@ Executa validações reais:
 import sys
 import time
 from pathlib import Path
+
+# Ensure UTF-8 output across all operating systems
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 # Injeta RasgaPDF do workspace
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -51,7 +55,7 @@ def run_test(test_id, name, func):
 
 print("=" * 80)
 mode_label = "OFFICIAL BENCHMARKS" if USE_BENCHMARKS else "STANDALONE FIXTURES"
-print(f"🧪 EXECUTANDO BATERIA DE 28 CASOS DE TESTE — RASGAPDF SPATIAL AI ENGINE ({mode_label})")
+print(f"🧪 EXECUTANDO BATERIA DE 30 CASOS DE TESTE — RASGAPDF SPATIAL AI ENGINE ({mode_label})")
 print("=" * 80)
 
 # =========================================================================
@@ -309,6 +313,52 @@ def t28_coordinate_contract_and_cropbox():
     doc_rot = rasgapdf.parse_pdf(str(pdf_astro), apply_rotation=True)
     assert len(doc_rot["pages"]) == len(doc_astro["pages"])
 
+def t29_image_only_pdf_handling():
+    img_pdf = REPO_ROOT / "tests" / "fixtures" / "image_only.pdf"
+    assert img_pdf.exists(), "fixture image_only.pdf deve existir"
+    
+    # 1. Estruturado com imagens habilitadas
+    doc = rasgapdf.parse_pdf(str(img_pdf), extract_images=True)
+    p = doc["pages"][0]
+    assert len(p["text_blocks"]) == 0, "PDF exclusivo de imagem não deve conter text_blocks"
+    assert p["raw_span_count"] == 0, "raw_span_count deve ser 0"
+    assert len(p["images"]) == 1, "deve detectar a imagem embutida"
+    assert p["images"][0]["pixel_width"] == 400
+    
+    # 2. Modo Raw
+    raw = rasgapdf.parse_raw(str(img_pdf))
+    assert raw["total_spans"] == 0
+    assert len(raw["spans"]) == 0
+
+def t30_malformed_pdf_resilience():
+    # 1. 0 bytes
+    try:
+        rasgapdf.parse_raw_bytes(b"")
+        assert False, "0 bytes deve levantar RuntimeError"
+    except (RuntimeError, ValueError):
+        pass
+
+    # 2. Lixo aleatório
+    try:
+        rasgapdf.parse_raw_bytes(b"NOT_A_VALID_PDF_HEADER_99999999")
+        assert False, "Lixo arbitrário deve levantar erro"
+    except (RuntimeError, ValueError):
+        pass
+
+    # 3. Truncado
+    try:
+        rasgapdf.parse_raw_bytes(b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\n")
+        assert False, "PDF truncado deve levantar erro"
+    except (RuntimeError, ValueError):
+        pass
+
+    # 4. Texto puro em buffer corrompido deve falhar graciosamente ou retornar string vazia
+    try:
+        text = rasgapdf.extract_text(b"corrupted binary garbage << >>")
+        assert isinstance(text, str)
+    except (RuntimeError, ValueError):
+        pass
+
 run_test(21, "Ordem de leitura sequencial consistente em 100% das páginas", t21_reading_order_sequential)
 run_test(22, "Ancoragem de citação espacial com localização de dados científicos", t22_spatial_citation_exact_data_match)
 run_test(23, "Ausência de poluição acidental de espaços em branco em linhas", t23_zero_accidental_whitespace_pollution)
@@ -317,6 +367,8 @@ run_test(25, "Estabilidade de memória FFI e repetibilidade de execução em loo
 run_test(26, "RAG Spatial Chunking: preservação estrita de múltiplas bboxes por chunk", t26_spatial_chunks_preserve_all_bboxes)
 run_test(27, "LangChain Loader: modo 'chunks' integrado com multi-rect highlighting", t27_langchain_loader_chunks_mode)
 run_test(28, "Contrato de coordenadas: CropBox/MediaBox e suporte a rotação visual", t28_coordinate_contract_and_cropbox)
+run_test(29, "Página exclusiva de imagem (image_only.pdf): 0 texto e 1 imagem detectada", t29_image_only_pdf_handling)
+run_test(30, "Resiliência contra PDFs malformados: zero panics e erros limpos", t30_malformed_pdf_resilience)
 
 # =========================================================================
 # RELATÓRIO FINAL
@@ -325,7 +377,7 @@ passed = sum(1 for _, _, status, _ in test_results if status == "PASSED")
 failed = sum(1 for _, _, status, _ in test_results if status != "PASSED")
 
 print("\n" + "=" * 80)
-print(f"📊 RESULTADO FINAL: {passed}/28 PASSARAM ({failed} falhas)")
+print(f"📊 RESULTADO FINAL: {passed}/30 PASSARAM ({failed} falhas)")
 print("=" * 80)
 if failed == 0:
     print("🏆 100% DOS CASOS DE TESTE FORAM APROVADOS COM SUCESSO!")

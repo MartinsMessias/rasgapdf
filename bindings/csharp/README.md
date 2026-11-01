@@ -22,7 +22,7 @@ Most .NET PDF libraries are heavy, complex, and guess document layout with fragi
 **RasgaPdf delivers uncompromising spatial precision at native hardware speed:**
 - **Exact Bounding Boxes:** Every character, word span, line, block, and table has exact coordinates `[x0, y0, x1, y1]`.
 - **Pure Native Speed:** Powered by a SIMD-parallelized pure Rust core. Parses pages in **~3 to 8 ms**.
-- **Cross-Platform:** Bundled native runtimes for Windows (x64) and Linux (x64). Zero external C libraries or native tools required.
+- **Cross-Platform:** Bundled native runtimes for Windows (x64), Linux (x64), and macOS (x64 / arm64). Zero external C libraries or native tools required.
 - **RAG & LLM Ready:** Directly feeds exact 2D visual layout into downstream embedding models, vector databases, and vision-language models.
 
 ---
@@ -45,8 +45,8 @@ Fastest possible extraction (~3 to 8 ms per page). Returns an unnested list of 2
 ```csharp
 using RasgaPdf;
 
-// Extract raw coordinates
-var raw = PdfParser.ParseRaw("document.pdf");
+// Extract raw coordinates from file or byte array
+var raw = SpatialPdf.ParseRaw("document.pdf");
 Console.WriteLine($"Extracted {raw.TotalSpans} spans across {raw.TotalPages} pages in {raw.ParseTimeMs:F2} ms");
 
 foreach (var span in raw.Spans)
@@ -57,8 +57,8 @@ foreach (var span in raw.Spans)
 
 ---
 
-### 🎯 Mode 2: Hierarchical Structured Document
-Reconstructs the visual hierarchy into visual paragraphs (`TextBlocks`), text lines (`Lines`), and auto-detects matrix tables:
+### 🎯 Mode 2: Hierarchical Structured Document & Tables
+Reconstructs the visual hierarchy into visual paragraphs (`TextBlocks`), text lines (`Lines`), per-cell tabular data (`Tables`), and coordinate bounds:
 
 ```csharp
 using RasgaPdf;
@@ -68,10 +68,11 @@ var options = new ParserOptions
     DetectTables = true,
     MinTableColumns = 3,
     ExtractImages = true,
-    ExtractDrawings = true
+    ExtractDrawings = true,
+    ApplyRotation = true
 };
 
-var doc = PdfParser.ParsePdf("invoice.pdf", options);
+var doc = SpatialPdf.Parse("invoice.pdf", options);
 Console.WriteLine($"Processed {doc.TotalPages} pages in {doc.ParseTimeMs:F2} ms");
 
 foreach (var page in doc.Pages)
@@ -81,7 +82,7 @@ foreach (var page in doc.Pages)
     // 1. Text blocks & lines
     foreach (var block in page.TextBlocks)
     {
-        Console.WriteLine($"Block #{block.BlockId} at ({block.Bbox.X0:F1}, {block.Bbox.Y0:F1}):");
+        Console.WriteLine($"Block #{block.BlockId} at ({block.BBox.X0:F1}, {block.BBox.Y0:F1}):");
         foreach (var line in block.Lines)
         {
             Console.WriteLine($"  Line: {line.Text}");
@@ -99,6 +100,20 @@ foreach (var page in doc.Pages)
         }
     }
 }
+```
+
+---
+
+### 🚀 Zero I/O Memory Extraction (Byte Arrays)
+
+```csharp
+byte[] pdfBytes = await File.ReadAllBytesAsync("document.pdf");
+
+// Pure text extraction directly from RAM
+string fullText = SpatialPdf.ExtractText(pdfBytes);
+
+// Raw physical coordinates directly from memory buffer
+RawSpatialDocument rawDoc = SpatialPdf.ParseRaw(pdfBytes);
 ```
 
 ---
