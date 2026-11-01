@@ -253,6 +253,11 @@ impl<'a> ContentInterpreter<'a> {
                     self.current_font_size = if sz > 0.0 { sz } else { sz.abs().max(1.0) };
                 }
             }
+            "TL" => {
+                if let Some(arg) = args.last() {
+                    self.text_leading = get_num(arg);
+                }
+            }
             "Tm" => {
                 if args.len() >= 6 {
                     let a = get_num(&args[args.len() - 6]);
