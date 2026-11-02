@@ -445,6 +445,53 @@ def to_spatial_chunks(
         return _chunk_page(doc_or_page, 1)
 
 
+def deduplicate_bboxes(
+    bboxes: List[Union[List[float], Dict[str, Any]]],
+    tolerance: float = 0.5,
+) -> List[List[float]]:
+    """
+    Remove bounding boxes duplicadas ou quase-idênticas (dentro de uma tolerância em pontos).
+
+    Evita renderizações sobrepostas de highlights quando blocos contíguos são compartilhados
+    entre múltiplos chunks citados (cenário de RAG com overlap_blocks >= 1).
+    """
+    unique: List[List[float]] = []
+    for b in bboxes:
+        if isinstance(b, dict):
+            coords = [float(b.get("x0", 0.0)), float(b.get("y0", 0.0)), float(b.get("x1", 0.0)), float(b.get("y1", 0.0))]
+        elif isinstance(b, (list, tuple)) and len(b) >= 4:
+            coords = [float(b[0]), float(b[1]), float(b[2]), float(b[3])]
+        else:
+            continue
+
+        is_dup = False
+        for u in unique:
+            if (
+                abs(coords[0] - u[0]) <= tolerance
+                and abs(coords[1] - u[1]) <= tolerance
+                and abs(coords[2] - u[2]) <= tolerance
+                and abs(coords[3] - u[3]) <= tolerance
+            ):
+                is_dup = True
+                break
+        if not is_dup:
+            unique.append(coords)
+    return unique
+
+
+def merge_citation_bboxes(
+    chunks: List[Dict[str, Any]],
+    tolerance: float = 0.5,
+) -> List[List[float]]:
+    """
+    Consolida e deduplica todas as bounding boxes de uma lista de chunks de citação RAG.
+    """
+    all_boxes = []
+    for chunk in chunks:
+        all_boxes.extend(chunk.get("bboxes", []))
+    return deduplicate_bboxes(all_boxes, tolerance=tolerance)
+
+
 def __getattr__(name: str):
     if name == "RasgaPDFLoader":
         from .integrations.langchain import RasgaPDFLoader
@@ -464,6 +511,8 @@ __all__ = [
     "extract_images_bytes",
     "version",
     "to_spatial_chunks",
+    "deduplicate_bboxes",
+    "merge_citation_bboxes",
     "RasgaPDFLoader",
     "RasgaPDFReader",
 ]

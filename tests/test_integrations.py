@@ -295,6 +295,15 @@ def t26_spatial_chunks_preserve_all_bboxes():
             assert b[2] <= ob[2] + 0.01
             assert b[3] <= ob[3] + 0.01
 
+    # Overlap deduplication validation (RecallRun citation test)
+    if len(chunks) >= 2:
+        raw_count = len(chunks[0]["bboxes"]) + len(chunks[1]["bboxes"])
+        merged = rasgapdf.merge_citation_bboxes(chunks[:2])
+        assert len(merged) <= raw_count
+        # If chunks shared an overlapping block, merged must have deduplicated it
+        if any(b in chunks[1]["bboxes"] for b in chunks[0]["bboxes"]):
+            assert len(merged) < raw_count
+
 def t27_langchain_loader_chunks_mode():
     loader = RasgaPDFLoader(str(pdf_astro), mode="chunks", chunk_max_chars=1000)
     docs = loader.load()

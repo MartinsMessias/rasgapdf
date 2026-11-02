@@ -239,8 +239,8 @@ fn build_crop_offset_pdf(rotation: i32) -> Vec<u8> {
 }
 
 #[test]
-fn test_crop_offset_at_90_and_270_degrees() {
-    for &rot in &[90, 270] {
+fn test_render_contract_same_page_at_0_90_and_270_degrees() {
+    for &rot in &[0, 90, 270] {
         let pdf_bytes = build_crop_offset_pdf(rot);
 
         // 1. Source unrotated mode (apply_rotation: false)
@@ -279,9 +279,16 @@ fn test_crop_offset_at_90_and_270_degrees() {
         assert_eq!(app_page.initial_rotation, rot);
         // rotation == 0 prevents accidental double rotation if consumer renders to canvas
         assert_eq!(app_page.rotation, 0);
-        // Dimensions swapped for 90/270
-        assert_eq!(app_page.width, 600.0);
-        assert_eq!(app_page.height, 400.0);
+
+        if rot == 90 || rot == 270 {
+            // Dimensions swapped for 90/270
+            assert_eq!(app_page.width, 600.0);
+            assert_eq!(app_page.height, 400.0);
+        } else {
+            // Same dimensions for 0 deg
+            assert_eq!(app_page.width, 400.0);
+            assert_eq!(app_page.height, 600.0);
+        }
 
         let app_line = &app_page.text_blocks[0].lines[0];
         assert_eq!(app_line.text, "CropTargetText");
@@ -304,13 +311,41 @@ fn test_crop_offset_at_90_and_270_degrees() {
             // Under 90 deg: rx0 = ph - s_box.y1 = 600 - s_box.y1; ry0 = s_box.x0 = 50.0
             assert!((a_box.y0 - 50.0).abs() <= 1.0, "Applied 90 y0 must match s_box.x0 (50), got {}", a_box.y0);
             assert!(a_box.x0 >= 0.0 && a_box.x1 <= 600.0);
-        } else {
+        } else if rot == 270 {
             // Under 270 deg: rx0 = s_box.y0; ry0 = pw - s_box.x1 = 400 - s_box.x1
             assert!(a_box.x0 >= 0.0 && a_box.x1 <= 600.0);
             assert!(a_box.y0 >= 0.0 && a_box.y1 <= 400.0);
+        } else {
+            // 0 deg: identical to source box
+            assert!((a_box.x0 - s_box.x0).abs() <= 0.001);
+            assert!((a_box.y0 - s_box.y0).abs() <= 0.001);
         }
 
         let app_chunks = app_page.to_spatial_chunks(1500, 0);
         assert_eq!(app_chunks[0].coordinate_system, "viewer_oriented");
     }
+}
+
+
+#[test]
+fn test_citation_bbox_deduplication_for_overlapping_chunks() {
+    use rasgapdf::types::{deduplicate_bboxes, BoundingBox};
+
+    let box_a = BoundingBox::new(50.0, 100.0, 200.0, 150.0);
+    let box_b = BoundingBox::new(50.0, 160.0, 200.0, 210.0);
+    let box_c = BoundingBox::new(50.0, 220.0, 200.0, 270.0);
+
+    let chunk1_bboxes = vec![box_a, box_b];
+    let chunk2_bboxes = vec![box_b, box_c];
+
+    let mut combined = Vec::new();
+    combined.extend_from_slice(&chunk1_bboxes);
+    combined.extend_from_slice(&chunk2_bboxes);
+    assert_eq!(combined.len(), 4);
+
+    let deduped = deduplicate_bboxes(&combined, 0.5);
+    assert_eq!(deduped.len(), 3);
+    assert_eq!(deduped[0], box_a);
+    assert_eq!(deduped[1], box_b);
+    assert_eq!(deduped[2], box_c);
 }

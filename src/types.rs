@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct BoundingBox {
     pub x0: f32,
     pub y0: f32,
@@ -59,6 +59,25 @@ impl BoundingBox {
             _ => self.clone(),
         }
     }
+
+    /// Checks if another bounding box is identical within a given tolerance (in points).
+    pub fn is_approx_equal(&self, other: &Self, tolerance: f32) -> bool {
+        (self.x0 - other.x0).abs() <= tolerance
+            && (self.y0 - other.y0).abs() <= tolerance
+            && (self.x1 - other.x1).abs() <= tolerance
+            && (self.y1 - other.y1).abs() <= tolerance
+    }
+}
+
+/// Deduplica bounding boxes que estejam dentro de uma tolerância em pt (evita highlights duplicados por chunk overlap).
+pub fn deduplicate_bboxes(bboxes: &[BoundingBox], tolerance: f32) -> Vec<BoundingBox> {
+    let mut unique: Vec<BoundingBox> = Vec::new();
+    for b in bboxes {
+        if !unique.iter().any(|u| u.is_approx_equal(b, tolerance)) {
+            unique.push(*b);
+        }
+    }
+    unique
 }
 
 /// Item de coordenada 2D mais bruto e direto possível
