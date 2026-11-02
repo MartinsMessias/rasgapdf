@@ -11,24 +11,36 @@ fn test_bounding_box_rotation_transformations() {
 
     // 0 degrees rotation: identical
     let rot0 = original.rotate(0, pw, ph);
-    assert_eq!((rot0.x0, rot0.y0, rot0.x1, rot0.y1), (10.0, 20.0, 100.0, 60.0));
+    assert_eq!(
+        (rot0.x0, rot0.y0, rot0.x1, rot0.y1),
+        (10.0, 20.0, 100.0, 60.0)
+    );
 
     // 90 degrees clockwise rotation:
     // Former bottom-left y becomes new left x; width & height swap
     let rot90 = original.rotate(90, pw, ph);
-    assert_eq!((rot90.x0, rot90.y0, rot90.x1, rot90.y1), (740.0, 10.0, 780.0, 100.0));
+    assert_eq!(
+        (rot90.x0, rot90.y0, rot90.x1, rot90.y1),
+        (740.0, 10.0, 780.0, 100.0)
+    );
     assert_eq!(rot90.width, 40.0);
     assert_eq!(rot90.height, 90.0);
 
     // 180 degrees rotation:
     let rot180 = original.rotate(180, pw, ph);
-    assert_eq!((rot180.x0, rot180.y0, rot180.x1, rot180.y1), (500.0, 740.0, 590.0, 780.0));
+    assert_eq!(
+        (rot180.x0, rot180.y0, rot180.x1, rot180.y1),
+        (500.0, 740.0, 590.0, 780.0)
+    );
     assert_eq!(rot180.width, 90.0);
     assert_eq!(rot180.height, 40.0);
 
     // 270 degrees rotation (or -90):
     let rot270 = original.rotate(270, pw, ph);
-    assert_eq!((rot270.x0, rot270.y0, rot270.x1, rot270.y1), (20.0, 500.0, 60.0, 590.0));
+    assert_eq!(
+        (rot270.x0, rot270.y0, rot270.x1, rot270.y1),
+        (20.0, 500.0, 60.0, 590.0)
+    );
     assert_eq!(rot270.width, 40.0);
     assert_eq!(rot270.height, 90.0);
 }
@@ -89,16 +101,26 @@ fn test_spatial_chunks_preserve_all_constituent_bboxes() {
 
     // When max_chars is large enough, both blocks are grouped into a single chunk
     let chunks = page.to_spatial_chunks(1500, 0);
-    assert_eq!(chunks.len(), 1, "Should aggregate contiguous blocks into 1 chunk");
+    assert_eq!(
+        chunks.len(),
+        1,
+        "Should aggregate contiguous blocks into 1 chunk"
+    );
     assert_eq!(chunks[0].block_count, 2);
-    assert_eq!(chunks[0].bboxes.len(), 2, "Must preserve individual bounding boxes for each block");
+    assert_eq!(
+        chunks[0].bboxes.len(),
+        2,
+        "Must preserve individual bounding boxes for each block"
+    );
     assert_eq!(chunks[0].bboxes[0].y0, 100.0);
     assert_eq!(chunks[0].bboxes[1].y0, 200.0);
     assert_eq!(chunks[0].overall_bbox.y0, 100.0);
     assert_eq!(chunks[0].overall_bbox.y1, 260.0);
     assert_eq!(chunks[0].coordinate_system, "source");
     assert!(chunks[0].text.contains("Introduction to Spatial Retrieval"));
-    assert!(chunks[0].text.contains("downstream viewers can highlight multiple rectangles"));
+    assert!(chunks[0]
+        .text
+        .contains("downstream viewers can highlight multiple rectangles"));
 }
 
 #[test]
@@ -140,7 +162,9 @@ fn test_crop_box_origin_normalization_and_precedence() {
     // Parse structured document: normalized coordinates relative to cropbox top-left
     let mut opts = ParserOptions::default();
     opts.detect_tables = false;
-    let sdoc = doc.parse_structured("cropped.pdf", &opts).expect("Structured parse failed");
+    let sdoc = doc
+        .parse_structured("cropped.pdf", &opts)
+        .expect("Structured parse failed");
     assert_eq!(sdoc.pages[0].width, 540.0);
     assert_eq!(sdoc.pages[0].height, 702.0);
     assert_eq!(sdoc.pages[0].crop_box, Some([36.0, 54.0, 576.0, 756.0]));
@@ -152,7 +176,11 @@ fn test_crop_box_origin_normalization_and_precedence() {
     // Normalized X = 36 - 36 = 0.
     // Normalized Y = 756 - 740 = 16 (plus font baseline).
     let span = &sdoc.pages[0].text_blocks[0].lines[0];
-    assert!((span.bbox.x0 - 0.0).abs() <= 1.0, "Expected x0 near 0, got {}", span.bbox.x0);
+    assert!(
+        (span.bbox.x0 - 0.0).abs() <= 1.0,
+        "Expected x0 near 0, got {}",
+        span.bbox.x0
+    );
 }
 
 #[test]
@@ -262,7 +290,11 @@ fn test_render_contract_same_page_at_0_90_and_270_degrees() {
         assert_eq!(src_line.text, "CropTargetText");
         let s_box = &src_line.bbox;
         // Text is at x=100 (relative to crop origin x=50, so x0=50)
-        assert!((s_box.x0 - 50.0).abs() <= 1.0, "Expected src x0 near 50, got {}", s_box.x0);
+        assert!(
+            (s_box.x0 - 50.0).abs() <= 1.0,
+            "Expected src x0 near 50, got {}",
+            s_box.x0
+        );
 
         let src_chunks = src_page.to_spatial_chunks(1500, 0);
         assert_eq!(src_chunks[0].coordinate_system, "source");
@@ -302,14 +334,19 @@ fn test_render_contract_same_page_at_0_90_and_270_degrees() {
             rot, rotated_s.x0, rotated_s.y0, a_box.x0, a_box.y0
         );
         assert!(
-            (rotated_s.width - a_box.width).abs() <= 0.01 && (rotated_s.height - a_box.height).abs() <= 0.01,
+            (rotated_s.width - a_box.width).abs() <= 0.01
+                && (rotated_s.height - a_box.height).abs() <= 0.01,
             "Rotated dimensions must match"
         );
 
         // Verification of physical coordinates:
         if rot == 90 {
             // Under 90 deg: rx0 = ph - s_box.y1 = 600 - s_box.y1; ry0 = s_box.x0 = 50.0
-            assert!((a_box.y0 - 50.0).abs() <= 1.0, "Applied 90 y0 must match s_box.x0 (50), got {}", a_box.y0);
+            assert!(
+                (a_box.y0 - 50.0).abs() <= 1.0,
+                "Applied 90 y0 must match s_box.x0 (50), got {}",
+                a_box.y0
+            );
             assert!(a_box.x0 >= 0.0 && a_box.x1 <= 600.0);
         } else if rot == 270 {
             // Under 270 deg: rx0 = s_box.y0; ry0 = pw - s_box.x1 = 400 - s_box.x1
@@ -325,7 +362,6 @@ fn test_render_contract_same_page_at_0_90_and_270_degrees() {
         assert_eq!(app_chunks[0].coordinate_system, "viewer_oriented");
     }
 }
-
 
 #[test]
 fn test_citation_bbox_deduplication_for_overlapping_chunks() {

@@ -61,8 +61,15 @@ impl<'a> Parser<'a> {
                 if let Ok(Some(Token::Integer(gen))) = self.lexer.next_token() {
                     let _after_gen_pos = self.lexer.pos();
                     if let Ok(Some(Token::Keyword(kw))) = self.lexer.next_token() {
-                        if kw == "R" && i >= 0 && i <= u32::MAX as i64 && gen >= 0 && gen <= u16::MAX as i64 {
-                            return Ok(Some(PdfObject::Reference(ObjectId::new(i as u32, gen as u16))));
+                        if kw == "R"
+                            && i >= 0
+                            && i <= u32::MAX as i64
+                            && gen >= 0
+                            && gen <= u16::MAX as i64
+                        {
+                            return Ok(Some(PdfObject::Reference(ObjectId::new(
+                                i as u32, gen as u16,
+                            ))));
                         }
                     }
                     // Not an 'R', rollback to after first integer
@@ -172,7 +179,10 @@ impl<'a> Parser<'a> {
         Ok(dict)
     }
 
-    fn read_stream_content(&mut self, dict: &BTreeMap<String, PdfObject>) -> Result<Vec<u8>, String> {
+    fn read_stream_content(
+        &mut self,
+        dict: &BTreeMap<String, PdfObject>,
+    ) -> Result<Vec<u8>, String> {
         // Stream keyword must be followed by newline (\r\n or \n)
         let mut pos = self.lexer.pos().min(self.full_data.len());
         if pos < self.full_data.len() && self.full_data[pos] == b'\r' {
@@ -214,7 +224,8 @@ impl<'a> Parser<'a> {
                 }
             }
             let stream_bytes = self.full_data[pos..end].to_vec();
-            self.lexer.set_pos((pos + end_offset + 9).min(self.full_data.len())); // 9 = "endstream".len()
+            self.lexer
+                .set_pos((pos + end_offset + 9).min(self.full_data.len())); // 9 = "endstream".len()
             return Ok(stream_bytes);
         }
 
@@ -223,7 +234,9 @@ impl<'a> Parser<'a> {
 }
 
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|window| window == needle)
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 #[cfg(test)]
@@ -239,8 +252,14 @@ mod tests {
         assert_eq!(p.parse_object().unwrap(), Some(PdfObject::Integer(100)));
         assert_eq!(p.parse_object().unwrap(), Some(PdfObject::Integer(-50)));
         assert_eq!(p.parse_object().unwrap(), Some(PdfObject::Real(3.14)));
-        assert_eq!(p.parse_object().unwrap(), Some(PdfObject::String(b"hello".to_vec())));
-        assert_eq!(p.parse_object().unwrap(), Some(PdfObject::Name("Name".into())));
+        assert_eq!(
+            p.parse_object().unwrap(),
+            Some(PdfObject::String(b"hello".to_vec()))
+        );
+        assert_eq!(
+            p.parse_object().unwrap(),
+            Some(PdfObject::Name("Name".into()))
+        );
         assert_eq!(
             p.parse_object().unwrap(),
             Some(PdfObject::Reference(ObjectId::new(10, 0)))

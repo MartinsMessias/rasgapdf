@@ -147,7 +147,10 @@ pub fn extract_images(
 pub fn extract_images_from_bytes(
     pdf_bytes: &[u8],
 ) -> Result<Vec<ExtractedImageData>, Box<dyn Error + Send + Sync>> {
-    let mut doc = PurePdfDoc::from_bytes(pdf_bytes).map_err(|e| format!("Pure PDF parse error: {e}"))?;
-    let images = doc.extract_all_images().map_err(|e| format!("Extract images error: {e}"))?;
+    let mut doc =
+        PurePdfDoc::from_bytes(pdf_bytes).map_err(|e| format!("Pure PDF parse error: {e}"))?;
+    let images = doc
+        .extract_all_images()
+        .map_err(|e| format!("Extract images error: {e}"))?;
     Ok(images)
 }

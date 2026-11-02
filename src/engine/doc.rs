@@ -12,7 +12,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 fn get_elapsed_ms(#[allow(unused)] start: Option<std::time::Instant>) -> f64 {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        start.map(|s| s.elapsed().as_secs_f64() * 1000.0).unwrap_or(0.0)
+        start
+            .map(|s| s.elapsed().as_secs_f64() * 1000.0)
+            .unwrap_or(0.0)
     }
     #[cfg(target_arch = "wasm32")]
     {
@@ -99,7 +101,9 @@ impl<'a> PurePdfDoc<'a> {
         visited: &mut HashSet<ObjectId>,
     ) -> Result<PdfObject, String> {
         if depth >= MAX_OBJECT_RESOLVE_DEPTH {
-            return Err("Maximum object resolution depth (64) exceeded (possible cycle)".to_string());
+            return Err(
+                "Maximum object resolution depth (64) exceeded (possible cycle)".to_string(),
+            );
         }
         match obj {
             PdfObject::Reference(id) => {
@@ -121,7 +125,9 @@ impl<'a> PurePdfDoc<'a> {
             .and_then(|r| r.as_reference())
             .ok_or("Missing /Root in PDF trailer")?;
 
-        let catalog = self.xref.get_object(self.data, root_ref, &mut self.obj_cache)?;
+        let catalog = self
+            .xref
+            .get_object(self.data, root_ref, &mut self.obj_cache)?;
         let pages_ref = catalog
             .dict_get("Pages")
             .and_then(|p| p.as_reference())
@@ -146,23 +152,35 @@ impl<'a> PurePdfDoc<'a> {
         }
 
         if self.pages.len() >= MAX_PAGES_LIMIT {
-            return Err(format!("Exceeded maximum page count limit ({})", MAX_PAGES_LIMIT));
+            return Err(format!(
+                "Exceeded maximum page count limit ({})",
+                MAX_PAGES_LIMIT
+            ));
         }
 
-        let node = self.xref.get_object(self.data, node_ref, &mut self.obj_cache)?;
-        let node_type = node.dict_get("Type").and_then(|t| t.as_name()).unwrap_or("");
+        let node = self
+            .xref
+            .get_object(self.data, node_ref, &mut self.obj_cache)?;
+        let node_type = node
+            .dict_get("Type")
+            .and_then(|t| t.as_name())
+            .unwrap_or("");
 
         if node_type == "Pages" || (node_type.is_empty() && node.dict_get("Kids").is_some()) {
             if let Some(kids_obj) = node.dict_get("Kids") {
                 let resolved_kids = self.resolve(kids_obj)?;
                 if let Some(kids_arr) = resolved_kids.as_array() {
-                    let kid_refs: Vec<ObjectId> = kids_arr.iter().filter_map(|k| k.as_reference()).collect();
+                    let kid_refs: Vec<ObjectId> =
+                        kids_arr.iter().filter_map(|k| k.as_reference()).collect();
                     for kid in kid_refs {
                         self.traverse_pages_node(kid, depth + 1, visited)?;
                     }
                 }
             }
-        } else if node_type == "Page" || node.dict_get("MediaBox").is_some() || node.dict_get("Contents").is_some() {
+        } else if node_type == "Page"
+            || node.dict_get("MediaBox").is_some()
+            || node.dict_get("Contents").is_some()
+        {
             self.pages.push(node_ref);
         }
 
@@ -176,7 +194,9 @@ impl<'a> PurePdfDoc<'a> {
         }
 
         let page_ref = self.pages[page_idx];
-        let page_obj = self.xref.get_object(self.data, page_ref, &mut self.obj_cache)?;
+        let page_obj = self
+            .xref
+            .get_object(self.data, page_ref, &mut self.obj_cache)?;
 
         // MediaBox, CropBox, and Rotate (with page tree inheritance support)
         let media_box_obj = self.get_inherited_page_attribute(&page_obj, "MediaBox")?;
@@ -186,9 +206,7 @@ impl<'a> PurePdfDoc<'a> {
         let media_box = self.parse_box_array(media_box_obj.as_ref())?;
         let crop_box = self.parse_box_array(crop_box_obj.as_ref())?;
 
-        let rotation = rotate_obj
-            .and_then(|r| r.as_i64())
-            .unwrap_or(0) as i32;
+        let rotation = rotate_obj.and_then(|r| r.as_i64()).unwrap_or(0) as i32;
 
         // Effective visible viewport: CropBox takes precedence over MediaBox
         let effective_box = crop_box.or(media_box).unwrap_or([0.0, 0.0, 595.28, 841.89]);
@@ -209,7 +227,11 @@ impl<'a> PurePdfDoc<'a> {
         };
         let origin_x = if min_x.is_finite() { min_x } else { 0.0 };
         let origin_y = if min_y.is_finite() { min_y } else { 0.0 };
-        let max_y = if max_y.is_finite() { max_y } else { origin_y + height };
+        let max_y = if max_y.is_finite() {
+            max_y
+        } else {
+            origin_y + height
+        };
 
         // Resources (/Font)
         let fonts = self.load_page_fonts(&page_obj)?;
@@ -232,7 +254,11 @@ impl<'a> PurePdfDoc<'a> {
         })
     }
 
-    fn get_inherited_page_attribute(&mut self, page_obj: &PdfObject, key: &str) -> Result<Option<PdfObject>, String> {
+    fn get_inherited_page_attribute(
+        &mut self,
+        page_obj: &PdfObject,
+        key: &str,
+    ) -> Result<Option<PdfObject>, String> {
         let mut curr = page_obj.clone();
         let mut visited_parents = HashSet::new();
 
@@ -272,7 +298,10 @@ impl<'a> PurePdfDoc<'a> {
         Ok(None)
     }
 
-    fn load_page_fonts(&mut self, page_obj: &PdfObject) -> Result<HashMap<String, PdfFont>, String> {
+    fn load_page_fonts(
+        &mut self,
+        page_obj: &PdfObject,
+    ) -> Result<HashMap<String, PdfFont>, String> {
         let mut fonts = HashMap::new();
 
         let res_obj = match page_obj.dict_get("Resources") {
@@ -291,7 +320,8 @@ impl<'a> PurePdfDoc<'a> {
                             if let Some(stream) = resolved.as_stream() {
                                 if let Some(form_res) = stream.dict.get("Resources") {
                                     if let Ok(r_res) = self.resolve(form_res) {
-                                        let _ = self.extract_fonts_from_resources(&r_res, &mut fonts);
+                                        let _ =
+                                            self.extract_fonts_from_resources(&r_res, &mut fonts);
                                     }
                                 }
                             }
@@ -304,7 +334,11 @@ impl<'a> PurePdfDoc<'a> {
         Ok(fonts)
     }
 
-    fn extract_fonts_from_resources(&mut self, res_obj: &PdfObject, fonts: &mut HashMap<String, PdfFont>) -> Result<(), String> {
+    fn extract_fonts_from_resources(
+        &mut self,
+        res_obj: &PdfObject,
+        fonts: &mut HashMap<String, PdfFont>,
+    ) -> Result<(), String> {
         let font_dict_obj = match res_obj.dict_get("Font") {
             Some(f) => self.resolve(f)?,
             None => return Ok(()),
@@ -346,12 +380,16 @@ impl<'a> PurePdfDoc<'a> {
                     // /FontDescriptor (Ascent / Descent)
                     if let Some(fd_obj) = resolved_font.dict_get("FontDescriptor") {
                         if let Ok(fd_resolved) = self.resolve(fd_obj) {
-                            if let Some(ascent) = fd_resolved.dict_get("Ascent").and_then(|a| a.as_f64()) {
+                            if let Some(ascent) =
+                                fd_resolved.dict_get("Ascent").and_then(|a| a.as_f64())
+                            {
                                 if ascent.abs() > 0.0 {
                                     pdf_font.ascent = (ascent as f32 / 1000.0).abs();
                                 }
                             }
-                            if let Some(descent) = fd_resolved.dict_get("Descent").and_then(|d| d.as_f64()) {
+                            if let Some(descent) =
+                                fd_resolved.dict_get("Descent").and_then(|d| d.as_f64())
+                            {
                                 if descent.abs() > 0.0 {
                                     pdf_font.descent = -(descent as f32 / 1000.0).abs();
                                 }
@@ -365,14 +403,19 @@ impl<'a> PurePdfDoc<'a> {
                             if let Some(desc_arr) = desc_resolved.as_array() {
                                 if let Some(first_desc) = desc_arr.first() {
                                     if let Ok(df_resolved) = self.resolve(first_desc) {
-                                        if let Some(dw) = df_resolved.dict_get("DW").and_then(|d| d.as_f64()) {
+                                        if let Some(dw) =
+                                            df_resolved.dict_get("DW").and_then(|d| d.as_f64())
+                                        {
                                             pdf_font.default_width = dw as f32;
                                         }
 
                                         if let Some(w_obj) = df_resolved.dict_get("W") {
                                             if let Ok(w_resolved) = self.resolve(w_obj) {
                                                 if let Some(w_arr) = w_resolved.as_array() {
-                                                    self.parse_cid_font_widths(&mut pdf_font, w_arr);
+                                                    self.parse_cid_font_widths(
+                                                        &mut pdf_font,
+                                                        w_arr,
+                                                    );
                                                 }
                                             }
                                         }
@@ -386,7 +429,9 @@ impl<'a> PurePdfDoc<'a> {
                     if let Some(to_uni_obj) = resolved_font.dict_get("ToUnicode") {
                         if let Ok(tu_resolved) = self.resolve(to_uni_obj) {
                             if let Some(stream) = tu_resolved.as_stream() {
-                                if let Ok(decompressed) = decompress_stream(&stream.data, &stream.dict) {
+                                if let Ok(decompressed) =
+                                    decompress_stream(&stream.data, &stream.dict)
+                                {
                                     pdf_font.parse_to_unicode(&decompressed);
                                 }
                             }
@@ -426,7 +471,15 @@ impl<'a> PurePdfDoc<'a> {
 
             if let Some(arr) = next_resolved.as_array() {
                 // Format 1: start_cid [ w1 w2 w3 ... ]
-                let widths: Vec<f32> = arr.iter().filter_map(|w| self.resolve(w).ok().and_then(|v| v.as_f64()).map(|v| v as f32)).collect();
+                let widths: Vec<f32> = arr
+                    .iter()
+                    .filter_map(|w| {
+                        self.resolve(w)
+                            .ok()
+                            .and_then(|v| v.as_f64())
+                            .map(|v| v as f32)
+                    })
+                    .collect();
                 font.add_cid_width_entry(start_cid, &widths);
                 i += 1;
             } else if let Some(end_cid) = next_resolved.as_i64() {
@@ -457,7 +510,8 @@ impl<'a> PurePdfDoc<'a> {
                                 full_contents.extend_from_slice(&decompressed);
                                 full_contents.push(b'\n');
                             } else {
-                                full_contents.extend_from_slice(&decompressed[..MAX_PAGE_CONTENTS_BYTES]);
+                                full_contents
+                                    .extend_from_slice(&decompressed[..MAX_PAGE_CONTENTS_BYTES]);
                                 full_contents.push(b'\n');
                             }
                         }
@@ -481,7 +535,8 @@ impl<'a> PurePdfDoc<'a> {
                                         if decompressed.len() <= allowed {
                                             full_contents.extend_from_slice(&decompressed);
                                         } else {
-                                            full_contents.extend_from_slice(&decompressed[..allowed]);
+                                            full_contents
+                                                .extend_from_slice(&decompressed[..allowed]);
                                         }
                                         full_contents.push(b'\n');
                                     }
@@ -506,7 +561,9 @@ impl<'a> PurePdfDoc<'a> {
                                 names.sort();
                                 let mut forms_processed = 0;
                                 for name in names {
-                                    if forms_processed >= MAX_FORM_XOBJECTS_PER_PAGE || full_contents.len() >= MAX_PAGE_CONTENTS_BYTES {
+                                    if forms_processed >= MAX_FORM_XOBJECTS_PER_PAGE
+                                        || full_contents.len() >= MAX_PAGE_CONTENTS_BYTES
+                                    {
                                         break;
                                     }
                                     let entry = &xdict[&name];
@@ -517,17 +574,27 @@ impl<'a> PurePdfDoc<'a> {
                                     }
                                     if let Ok(resolved) = self.resolve(entry) {
                                         if let Some(stream) = resolved.as_stream() {
-                                            let subtype = stream.dict.get("Subtype").and_then(|s| s.as_name()).unwrap_or("");
+                                            let subtype = stream
+                                                .dict
+                                                .get("Subtype")
+                                                .and_then(|s| s.as_name())
+                                                .unwrap_or("");
                                             if subtype == "Form" {
                                                 forms_processed += 1;
-                                                if let Ok(decompressed) = decompress_stream(&stream.data, &stream.dict) {
+                                                if let Ok(decompressed) =
+                                                    decompress_stream(&stream.data, &stream.dict)
+                                                {
                                                     let current_len = full_contents.len();
-                                                    let allowed = MAX_PAGE_CONTENTS_BYTES.saturating_sub(current_len);
+                                                    let allowed = MAX_PAGE_CONTENTS_BYTES
+                                                        .saturating_sub(current_len);
                                                     if allowed > 0 {
                                                         if decompressed.len() <= allowed {
-                                                            full_contents.extend_from_slice(&decompressed);
+                                                            full_contents
+                                                                .extend_from_slice(&decompressed);
                                                         } else {
-                                                            full_contents.extend_from_slice(&decompressed[..allowed]);
+                                                            full_contents.extend_from_slice(
+                                                                &decompressed[..allowed],
+                                                            );
                                                         }
                                                         full_contents.push(b'\n');
                                                     }
@@ -554,7 +621,13 @@ impl<'a> PurePdfDoc<'a> {
 
         for p in 0..total_pages {
             let page_info = self.load_page(p)?;
-            let mut interp = ContentInterpreter::with_viewport(p + 1, page_info.origin_x, page_info.max_y, page_info.height, &page_info.fonts);
+            let mut interp = ContentInterpreter::with_viewport(
+                p + 1,
+                page_info.origin_x,
+                page_info.max_y,
+                page_info.height,
+                &page_info.fonts,
+            );
             interp.interpret(&page_info.contents)?;
             all_spans.extend(interp.spans);
         }
@@ -578,7 +651,13 @@ impl<'a> PurePdfDoc<'a> {
 
         for p in 0..total_pages {
             let page_info = self.load_page(p)?;
-            let mut interp = ContentInterpreter::with_viewport(p + 1, page_info.origin_x, page_info.max_y, page_info.height, &page_info.fonts);
+            let mut interp = ContentInterpreter::with_viewport(
+                p + 1,
+                page_info.origin_x,
+                page_info.max_y,
+                page_info.height,
+                &page_info.fonts,
+            );
             let _ = interp.interpret(&page_info.contents);
 
             let res_obj = match page_info.raw_page_obj.dict_get("Resources") {
@@ -602,25 +681,56 @@ impl<'a> PurePdfDoc<'a> {
                     let resolved = self.resolve(entry)?;
 
                     if let Some(stream) = resolved.as_stream() {
-                        let subtype = stream.dict.get("Subtype").and_then(|s| s.as_name()).unwrap_or("");
+                        let subtype = stream
+                            .dict
+                            .get("Subtype")
+                            .and_then(|s| s.as_name())
+                            .unwrap_or("");
                         if subtype == "Image" {
-                            let width = stream.dict.get("Width").and_then(|w| w.as_i64()).unwrap_or(0) as u32;
-                            let height = stream.dict.get("Height").and_then(|h| h.as_i64()).unwrap_or(0) as u32;
-                            let bpc = stream.dict.get("BitsPerComponent").and_then(|b| b.as_i64()).map(|b| b as i32);
-                            let cs = stream.dict.get("ColorSpace").and_then(|c| c.as_name()).map(|s| s.to_string());
+                            let width = stream
+                                .dict
+                                .get("Width")
+                                .and_then(|w| w.as_i64())
+                                .unwrap_or(0) as u32;
+                            let height = stream
+                                .dict
+                                .get("Height")
+                                .and_then(|h| h.as_i64())
+                                .unwrap_or(0) as u32;
+                            let bpc = stream
+                                .dict
+                                .get("BitsPerComponent")
+                                .and_then(|b| b.as_i64())
+                                .map(|b| b as i32);
+                            let cs = stream
+                                .dict
+                                .get("ColorSpace")
+                                .and_then(|c| c.as_name())
+                                .map(|s| s.to_string());
                             let filter = stream.dict.get("Filter").and_then(|f| {
-                                f.as_name()
-                                    .map(|s| s.to_string())
-                                    .or_else(|| f.as_array().and_then(|a| a.last().and_then(|e| e.as_name().map(|s| s.to_string()))))
+                                f.as_name().map(|s| s.to_string()).or_else(|| {
+                                    f.as_array().and_then(|a| {
+                                        a.last().and_then(|e| e.as_name().map(|s| s.to_string()))
+                                    })
+                                })
                             });
 
                             let bbox = interp.image_placements.get(&name).cloned();
                             let raw_stream_bytes = stream.data.clone();
 
                             let has_bytes = !raw_stream_bytes.is_empty();
-                            let byte_len = if has_bytes { Some(raw_stream_bytes.len()) } else { None };
-                            let sha256 = if has_bytes { Some(image::sha256_hex(&raw_stream_bytes)) } else { None };
-                            let mime_type = image::mime_from_filter(filter.as_deref()).map(str::to_string);
+                            let byte_len = if has_bytes {
+                                Some(raw_stream_bytes.len())
+                            } else {
+                                None
+                            };
+                            let sha256 = if has_bytes {
+                                Some(image::sha256_hex(&raw_stream_bytes))
+                            } else {
+                                None
+                            };
+                            let mime_type =
+                                image::mime_from_filter(filter.as_deref()).map(str::to_string);
 
                             let spatial_img = SpatialImage {
                                 image_id: idx + 1,
@@ -653,7 +763,11 @@ impl<'a> PurePdfDoc<'a> {
     }
 
     /// Mode 2: Structured Parse (Hierarchical with Lines, Blocks, and Tables)
-    pub fn parse_structured(&mut self, file_name: &str, options: &ParserOptions) -> Result<SpatialDocument, String> {
+    pub fn parse_structured(
+        &mut self,
+        file_name: &str,
+        options: &ParserOptions,
+    ) -> Result<SpatialDocument, String> {
         let start = now_instant();
         let total_pages = self.page_count();
         let detector = TableDetector::new(
@@ -666,7 +780,13 @@ impl<'a> PurePdfDoc<'a> {
 
         for p in 0..total_pages {
             let page_info = self.load_page(p)?;
-            let mut interp = ContentInterpreter::with_viewport(p + 1, page_info.origin_x, page_info.max_y, page_info.height, &page_info.fonts);
+            let mut interp = ContentInterpreter::with_viewport(
+                p + 1,
+                page_info.origin_x,
+                page_info.max_y,
+                page_info.height,
+                &page_info.fonts,
+            );
             interp.interpret(&page_info.contents)?;
 
             let raw_coord_spans = interp.spans;
@@ -737,7 +857,8 @@ impl<'a> PurePdfDoc<'a> {
                 let mut block_counter = 1;
 
                 for span in &non_table_spans {
-                    let is_same_line = (span.y0 - last_y).abs() <= (options.row_tolerance / 2.0).max(3.0);
+                    let is_same_line =
+                        (span.y0 - last_y).abs() <= (options.row_tolerance / 2.0).max(3.0);
                     if !is_same_line {
                         if !current_line_spans.is_empty() {
                             let line = make_spatial_line(&current_line_spans);
@@ -783,38 +904,79 @@ impl<'a> PurePdfDoc<'a> {
             // Extract images if requested
             let mut images = Vec::new();
             if options.extract_images {
-                let res_obj = page_info.raw_page_obj.dict_get("Resources")
+                let res_obj = page_info
+                    .raw_page_obj
+                    .dict_get("Resources")
                     .and_then(|r| self.resolve(r).ok());
 
                 if let Some(res) = res_obj {
-                    if let Some(xobj_dict) = res.dict_get("XObject").and_then(|x| self.resolve(x).ok()) {
+                    if let Some(xobj_dict) =
+                        res.dict_get("XObject").and_then(|x| self.resolve(x).ok())
+                    {
                         if let Some(xobjs) = xobj_dict.as_dict() {
                             let mut names: Vec<_> = xobjs.keys().cloned().collect();
                             names.sort();
 
                             for (idx, name) in names.into_iter().enumerate() {
                                 let entry = &xobjs[&name];
-                                let xref = entry.as_reference().map(|r| r.number as i32).unwrap_or(0);
+                                let xref =
+                                    entry.as_reference().map(|r| r.number as i32).unwrap_or(0);
                                 if let Ok(resolved) = self.resolve(entry) {
                                     if let Some(stream) = resolved.as_stream() {
-                                        let subtype = stream.dict.get("Subtype").and_then(|s| s.as_name()).unwrap_or("");
+                                        let subtype = stream
+                                            .dict
+                                            .get("Subtype")
+                                            .and_then(|s| s.as_name())
+                                            .unwrap_or("");
                                         if subtype == "Image" {
-                                            let width = stream.dict.get("Width").and_then(|w| w.as_i64()).unwrap_or(0) as u32;
-                                            let height = stream.dict.get("Height").and_then(|h| h.as_i64()).unwrap_or(0) as u32;
-                                            let bpc = stream.dict.get("BitsPerComponent").and_then(|b| b.as_i64()).map(|b| b as i32);
-                                            let cs = stream.dict.get("ColorSpace").and_then(|c| c.as_name()).map(|s| s.to_string());
+                                            let width = stream
+                                                .dict
+                                                .get("Width")
+                                                .and_then(|w| w.as_i64())
+                                                .unwrap_or(0)
+                                                as u32;
+                                            let height = stream
+                                                .dict
+                                                .get("Height")
+                                                .and_then(|h| h.as_i64())
+                                                .unwrap_or(0)
+                                                as u32;
+                                            let bpc = stream
+                                                .dict
+                                                .get("BitsPerComponent")
+                                                .and_then(|b| b.as_i64())
+                                                .map(|b| b as i32);
+                                            let cs = stream
+                                                .dict
+                                                .get("ColorSpace")
+                                                .and_then(|c| c.as_name())
+                                                .map(|s| s.to_string());
                                             let filter = stream.dict.get("Filter").and_then(|f| {
-                                                f.as_name()
-                                                    .map(|s| s.to_string())
-                                                    .or_else(|| f.as_array().and_then(|a| a.last().and_then(|e| e.as_name().map(|s| s.to_string()))))
+                                                f.as_name().map(|s| s.to_string()).or_else(|| {
+                                                    f.as_array().and_then(|a| {
+                                                        a.last().and_then(|e| {
+                                                            e.as_name().map(|s| s.to_string())
+                                                        })
+                                                    })
+                                                })
                                             });
 
                                             let bbox = interp.image_placements.get(&name).cloned();
                                             let raw_stream_bytes = stream.data.clone();
                                             let has_bytes = !raw_stream_bytes.is_empty();
-                                            let byte_len = if has_bytes { Some(raw_stream_bytes.len()) } else { None };
-                                            let sha256 = if has_bytes { Some(image::sha256_hex(&raw_stream_bytes)) } else { None };
-                                            let mime_type = image::mime_from_filter(filter.as_deref()).map(str::to_string);
+                                            let byte_len = if has_bytes {
+                                                Some(raw_stream_bytes.len())
+                                            } else {
+                                                None
+                                            };
+                                            let sha256 = if has_bytes {
+                                                Some(image::sha256_hex(&raw_stream_bytes))
+                                            } else {
+                                                None
+                                            };
+                                            let mime_type =
+                                                image::mime_from_filter(filter.as_deref())
+                                                    .map(str::to_string);
 
                                             images.push(SpatialImage {
                                                 image_id: idx + 1,
@@ -1026,7 +1188,10 @@ mod tests {
         let raw_doc = doc.parse_raw("text_only.pdf").unwrap();
         assert_eq!(raw_doc.total_pages, 1);
         assert!(raw_doc.total_spans > 0, "Must extract spans from real PDF");
-        println!("Extracted {} spans from text_only.pdf: {:?}", raw_doc.total_spans, raw_doc.spans);
+        println!(
+            "Extracted {} spans from text_only.pdf: {:?}",
+            raw_doc.total_spans, raw_doc.spans
+        );
     }
 
     #[test]
@@ -1061,10 +1226,22 @@ mod tests {
                         "⚡ [BENCHMARK] {}: {} page(s), {} spans, parsed in {:?}",
                         path_str, page_count, raw.total_spans, elapsed
                     );
-                    let limit = if path_str.contains("sample.pdf") { 100 } else { 3 };
+                    let limit = if path_str.contains("sample.pdf") {
+                        100
+                    } else {
+                        3
+                    };
                     for span in raw.spans.iter().take(limit) {
-                        println!("   ↳ span: [{:.1}, {:.1}, {:.1}, {:.1}] font={} size={} text={:?}",
-                            span.x0, span.y0, span.x1, span.y1, span.font_name, span.font_size, span.text);
+                        println!(
+                            "   ↳ span: [{:.1}, {:.1}, {:.1}, {:.1}] font={} size={} text={:?}",
+                            span.x0,
+                            span.y0,
+                            span.x1,
+                            span.y1,
+                            span.font_name,
+                            span.font_size,
+                            span.text
+                        );
                     }
                 }
                 Err(err) => {
@@ -1165,12 +1342,19 @@ mod tests {
         let structured = doc.parse_structured("sample.pdf", &options).unwrap();
         assert_eq!(structured.total_pages, 1);
         let page = &structured.pages[0];
-        assert_eq!(page.tables.len(), 1, "Deveria ter detectado a tabela de 4 colunas");
+        assert_eq!(
+            page.tables.len(),
+            1,
+            "Deveria ter detectado a tabela de 4 colunas"
+        );
         let table = &page.tables[0];
         assert_eq!(table.col_count, 4);
         assert_eq!(table.headers, vec!["Item", "X pt", "Y pt", "Type"]);
         assert_eq!(table.rows.len(), 4);
-        assert!(!page.text_blocks.is_empty(), "Deveria ter blocos de texto fora da tabela");
+        assert!(
+            !page.text_blocks.is_empty(),
+            "Deveria ter blocos de texto fora da tabela"
+        );
     }
 
     #[test]
@@ -1189,7 +1373,11 @@ mod tests {
         assert_eq!((img.image.pixel_width, img.image.pixel_height), (400, 300));
         assert_eq!(img.image.filter.as_deref(), Some("DCTDecode"));
         assert_eq!(img.image.mime_type.as_deref(), Some("image/jpeg"));
-        assert_eq!(&img.bytes[..3], [0xFF, 0xD8, 0xFF], "Assinatura JPEG original");
+        assert_eq!(
+            &img.bytes[..3],
+            [0xFF, 0xD8, 0xFF],
+            "Assinatura JPEG original"
+        );
         assert!(img.image.bbox.is_some(), "Deveria ter posicionado a imagem");
         let bbox = img.image.bbox.as_ref().unwrap();
         assert!((bbox.x0 - 330.0).abs() <= 2.0);
@@ -1224,7 +1412,10 @@ mod tests {
 
         let mut doc = PurePdfDoc::from_bytes(&pdf).unwrap();
         let res = doc.resolve(&PdfObject::Reference(ObjectId::new(5, 0)));
-        assert!(res.is_err(), "Cyclic reference resolution must return Err without overflowing stack");
+        assert!(
+            res.is_err(),
+            "Cyclic reference resolution must return Err without overflowing stack"
+        );
     }
 
     #[test]
@@ -1246,7 +1437,10 @@ mod tests {
         );
 
         let res = PurePdfDoc::from_bytes(&pdf);
-        assert!(res.is_err(), "Cyclic page tree must return Err without overflowing stack");
+        assert!(
+            res.is_err(),
+            "Cyclic page tree must return Err without overflowing stack"
+        );
     }
 
     #[test]
@@ -1256,10 +1450,14 @@ mod tests {
         let o1 = pdf.len();
         pdf.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
         let o2 = pdf.len();
-        pdf.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [ 3 0 R ] /Count 1 /Parent 3 0 R >>\nendobj\n");
+        pdf.extend_from_slice(
+            b"2 0 obj\n<< /Type /Pages /Kids [ 3 0 R ] /Count 1 /Parent 3 0 R >>\nendobj\n",
+        );
         let o3 = pdf.len();
         // Page 3 references 2 as Parent, but 2 references 3 as Parent (cycle in /Parent)
-        pdf.extend_from_slice(b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 612 792 ] >>\nendobj\n");
+        pdf.extend_from_slice(
+            b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 612 792 ] >>\nendobj\n",
+        );
         let xref_pos = pdf.len();
         pdf.extend_from_slice(
             format!(
@@ -1270,10 +1468,16 @@ mod tests {
         );
 
         let mut doc = PurePdfDoc::from_bytes(&pdf).unwrap();
-        let page_obj = doc.xref.get_object(doc.data, ObjectId::new(3, 0), &mut doc.obj_cache).unwrap();
+        let page_obj = doc
+            .xref
+            .get_object(doc.data, ObjectId::new(3, 0), &mut doc.obj_cache)
+            .unwrap();
         // Querying an attribute that doesn't exist on page 3 will traverse Parent into 2 then back to 3
         let res = doc.get_inherited_page_attribute(&page_obj, "NonExistentKey");
-        assert!(res.is_err(), "Cyclic /Parent chain must be detected and return Err");
+        assert!(
+            res.is_err(),
+            "Cyclic /Parent chain must be detected and return Err"
+        );
     }
 
     #[test]
@@ -1288,7 +1492,9 @@ mod tests {
         // Contents has duplicate reference to stream 4 five times: [ 4 0 R 4 0 R 4 0 R 4 0 R 4 0 R ]
         pdf.extend_from_slice(b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 612 792 ] /Contents [ 4 0 R 4 0 R 4 0 R 4 0 R 4 0 R ] >>\nendobj\n");
         let o4 = pdf.len();
-        pdf.extend_from_slice(b"4 0 obj\n<< /Length 12 >> stream\nq 1 0 0 1 Q\n\nendstream\nendobj\n");
+        pdf.extend_from_slice(
+            b"4 0 obj\n<< /Length 12 >> stream\nq 1 0 0 1 Q\n\nendstream\nendobj\n",
+        );
         let xref_pos = pdf.len();
         pdf.extend_from_slice(
             format!(
@@ -1303,7 +1509,10 @@ mod tests {
         // Since stream 4 0 R is repeated 5 times, deduplication must include it only once
         let stream_text = std::str::from_utf8(&page_info.contents).unwrap();
         let occurrences = stream_text.matches("q 1 0 0 1 Q").count();
-        assert_eq!(occurrences, 1, "Duplicate content stream references in array must be deduplicated");
+        assert_eq!(
+            occurrences, 1,
+            "Duplicate content stream references in array must be deduplicated"
+        );
     }
 
     #[test]

@@ -47,7 +47,11 @@ fn page_with_image_keeps_its_text() {
         texts.iter().any(|t| t.contains("RasgaPDF")),
         "o texto da página com imagem foi perdido: {texts:?}"
     );
-    assert!(page.raw_span_count >= 3, "raw_span_count={}", page.raw_span_count);
+    assert!(
+        page.raw_span_count >= 3,
+        "raw_span_count={}",
+        page.raw_span_count
+    );
 }
 
 #[test]
@@ -121,9 +125,15 @@ fn drawings_map_lines_curves_and_rectangles() {
             && drawing
                 .stroke_color
                 .is_some_and(|color| (color[0] - 1.0).abs() < 0.01)
-            && drawing.width.is_some_and(|width| (width - 4.0).abs() < 0.01)
+            && drawing
+                .width
+                .is_some_and(|width| (width - 4.0).abs() < 0.01)
     });
-    assert!(red_line, "traço vermelho não encontrado: {:?}", page.drawings);
+    assert!(
+        red_line,
+        "traço vermelho não encontrado: {:?}",
+        page.drawings
+    );
 
     // Preenchimento azul `0 0 1 rg`.
     let blue_fill = page.drawings.iter().any(|drawing| {
@@ -178,7 +188,11 @@ fn extract_images_returns_original_jpeg_stream() {
     let written = write_images_to_dir(&mut found, &dir).expect("write_images_to_dir falhou");
     assert_eq!(written, 1);
 
-    let file_name = found[0].image.file.clone().expect("nome do arquivo ausente");
+    let file_name = found[0]
+        .image
+        .file
+        .clone()
+        .expect("nome do arquivo ausente");
     assert_eq!(file_name, "page_001_img_001_xref7.jpg");
 
     let bytes = std::fs::read(dir.join(&file_name)).expect("arquivo sidecar não existe");
@@ -197,7 +211,10 @@ fn extract_images_returns_original_jpeg_stream() {
     assert_eq!(manifest["total_images"], 1);
     assert_eq!(manifest["written"], 1);
     assert_eq!(manifest["images"][0]["page"], 1);
-    assert_eq!(manifest["images"][0]["image"]["file"], "page_001_img_001_xref7.jpg");
+    assert_eq!(
+        manifest["images"][0]["image"]["file"],
+        "page_001_img_001_xref7.jpg"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -250,14 +267,23 @@ fn image_only_page_has_no_text_and_extracts_image() {
     let page = &doc.pages[0];
 
     // Página sem nenhum texto não deve inventar blocos fantasmas
-    assert!(page.text_blocks.is_empty(), "página com apenas imagem não deve ter text_blocks: {:?}", page.text_blocks);
+    assert!(
+        page.text_blocks.is_empty(),
+        "página com apenas imagem não deve ter text_blocks: {:?}",
+        page.text_blocks
+    );
     assert_eq!(page.raw_span_count, 0, "raw_span_count deve ser 0");
     // Mas deve detectar a imagem embutida
-    assert_eq!(page.images.len(), 1, "deve encontrar 1 imagem embutida na fixture image_only.pdf");
+    assert_eq!(
+        page.images.len(),
+        1,
+        "deve encontrar 1 imagem embutida na fixture image_only.pdf"
+    );
     assert_eq!(page.images[0].pixel_width, 400);
 
     // Modo raw também deve reportar 0 spans sem falhar
-    let raw = parse_raw_file(&fixture("image_only.pdf")).expect("parse_raw_file em image_only não deve falhar");
+    let raw = parse_raw_file(&fixture("image_only.pdf"))
+        .expect("parse_raw_file em image_only não deve falhar");
     assert_eq!(raw.total_spans, 0);
     assert!(raw.spans.is_empty());
 }
@@ -271,12 +297,21 @@ fn malformed_pdfs_return_clean_errors_without_panic() {
     assert!(empty_res.is_err(), "0-byte buffer deve retornar erro");
 
     // 2. Lixo aleatório (sem assinatura %PDF)
-    let garbage_res = parse_bytes(b"THIS_IS_DEFINITELY_NOT_A_PDF_DOCUMENT_1234567890", &ParserOptions::default());
+    let garbage_res = parse_bytes(
+        b"THIS_IS_DEFINITELY_NOT_A_PDF_DOCUMENT_1234567890",
+        &ParserOptions::default(),
+    );
     assert!(garbage_res.is_err(), "Lixo arbitrário deve retornar erro");
 
     // 3. Cabeçalho PDF truncado abruptamente
-    let truncated_res = parse_bytes(b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\n", &ParserOptions::default());
-    assert!(truncated_res.is_err(), "PDF truncado deve retornar erro sem panic");
+    let truncated_res = parse_bytes(
+        b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\n",
+        &ParserOptions::default(),
+    );
+    assert!(
+        truncated_res.is_err(),
+        "PDF truncado deve retornar erro sem panic"
+    );
 
     // 4. Raw bytes em buffer corrompido
     let raw_err = parse_raw_bytes(b"corrupted raw stream");
@@ -286,4 +321,3 @@ fn malformed_pdfs_return_clean_errors_without_panic() {
     let txt_err = extract_text_bytes(b"corrupted stream << >>");
     assert!(txt_err.is_err() || txt_err.unwrap().is_empty());
 }
-

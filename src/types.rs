@@ -31,9 +31,17 @@ impl BoundingBox {
     /// Rotates the bounding box to match a rotated page view (0, 90, 180, 270 degrees clockwise).
     /// `page_width` and `page_height` are the dimensions of the unrotated page.
     pub fn rotate(&self, rotation: i32, page_width: f32, page_height: f32) -> Self {
-        let pw = if page_width.is_finite() { page_width } else { 0.0 };
-        let ph = if page_height.is_finite() { page_height } else { 0.0 };
-        let norm_rot = ((rotation % 360) + 360) % 360;
+        let pw = if page_width.is_finite() {
+            page_width
+        } else {
+            0.0
+        };
+        let ph = if page_height.is_finite() {
+            page_height
+        } else {
+            0.0
+        };
+        let norm_rot = rotation.rem_euclid(360);
         match norm_rot {
             90 => {
                 let rx0 = ph - self.y1;
@@ -56,7 +64,7 @@ impl BoundingBox {
                 let ry1 = pw - self.x0;
                 BoundingBox::new(rx0.min(rx1), ry0.min(ry1), rx0.max(rx1), ry0.max(ry1))
             }
-            _ => self.clone(),
+            _ => *self,
         }
     }
 
@@ -299,7 +307,6 @@ impl Default for ParserOptions {
     }
 }
 
-
 /// Chunk semântico espacial para RAG e citação visual determinística.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpatialChunk {
@@ -319,7 +326,11 @@ impl SpatialPage {
     /// Normaliza todos os elementos geométricos da página de acordo com sua rotação nativa.
     /// Para 90 e 270 graus, a largura e altura são permutadas.
     pub fn rotated(&self) -> SpatialPage {
-        let initial_rot = if self.initial_rotation != 0 { self.initial_rotation } else { self.rotation };
+        let initial_rot = if self.initial_rotation != 0 {
+            self.initial_rotation
+        } else {
+            self.rotation
+        };
         if self.rotation == 0 || self.rotation % 360 == 0 {
             let mut p = self.clone();
             p.coordinate_system = "viewer_oriented".to_string();
@@ -329,55 +340,91 @@ impl SpatialPage {
         let rot = self.rotation;
         let pw = self.width;
         let ph = self.height;
-        let (new_w, new_h) = if (rot % 360).abs() == 90 || (rot % 360).abs() == 270 { (ph, pw) } else { (pw, ph) };
+        let (new_w, new_h) = if (rot % 360).abs() == 90 || (rot % 360).abs() == 270 {
+            (ph, pw)
+        } else {
+            (pw, ph)
+        };
 
-        let text_blocks = self.text_blocks.iter().map(|block| {
-            let mut b = block.clone();
-            b.bbox = b.bbox.rotate(rot, pw, ph);
-            b.lines = b.lines.iter().map(|line| {
-                let mut l = line.clone();
-                l.bbox = l.bbox.rotate(rot, pw, ph);
-                l.spans = l.spans.iter().map(|span| {
-                    let mut s = span.clone();
-                    s.bbox = s.bbox.rotate(rot, pw, ph);
-                    s
-                }).collect();
-                l
-            }).collect();
-            b
-        }).collect();
+        let text_blocks = self
+            .text_blocks
+            .iter()
+            .map(|block| {
+                let mut b = block.clone();
+                b.bbox = b.bbox.rotate(rot, pw, ph);
+                b.lines = b
+                    .lines
+                    .iter()
+                    .map(|line| {
+                        let mut l = line.clone();
+                        l.bbox = l.bbox.rotate(rot, pw, ph);
+                        l.spans = l
+                            .spans
+                            .iter()
+                            .map(|span| {
+                                let mut s = span.clone();
+                                s.bbox = s.bbox.rotate(rot, pw, ph);
+                                s
+                            })
+                            .collect();
+                        l
+                    })
+                    .collect();
+                b
+            })
+            .collect();
 
-        let tables = self.tables.iter().map(|tbl| {
-            let mut t = tbl.clone();
-            t.bbox = t.bbox.rotate(rot, pw, ph);
-            t.cells = t.cells.iter().map(|c| {
-                let mut cell = c.clone();
-                cell.bbox = cell.bbox.rotate(rot, pw, ph);
-                cell
-            }).collect();
-            t
-        }).collect();
+        let tables = self
+            .tables
+            .iter()
+            .map(|tbl| {
+                let mut t = tbl.clone();
+                t.bbox = t.bbox.rotate(rot, pw, ph);
+                t.cells = t
+                    .cells
+                    .iter()
+                    .map(|c| {
+                        let mut cell = c.clone();
+                        cell.bbox = cell.bbox.rotate(rot, pw, ph);
+                        cell
+                    })
+                    .collect();
+                t
+            })
+            .collect();
 
-        let images = self.images.iter().map(|img| {
-            let mut i = img.clone();
-            if let Some(ref bb) = i.bbox {
-                i.bbox = Some(bb.rotate(rot, pw, ph));
-            }
-            i
-        }).collect();
+        let images = self
+            .images
+            .iter()
+            .map(|img| {
+                let mut i = img.clone();
+                if let Some(ref bb) = i.bbox {
+                    i.bbox = Some(bb.rotate(rot, pw, ph));
+                }
+                i
+            })
+            .collect();
 
-        let drawings = self.drawings.iter().map(|drw| {
-            let mut d = drw.clone();
-            d.bbox = d.bbox.rotate(rot, pw, ph);
-            d
-        }).collect();
+        let drawings = self
+            .drawings
+            .iter()
+            .map(|drw| {
+                let mut d = drw.clone();
+                d.bbox = d.bbox.rotate(rot, pw, ph);
+                d
+            })
+            .collect();
 
         SpatialPage {
             page_number: self.page_number,
             width: new_w,
             height: new_h,
             rotation: 0,
-            initial_rotation: if self.initial_rotation != 0 { self.initial_rotation } else { self.rotation },
+            initial_rotation: if self.initial_rotation != 0 {
+                self.initial_rotation
+            } else {
+                self.rotation
+            },
             coordinate_system: "viewer_oriented".to_string(),
             text_blocks,
             tables,
@@ -405,13 +452,21 @@ impl SpatialPage {
         for block in &self.text_blocks {
             let block_text_len: usize = block.lines.iter().map(|l| l.text.len() + 1).sum();
             if !current_blocks.is_empty() && (current_len + block_text_len > max_chars) {
-                chunks.push(Self::build_chunk_from_blocks(self.page_number, chunk_id, &self.coordinate_system, &current_blocks));
+                chunks.push(Self::build_chunk_from_blocks(
+                    self.page_number,
+                    chunk_id,
+                    &self.coordinate_system,
+                    &current_blocks,
+                ));
                 chunk_id += 1;
 
                 if overlap_blocks > 0 && current_blocks.len() > overlap_blocks {
                     let keep_from = current_blocks.len() - overlap_blocks;
                     current_blocks = current_blocks[keep_from..].to_vec();
-                    current_len = current_blocks.iter().map(|b| b.lines.iter().map(|l| l.text.len() + 1).sum::<usize>()).sum();
+                    current_len = current_blocks
+                        .iter()
+                        .map(|b| b.lines.iter().map(|l| l.text.len() + 1).sum::<usize>())
+                        .sum();
                 } else if overlap_blocks == 0 {
                     current_blocks.clear();
                     current_len = 0;
@@ -423,13 +478,23 @@ impl SpatialPage {
         }
 
         if !current_blocks.is_empty() {
-            chunks.push(Self::build_chunk_from_blocks(self.page_number, chunk_id, &self.coordinate_system, &current_blocks));
+            chunks.push(Self::build_chunk_from_blocks(
+                self.page_number,
+                chunk_id,
+                &self.coordinate_system,
+                &current_blocks,
+            ));
         }
 
         chunks
     }
 
-    fn build_chunk_from_blocks(page_number: usize, chunk_id: usize, coordinate_system: &str, blocks: &[&SpatialBlock]) -> SpatialChunk {
+    fn build_chunk_from_blocks(
+        page_number: usize,
+        chunk_id: usize,
+        coordinate_system: &str,
+        blocks: &[&SpatialBlock],
+    ) -> SpatialChunk {
         let mut text_parts = Vec::new();
         let mut bboxes = Vec::new();
         let mut min_x0 = f32::MAX;
@@ -438,11 +503,16 @@ impl SpatialPage {
         let mut max_y1 = f32::MIN;
 
         for b in blocks {
-            let block_str: String = b.lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n");
+            let block_str: String = b
+                .lines
+                .iter()
+                .map(|l| l.text.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
             if !block_str.trim().is_empty() {
                 text_parts.push(block_str);
             }
-            bboxes.push(b.bbox.clone());
+            bboxes.push(b.bbox);
             min_x0 = min_x0.min(b.bbox.x0);
             min_y0 = min_y0.min(b.bbox.y0);
             max_x1 = max_x1.max(b.bbox.x1);
@@ -450,7 +520,7 @@ impl SpatialPage {
         }
 
         let full_text = text_parts.join("\n\n");
-        let token_estimate = (full_text.len() + 3) / 4;
+        let token_estimate = full_text.len().div_ceil(4);
         let overall_bbox = if min_x0 <= max_x1 {
             BoundingBox::new(min_x0, min_y0, max_x1, max_y1)
         } else {

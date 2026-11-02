@@ -122,15 +122,18 @@ impl<'a> ContentInterpreter<'a> {
         page_num: usize,
         origin_x: f32,
         max_y: f32,
-        #[allow(dead_code)]
-    page_height: f32,
+        #[allow(dead_code)] page_height: f32,
         fonts: &'a HashMap<String, PdfFont>,
     ) -> Self {
         Self {
             page_num,
             origin_x: if origin_x.is_finite() { origin_x } else { 0.0 },
             max_y: if max_y.is_finite() { max_y } else { 0.0 },
-            page_height: if page_height.is_finite() { page_height } else { 0.0 },
+            page_height: if page_height.is_finite() {
+                page_height
+            } else {
+                0.0
+            },
             fonts,
             state_stack: Vec::new(),
             current_state: GraphicsState::new(),
@@ -296,13 +299,8 @@ impl<'a> ContentInterpreter<'a> {
                 self.text_matrix = self.text_line_matrix;
             }
             "Tj" => {
-                if let Some(t) = args.last() {
-                    match t {
-                        Token::LiteralString(bytes) | Token::HexString(bytes) => {
-                            self.emit_text_string(bytes);
-                        }
-                        _ => {}
-                    }
+                if let Some(Token::LiteralString(bytes) | Token::HexString(bytes)) = args.last() {
+                    self.emit_text_string(bytes);
                 }
             }
             "TJ" => {
@@ -331,10 +329,8 @@ impl<'a> ContentInterpreter<'a> {
                 let trans = Matrix::new(1.0, 0.0, 0.0, 1.0, 0.0, -self.text_leading);
                 self.text_line_matrix = trans.concat(&self.text_line_matrix);
                 self.text_matrix = self.text_line_matrix;
-                if let Some(t) = args.last() {
-                    if let Token::LiteralString(bytes) | Token::HexString(bytes) = t {
-                        self.emit_text_string(bytes);
-                    }
+                if let Some(Token::LiteralString(bytes) | Token::HexString(bytes)) = args.last() {
+                    self.emit_text_string(bytes);
                 }
             }
 
@@ -435,7 +431,12 @@ impl<'a> ContentInterpreter<'a> {
 
                     self.image_placements.insert(
                         xname.clone(),
-                        BoundingBox::new(round_coord(min_x), round_coord(y0), round_coord(max_x), round_coord(y1)),
+                        BoundingBox::new(
+                            round_coord(min_x),
+                            round_coord(y0),
+                            round_coord(max_x),
+                            round_coord(y1),
+                        ),
                     );
                 }
             }
@@ -535,8 +536,19 @@ impl<'a> ContentInterpreter<'a> {
             }
         }
 
-        let bbox = if min_x < max_x && min_y < max_y && min_x.is_finite() && min_y.is_finite() && max_x.is_finite() && max_y.is_finite() {
-            BoundingBox::new(round_coord(min_x), round_coord(min_y), round_coord(max_x), round_coord(max_y))
+        let bbox = if min_x < max_x
+            && min_y < max_y
+            && min_x.is_finite()
+            && min_y.is_finite()
+            && max_x.is_finite()
+            && max_y.is_finite()
+        {
+            BoundingBox::new(
+                round_coord(min_x),
+                round_coord(min_y),
+                round_coord(max_x),
+                round_coord(max_y),
+            )
         } else {
             BoundingBox::new(0.0, 0.0, 0.0, 0.0)
         };
@@ -551,9 +563,21 @@ impl<'a> ContentInterpreter<'a> {
             drawing_type: dtype.to_string(),
             item_count,
             items,
-            stroke_color: if is_stroke { self.current_state.stroke_color } else { None },
-            fill_color: if is_fill { self.current_state.fill_color } else { None },
-            width: if is_stroke { Some(self.current_state.line_width) } else { None },
+            stroke_color: if is_stroke {
+                self.current_state.stroke_color
+            } else {
+                None
+            },
+            fill_color: if is_fill {
+                self.current_state.fill_color
+            } else {
+                None
+            },
+            width: if is_stroke {
+                Some(self.current_state.line_width)
+            } else {
+                None
+            },
             fill_opacity: None,
             stroke_opacity: None,
             even_odd: None,

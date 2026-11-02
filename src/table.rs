@@ -33,10 +33,16 @@ impl TableDetector {
         }
     }
 
-    pub fn extract_tables(&self, spans: &[RawSpan], table_id_start: usize) -> (Vec<SpatialTable>, Vec<RawSpan>) {
+    pub fn extract_tables(
+        &self,
+        spans: &[RawSpan],
+        table_id_start: usize,
+    ) -> (Vec<SpatialTable>, Vec<RawSpan>) {
         let valid_spans: Vec<RawSpan> = spans
             .iter()
-            .filter(|s| s.x0.is_finite() && s.y0.is_finite() && s.x1.is_finite() && s.y1.is_finite())
+            .filter(|s| {
+                s.x0.is_finite() && s.y0.is_finite() && s.x1.is_finite() && s.y1.is_finite()
+            })
             .cloned()
             .collect();
 
@@ -54,7 +60,9 @@ impl TableDetector {
                 current_line.push(span.clone());
             } else {
                 if !current_line.is_empty() {
-                    current_line.sort_by(|a, b| a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal));
+                    current_line.sort_by(|a, b| {
+                        a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal)
+                    });
                     lines.push(Self::coalesce_line_spans(&current_line, self.col_tolerance));
                 }
                 current_line = vec![span.clone()];
@@ -62,7 +70,8 @@ impl TableDetector {
             }
         }
         if !current_line.is_empty() {
-            current_line.sort_by(|a, b| a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal));
+            current_line
+                .sort_by(|a, b| a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal));
             lines.push(Self::coalesce_line_spans(&current_line, self.col_tolerance));
         }
 
@@ -81,7 +90,9 @@ impl TableDetector {
                 } else {
                     // Verifica se alinha com as colunas existentes
                     let aligns = line.iter().any(|s| {
-                        active_cols.iter().any(|&c| (c - s.x0).abs() <= self.col_tolerance)
+                        active_cols
+                            .iter()
+                            .any(|&c| (c - s.x0).abs() <= self.col_tolerance)
                     });
 
                     if aligns {
@@ -89,7 +100,8 @@ impl TableDetector {
                     } else {
                         // Fecha a tabela anterior
                         if active_table_rows.len() >= 2 {
-                            let table = self.build_table(&active_table_rows, &active_cols, table_counter);
+                            let table =
+                                self.build_table(&active_table_rows, &active_cols, table_counter);
                             detected_tables.push(table);
                             table_counter = table_counter.saturating_add(1);
                         } else {
@@ -105,7 +117,8 @@ impl TableDetector {
                 // Linha de texto normal
                 if !active_table_rows.is_empty() {
                     if active_table_rows.len() >= 2 {
-                        let table = self.build_table(&active_table_rows, &active_cols, table_counter);
+                        let table =
+                            self.build_table(&active_table_rows, &active_cols, table_counter);
                         detected_tables.push(table);
                         table_counter = table_counter.saturating_add(1);
                     } else {
@@ -133,7 +146,12 @@ impl TableDetector {
         (detected_tables, non_table_spans)
     }
 
-    fn build_table(&self, rows_raw: &[Vec<RawSpan>], cols_x: &[f32], table_id: usize) -> SpatialTable {
+    fn build_table(
+        &self,
+        rows_raw: &[Vec<RawSpan>],
+        cols_x: &[f32],
+        table_id: usize,
+    ) -> SpatialTable {
         let num_cols = cols_x.len();
         if num_cols == 0 || rows_raw.is_empty() {
             return SpatialTable {
@@ -160,7 +178,11 @@ impl TableDetector {
             let mut row_strings = vec![String::new(); num_cols];
 
             for span in row_spans {
-                if span.x0.is_finite() && span.y0.is_finite() && span.x1.is_finite() && span.y1.is_finite() {
+                if span.x0.is_finite()
+                    && span.y0.is_finite()
+                    && span.x1.is_finite()
+                    && span.y1.is_finite()
+                {
                     min_x = min_x.min(span.x0);
                     min_y = min_y.min(span.y0);
                     max_x = max_x.max(span.x1);

@@ -1,7 +1,7 @@
+use super::object::PdfObject;
 use flate2::read::ZlibDecoder;
 use std::collections::BTreeMap;
 use std::io::Read;
-use super::object::PdfObject;
 
 pub const MAX_DECOMPRESSED_BYTES: u64 = 128 * 1024 * 1024; // 128 MB
 pub const MAX_FILTER_CHAIN_DEPTH: usize = 8;
@@ -59,7 +59,9 @@ pub fn decompress_stream(
                         _ => {}
                     }
                     if (current_data.len() as u64) > MAX_DECOMPRESSED_BYTES {
-                        return Err("Decompressed stream in filter pipeline exceeds maximum size".into());
+                        return Err(
+                            "Decompressed stream in filter pipeline exceeds maximum size".into(),
+                        );
                     }
                 }
             }
@@ -113,10 +115,8 @@ pub fn decode_ascii85(data: &[u8]) -> Result<Vec<u8>, String> {
             i += 1;
             continue;
         }
-        if b == b'~' {
-            if i < data.len() && data[i] == b'>' {
-                break;
-            }
+        if b == b'~' && i < data.len() && data[i] == b'>' {
+            break;
         }
         if b.is_ascii_whitespace() || b == 0 {
             continue;
@@ -155,9 +155,15 @@ pub fn decode_ascii85(data: &[u8]) -> Result<Vec<u8>, String> {
         let b0 = (tuple >> 24) as u8;
         let b1 = (tuple >> 16) as u8;
         let b2 = (tuple >> 8) as u8;
-        if bytes_to_write >= 1 { out.push(b0); }
-        if bytes_to_write >= 2 { out.push(b1); }
-        if bytes_to_write >= 3 { out.push(b2); }
+        if bytes_to_write >= 1 {
+            out.push(b0);
+        }
+        if bytes_to_write >= 2 {
+            out.push(b1);
+        }
+        if bytes_to_write >= 3 {
+            out.push(b2);
+        }
     } else if count == 1 {
         return Err("Invalid trailing character in ASCII85 stream".into());
     }
@@ -206,14 +212,8 @@ pub fn decode_ascii_hex(data: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 /// Applies PNG/TIFF predictor decoding (ISO 32000-1, Section 7.4.4.4)
-fn apply_predictor(
-    data: &[u8],
-    parms: &BTreeMap<String, PdfObject>,
-) -> Result<Vec<u8>, String> {
-    let predictor = parms
-        .get("Predictor")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(1);
+fn apply_predictor(data: &[u8], parms: &BTreeMap<String, PdfObject>) -> Result<Vec<u8>, String> {
+    let predictor = parms.get("Predictor").and_then(|v| v.as_i64()).unwrap_or(1);
 
     if predictor <= 1 {
         return Ok(data.to_vec()); // No prediction
@@ -231,14 +231,31 @@ fn apply_predictor(
     // Defensive validation of parameters (ISO 32000-1, Section 7.4.4.4)
     let columns = match parms.get("Columns").and_then(|v| v.as_i64()) {
         Some(c) if c > 0 && (c as usize) <= MAX_PREDICTOR_COLUMNS => c as usize,
-        Some(c) if c <= 0 => return Err(format!("Invalid non-positive Columns in DecodeParms: {}", c)),
-        Some(c) => return Err(format!("Columns {} exceeds limit {}", c, MAX_PREDICTOR_COLUMNS)),
+        Some(c) if c <= 0 => {
+            return Err(format!(
+                "Invalid non-positive Columns in DecodeParms: {}",
+                c
+            ))
+        }
+        Some(c) => {
+            return Err(format!(
+                "Columns {} exceeds limit {}",
+                c, MAX_PREDICTOR_COLUMNS
+            ))
+        }
         None => 1,
     };
     let colors = match parms.get("Colors").and_then(|v| v.as_i64()) {
         Some(c) if c > 0 && (c as usize) <= MAX_PREDICTOR_COLORS => c as usize,
-        Some(c) if c <= 0 => return Err(format!("Invalid non-positive Colors in DecodeParms: {}", c)),
-        Some(c) => return Err(format!("Colors {} exceeds limit {}", c, MAX_PREDICTOR_COLORS)),
+        Some(c) if c <= 0 => {
+            return Err(format!("Invalid non-positive Colors in DecodeParms: {}", c))
+        }
+        Some(c) => {
+            return Err(format!(
+                "Colors {} exceeds limit {}",
+                c, MAX_PREDICTOR_COLORS
+            ))
+        }
         None => 1,
     };
     let bpc = match parms.get("BitsPerComponent").and_then(|v| v.as_i64()) {
@@ -247,23 +264,31 @@ fn apply_predictor(
         None => 8,
     };
 
-    let bits_per_pixel = colors.checked_mul(bpc).ok_or("Integer overflow calculating bits_per_pixel")?;
-    let bytes_per_pixel = ((bits_per_pixel + 7) / 8).max(1);
+    let bits_per_pixel = colors
+        .checked_mul(bpc)
+        .ok_or("Integer overflow calculating bits_per_pixel")?;
+    let bytes_per_pixel = bits_per_pixel.div_ceil(8).max(1);
 
-    let row_bits = columns.checked_mul(bits_per_pixel).ok_or("Integer overflow calculating row_bits")?;
-    let row_len = (row_bits + 7) / 8;
+    let row_bits = columns
+        .checked_mul(bits_per_pixel)
+        .ok_or("Integer overflow calculating row_bits")?;
+    let row_len = row_bits.div_ceil(8);
     if row_len == 0 {
         return Err("Calculated row length is zero in PNG predictor".to_string());
     }
 
-    let stride = row_len.checked_add(1).ok_or("Integer overflow calculating stride")?;
+    let stride = row_len
+        .checked_add(1)
+        .ok_or("Integer overflow calculating stride")?;
 
     let num_rows = data.len() / stride;
     if num_rows == 0 {
         return Ok(Vec::new());
     }
 
-    let expected_out_len = num_rows.checked_mul(row_len).ok_or("Integer overflow calculating output size")?;
+    let expected_out_len = num_rows
+        .checked_mul(row_len)
+        .ok_or("Integer overflow calculating output size")?;
     if expected_out_len > MAX_DECOMPRESSED_BYTES as usize {
         return Err("Predictor output exceeds maximum allowed decompressed size".to_string());
     }
@@ -293,7 +318,11 @@ fn apply_predictor(
             1 => {
                 // Sub: Raw(x) + Recon(x - bpp)
                 for i in 0..row_len {
-                    let left = if i >= bytes_per_pixel { current_row[i - bytes_per_pixel] } else { 0 };
+                    let left = if i >= bytes_per_pixel {
+                        current_row[i - bytes_per_pixel]
+                    } else {
+                        0
+                    };
                     current_row[i] = raw_row[i].wrapping_add(left);
                 }
             }
@@ -307,7 +336,11 @@ fn apply_predictor(
             3 => {
                 // Average: Raw(x) + floor((Recon(x - bpp) + Prior(x)) / 2)
                 for i in 0..row_len {
-                    let left = if i >= bytes_per_pixel { current_row[i - bytes_per_pixel] as u16 } else { 0 };
+                    let left = if i >= bytes_per_pixel {
+                        current_row[i - bytes_per_pixel] as u16
+                    } else {
+                        0
+                    };
                     let up = prev_row[i] as u16;
                     let avg = ((left + up) / 2) as u8;
                     current_row[i] = raw_row[i].wrapping_add(avg);
@@ -316,9 +349,17 @@ fn apply_predictor(
             4 => {
                 // Paeth
                 for i in 0..row_len {
-                    let a = if i >= bytes_per_pixel { current_row[i - bytes_per_pixel] } else { 0 };
+                    let a = if i >= bytes_per_pixel {
+                        current_row[i - bytes_per_pixel]
+                    } else {
+                        0
+                    };
                     let b = prev_row[i];
-                    let c = if i >= bytes_per_pixel { prev_row[i - bytes_per_pixel] } else { 0 };
+                    let c = if i >= bytes_per_pixel {
+                        prev_row[i - bytes_per_pixel]
+                    } else {
+                        0
+                    };
                     let paeth = paeth_predictor(a, b, c);
                     current_row[i] = raw_row[i].wrapping_add(paeth);
                 }
@@ -399,25 +440,37 @@ mod tests {
         let mut parms = BTreeMap::new();
         parms.insert("Predictor".into(), PdfObject::Integer(12));
         parms.insert("Columns".into(), PdfObject::Integer(-1));
-        assert!(apply_predictor(&fake_data, &parms).is_err(), "Negative columns must error");
+        assert!(
+            apply_predictor(&fake_data, &parms).is_err(),
+            "Negative columns must error"
+        );
 
         // 2. Exorbitant Columns (preventing arithmetic overflow)
         let mut parms2 = BTreeMap::new();
         parms2.insert("Predictor".into(), PdfObject::Integer(12));
         parms2.insert("Columns".into(), PdfObject::Integer(i64::MAX));
-        assert!(apply_predictor(&fake_data, &parms2).is_err(), "Overflow columns must error");
+        assert!(
+            apply_predictor(&fake_data, &parms2).is_err(),
+            "Overflow columns must error"
+        );
 
         // 3. Negative Colors
         let mut parms3 = BTreeMap::new();
         parms3.insert("Predictor".into(), PdfObject::Integer(12));
         parms3.insert("Colors".into(), PdfObject::Integer(-5));
-        assert!(apply_predictor(&fake_data, &parms3).is_err(), "Negative colors must error");
+        assert!(
+            apply_predictor(&fake_data, &parms3).is_err(),
+            "Negative colors must error"
+        );
 
         // 4. Invalid BitsPerComponent
         let mut parms4 = BTreeMap::new();
         parms4.insert("Predictor".into(), PdfObject::Integer(12));
         parms4.insert("BitsPerComponent".into(), PdfObject::Integer(99999));
-        assert!(apply_predictor(&fake_data, &parms4).is_err(), "Invalid bpc must error");
+        assert!(
+            apply_predictor(&fake_data, &parms4).is_err(),
+            "Invalid bpc must error"
+        );
     }
 
     #[test]
@@ -445,7 +498,10 @@ mod tests {
 
         let dummy_data = vec![1, 2, 3];
         let res = decompress_stream(&dummy_data, &dict);
-        assert!(res.is_err(), "Exceeding filter pipeline depth must error safely");
+        assert!(
+            res.is_err(),
+            "Exceeding filter pipeline depth must error safely"
+        );
     }
 
     #[test]

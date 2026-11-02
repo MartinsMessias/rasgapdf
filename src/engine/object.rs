@@ -80,7 +80,8 @@ impl PdfObject {
     }
 
     pub fn as_str(&self) -> Option<&str> {
-        self.as_string_bytes().and_then(|b| std::str::from_utf8(b).ok())
+        self.as_string_bytes()
+            .and_then(|b| std::str::from_utf8(b).ok())
     }
 
     pub fn as_array(&self) -> Option<&[PdfObject]> {

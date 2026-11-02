@@ -1,9 +1,9 @@
-use std::fs::File;
-use std::io::Write;
 use clap::{Parser, ValueEnum};
 use rasgapdf::{
     extract_images, parse_file, parse_raw_file, write_images_to_dir, write_manifest, ParserOptions,
 };
+use std::fs::File;
+use std::io::Write;
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutputFormat {
@@ -136,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             OutputFormat::Tsv => {
                 let mut out = String::from("page\tx0\ty0\tx1\ty1\tfont_size\tfont_name\ttext\n");
                 for s in &raw_doc.spans {
-                    let sanitized = s.text.replace('\t', " ").replace('\n', " ");
+                    let sanitized = s.text.replace(['\t', '\n'], " ");
                     out.push_str(&format!(
                         "{}\t{:.2}\t{:.2}\t{:.2}\t{:.2}\t{:.1}\t{}\t{}\n",
                         s.page, s.x0, s.y0, s.x1, s.y1, s.font_size, s.font_name, sanitized
@@ -184,12 +184,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let dir_path = std::path::PathBuf::from(dir);
             match extract_images(&args.input) {
                 Ok(mut found) => match write_images_to_dir(&mut found, &dir_path) {
-                    Ok(written) => match write_manifest(
-                        &found,
-                        written,
-                        &doc.file_name,
-                        &dir_path,
-                    ) {
+                    Ok(written) => match write_manifest(&found, written, &doc.file_name, &dir_path)
+                    {
                         Ok(manifest_path) => eprintln!(
                             "🖼️  {} de {} imagens gravadas em {} (manifesto: {})",
                             written,
@@ -220,18 +216,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     doc.file_name, doc.total_pages, doc.parse_time_ms
                 ));
                 for page in &doc.pages {
-                    out.push_str(&format!("\n=== Página {} ({}x{}) ===\n", page.page_number, page.width, page.height));
+                    out.push_str(&format!(
+                        "\n=== Página {} ({}x{}) ===\n",
+                        page.page_number, page.width, page.height
+                    ));
                     if !page.tables.is_empty() {
                         out.push_str(&format!("  [Tabelas Detectadas: {}]\n", page.tables.len()));
                         for (idx, tbl) in page.tables.iter().enumerate() {
-                            out.push_str(&format!("    Tabela #{}: {} linhas x {} colunas (Bbox: {:?})\n", idx + 1, tbl.rows.len(), tbl.col_count, tbl.bbox));
+                            out.push_str(&format!(
+                                "    Tabela #{}: {} linhas x {} colunas (Bbox: {:?})\n",
+                                idx + 1,
+                                tbl.rows.len(),
+                                tbl.col_count,
+                                tbl.bbox
+                            ));
                         }
                     }
-                    out.push_str(&format!("  [Blocos de Texto: {}]\n", page.text_blocks.len()));
+                    out.push_str(&format!(
+                        "  [Blocos de Texto: {}]\n",
+                        page.text_blocks.len()
+                    ));
                     for block in &page.text_blocks {
-                        out.push_str(&format!("    Bloco #{}: {:?}\n", block.block_id, block.bbox));
+                        out.push_str(&format!(
+                            "    Bloco #{}: {:?}\n",
+                            block.block_id, block.bbox
+                        ));
                         for line in &block.lines {
-                            out.push_str(&format!("      Linha: {:?} -> \"{}\"\n", line.bbox, line.text));
+                            out.push_str(&format!(
+                                "      Linha: {:?} -> \"{}\"\n",
+                                line.bbox, line.text
+                            ));
                         }
                     }
                     if !page.images.is_empty() {
@@ -239,7 +253,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         for img in &page.images {
                             out.push_str(&format!(
                                 "    Imagem #{}: {} | {}x{} px | filter={:?} | bbox={:?}\n",
-                                img.image_id, img.name, img.pixel_width, img.pixel_height, img.filter, img.bbox
+                                img.image_id,
+                                img.name,
+                                img.pixel_width,
+                                img.pixel_height,
+                                img.filter,
+                                img.bbox
                             ));
                         }
                     }
@@ -269,9 +288,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     out
                 } else {
-                    let mut out = String::from("page\tx0\ty0\tx1\ty1\tfont_size\tfont_name\ttext\n");
+                    let mut out =
+                        String::from("page\tx0\ty0\tx1\ty1\tfont_size\tfont_name\ttext\n");
                     for s in &raw_doc.spans {
-                        let sanitized = s.text.replace('\t', " ").replace('\n', " ");
+                        let sanitized = s.text.replace(['\t', '\n'], " ");
                         out.push_str(&format!(
                             "{}\t{:.2}\t{:.2}\t{:.2}\t{:.2}\t{:.1}\t{}\t{}\n",
                             s.page, s.x0, s.y0, s.x1, s.y1, s.font_size, s.font_name, sanitized

@@ -17,6 +17,12 @@ pub struct XRefTable {
     pub trailer: BTreeMap<String, PdfObject>,
 }
 
+impl Default for XRefTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl XRefTable {
     pub fn new() -> Self {
         Self {
@@ -48,7 +54,8 @@ impl XRefTable {
                     // Read trailer
                     if let Ok(Some(Token::Keyword(tr_kw))) = parser.next_token() {
                         if tr_kw == "trailer" {
-                            if let Ok(Some(PdfObject::Dictionary(tr_dict))) = parser.parse_object() {
+                            if let Ok(Some(PdfObject::Dictionary(tr_dict))) = parser.parse_object()
+                            {
                                 // Chain previous xref table if /Prev exists
                                 let prev = tr_dict
                                     .get("Prev")
@@ -81,7 +88,8 @@ impl XRefTable {
                         _ => return Err("Expected stream for XRef stream object".into()),
                     };
 
-                    let decompressed = decompress_stream(&xref_stream_obj.data, &xref_stream_obj.dict)?;
+                    let decompressed =
+                        decompress_stream(&xref_stream_obj.data, &xref_stream_obj.dict)?;
                     read_binary_xref_stream(&decompressed, &xref_stream_obj.dict, &mut table)?;
 
                     let prev = xref_stream_obj
@@ -103,9 +111,9 @@ impl XRefTable {
     }
 
     /// Dereferences an indirect object from the PDF file or object streams
-    pub fn get_object<'a>(
+    pub fn get_object(
         &self,
-        data: &'a [u8],
+        data: &[u8],
         id: ObjectId,
         obj_stream_cache: &mut HashMap<u32, BTreeMap<u32, PdfObject>>,
     ) -> Result<PdfObject, String> {
@@ -126,36 +134,45 @@ impl XRefTable {
                 let obj_kw = parser.next_token()?;
 
                 match (obj_num, gen_num, obj_kw) {
-                    (Some(Token::Integer(n)), Some(Token::Integer(_)), Some(Token::Keyword(ref k)))
-                        if n == id.number as i64 && k == "obj" =>
-                    {
-                        parser
-                            .parse_object()?
-                            .ok_or_else(|| format!("Failed to parse object {}", id))
-                    }
-                    _ => Err(format!("Corrupt object header for {} at offset {}", id, offset)),
+                    (
+                        Some(Token::Integer(n)),
+                        Some(Token::Integer(_)),
+                        Some(Token::Keyword(ref k)),
+                    ) if n == id.number as i64 && k == "obj" => parser
+                        .parse_object()?
+                        .ok_or_else(|| format!("Failed to parse object {}", id)),
+                    _ => Err(format!(
+                        "Corrupt object header for {} at offset {}",
+                        id, offset
+                    )),
                 }
             }
-            XRefEntry::Compressed { stream_num, index: _ } => {
+            XRefEntry::Compressed {
+                stream_num,
+                index: _,
+            } => {
                 if *stream_num == id.number {
                     return Err(format!("Cyclic object stream reference for object {}", id));
                 }
                 // Disallow nested object streams per ISO 32000-1 section 7.5.7
                 if let Some(XRefEntry::Compressed { .. }) = self.entries.get(stream_num) {
-                    return Err(format!("Nested object stream detected for stream {}", stream_num));
+                    return Err(format!(
+                        "Nested object stream detected for stream {}",
+                        stream_num
+                    ));
                 }
 
                 if !obj_stream_cache.contains_key(stream_num) {
-                    let stream_obj = self.get_object(data, ObjectId::new(*stream_num, 0), obj_stream_cache)?;
+                    let stream_obj =
+                        self.get_object(data, ObjectId::new(*stream_num, 0), obj_stream_cache)?;
                     let parsed_objects = parse_object_stream(&stream_obj)?;
                     obj_stream_cache.insert(*stream_num, parsed_objects);
                 }
 
                 let stream_objects = obj_stream_cache.get(stream_num).unwrap();
-                stream_objects
-                    .get(&id.number)
-                    .cloned()
-                    .ok_or_else(|| format!("Object {} not found in Object Stream {}", id, stream_num))
+                stream_objects.get(&id.number).cloned().ok_or_else(|| {
+                    format!("Object {} not found in Object Stream {}", id, stream_num)
+                })
             }
         }
     }
@@ -221,20 +238,24 @@ fn read_ascii_xref_subsections(parser: &mut Parser, table: &mut XRefTable) -> Re
             let gen_tok = parser.next_token()?;
             let type_tok = parser.next_token()?;
 
-            if let (Some(Token::Integer(offset)), Some(Token::Integer(gen)), Some(Token::Keyword(typ))) =
-                (offset_tok, gen_tok, type_tok)
+            if let (
+                Some(Token::Integer(offset)),
+                Some(Token::Integer(gen)),
+                Some(Token::Keyword(typ)),
+            ) = (offset_tok, gen_tok, type_tok)
             {
                 if offset < 0 || gen < 0 || gen > u16::MAX as i64 {
                     continue;
                 }
                 if let Some(obj_id) = first_id.checked_add(i) {
                     if typ == "n" {
-                        table.entries.entry(obj_id).or_insert(
-                            XRefEntry::Uncompressed {
+                        table
+                            .entries
+                            .entry(obj_id)
+                            .or_insert(XRefEntry::Uncompressed {
                                 offset: offset as usize,
                                 generation: gen as u16,
-                            },
-                        );
+                            });
                     }
                 }
             }
@@ -281,19 +302,20 @@ fn read_binary_xref_stream(
     let size = dict.get("Size").and_then(|s| s.as_i64()).unwrap_or(0) as u32;
 
     // Index array: pairs of [first_id count first_id count ...]
-    let index_ranges: Vec<(u32, u32)> = if let Some(index_arr) = dict.get("Index").and_then(|i| i.as_array()) {
-        let mut ranges = Vec::new();
-        for chunk in index_arr.chunks(2) {
-            if chunk.len() == 2 {
-                let first = chunk[0].as_i64().unwrap_or(0) as u32;
-                let count = chunk[1].as_i64().unwrap_or(0) as u32;
-                ranges.push((first, count));
+    let index_ranges: Vec<(u32, u32)> =
+        if let Some(index_arr) = dict.get("Index").and_then(|i| i.as_array()) {
+            let mut ranges = Vec::new();
+            for chunk in index_arr.chunks(2) {
+                if chunk.len() == 2 {
+                    let first = chunk[0].as_i64().unwrap_or(0) as u32;
+                    let count = chunk[1].as_i64().unwrap_or(0) as u32;
+                    ranges.push((first, count));
+                }
             }
-        }
-        ranges
-    } else {
-        vec![(0, size)]
-    };
+            ranges
+        } else {
+            vec![(0, size)]
+        };
 
     let mut stream_pos = 0;
     for (first_id, count) in index_ranges {
@@ -308,7 +330,11 @@ fn read_binary_xref_stream(
             let entry_bytes = &stream_data[stream_pos..stream_pos + entry_size];
             stream_pos += entry_size;
 
-            let entry_type = if w0 > 0 { read_int(&entry_bytes[0..w0]) } else { 1 };
+            let entry_type = if w0 > 0 {
+                read_int(&entry_bytes[0..w0])
+            } else {
+                1
+            };
             let f1 = read_int(&entry_bytes[w0..w0 + w1]);
             let f2 = read_int(&entry_bytes[w0 + w1..entry_size]);
 
@@ -316,21 +342,23 @@ fn read_binary_xref_stream(
                 match entry_type {
                     1 => {
                         // Type 1: uncompressed object at file byte offset
-                        table.entries.entry(obj_id).or_insert(
-                            XRefEntry::Uncompressed {
+                        table
+                            .entries
+                            .entry(obj_id)
+                            .or_insert(XRefEntry::Uncompressed {
                                 offset: f1 as usize,
                                 generation: f2 as u16,
-                            },
-                        );
+                            });
                     }
                     2 => {
                         // Type 2: object in object stream (f1 = stream obj num, f2 = index)
-                        table.entries.entry(obj_id).or_insert(
-                            XRefEntry::Compressed {
+                        table
+                            .entries
+                            .entry(obj_id)
+                            .or_insert(XRefEntry::Compressed {
                                 stream_num: f1 as u32,
                                 index: f2 as u16,
-                            },
-                        );
+                            });
                     }
                     _ => {} // Type 0: free object
                 }
@@ -355,7 +383,11 @@ fn parse_object_stream(stream_obj: &PdfObject) -> Result<BTreeMap<u32, PdfObject
     let decompressed = decompress_stream(&stream.data, &stream.dict)?;
 
     let raw_n = stream.dict.get("N").and_then(|n| n.as_i64()).unwrap_or(0);
-    let raw_first = stream.dict.get("First").and_then(|f| f.as_i64()).unwrap_or(0);
+    let raw_first = stream
+        .dict
+        .get("First")
+        .and_then(|f| f.as_i64())
+        .unwrap_or(0);
     if raw_n <= 0 || raw_first < 0 {
         return Ok(BTreeMap::new());
     }
@@ -423,7 +455,9 @@ mod tests {
         );
 
         let mut cache = HashMap::new();
-        let cat = table.get_object(&pdf, ObjectId::new(1, 0), &mut cache).unwrap();
+        let cat = table
+            .get_object(&pdf, ObjectId::new(1, 0), &mut cache)
+            .unwrap();
         assert_eq!(cat.dict_get("Type").unwrap().as_name(), Some("Catalog"));
     }
 

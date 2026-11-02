@@ -1,9 +1,11 @@
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
+use crate::spatial::{extract_text_bytes, parse_file, parse_raw_bytes, parse_raw_file};
+use crate::types::ParserOptions;
 use std::alloc::{alloc, dealloc, Layout};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use crate::types::ParserOptions;
-use crate::spatial::{extract_text_bytes, parse_file, parse_raw_bytes, parse_raw_file};
 
 /// Processa um arquivo PDF e retorna o JSON espacial estruturado como string C.
 /// O chamador deve liberar a memória chamando `rasgapdf_free_string`.
@@ -15,7 +17,9 @@ pub extern "C" fn rasgapdf_parse_file(path_ptr: *const c_char) -> *mut c_char {
     catch_unwind(AssertUnwindSafe(|| {
         rasgapdf_parse_file_options(path_ptr, std::ptr::null())
     }))
-    .unwrap_or_else(|_| create_error_json("Panic caught across FFI boundary in rasgapdf_parse_file"))
+    .unwrap_or_else(|_| {
+        create_error_json("Panic caught across FFI boundary in rasgapdf_parse_file")
+    })
 }
 
 /// Modo 1: Retorna exclusivamente a lista plana de coordenadas brutas X/Y.
@@ -52,7 +56,10 @@ pub extern "C" fn rasgapdf_parse_raw(path_ptr: *const c_char) -> *mut c_char {
 /// `path_ptr` e `options_json_ptr` (se não-nulo) devem apontar para strings C válidas terminadas em NUL.
 /// O ponteiro retornado deve ser liberado via `rasgapdf_free_string`.
 #[no_mangle]
-pub extern "C" fn rasgapdf_parse_file_options(path_ptr: *const c_char, options_json_ptr: *const c_char) -> *mut c_char {
+pub extern "C" fn rasgapdf_parse_file_options(
+    path_ptr: *const c_char,
+    options_json_ptr: *const c_char,
+) -> *mut c_char {
     catch_unwind(AssertUnwindSafe(|| {
         if path_ptr.is_null() {
             return create_error_json("Path pointer is null");
@@ -84,7 +91,9 @@ pub extern "C" fn rasgapdf_parse_file_options(path_ptr: *const c_char, options_j
             Err(e) => create_error_json(&format!("Parse error: {}", e)),
         }
     }))
-    .unwrap_or_else(|_| create_error_json("Panic caught across FFI boundary in rasgapdf_parse_file_options"))
+    .unwrap_or_else(|_| {
+        create_error_json("Panic caught across FFI boundary in rasgapdf_parse_file_options")
+    })
 }
 
 /// Libera a string alocada pelo Rust.
@@ -108,7 +117,10 @@ pub extern "C" fn rasgapdf_free_string(ptr: *mut c_char) {
 /// `{"total_images": n, "written": m, "images": [{"page": 1, "image": {...}}]}`.
 /// O chamador deve liberar a memória chamando `rasgapdf_free_string`.
 #[no_mangle]
-pub extern "C" fn rasgapdf_extract_images(path_ptr: *const c_char, dir_ptr: *const c_char) -> *mut c_char {
+pub extern "C" fn rasgapdf_extract_images(
+    path_ptr: *const c_char,
+    dir_ptr: *const c_char,
+) -> *mut c_char {
     catch_unwind(AssertUnwindSafe(|| {
         if path_ptr.is_null() || dir_ptr.is_null() {
             return create_error_json("Path/Dir pointer is null");
@@ -149,7 +161,9 @@ pub extern "C" fn rasgapdf_extract_images(path_ptr: *const c_char, dir_ptr: *con
             Err(e) => create_error_json(&format!("JSON serialization error: {}", e)),
         }
     }))
-    .unwrap_or_else(|_| create_error_json("Panic caught across FFI boundary in rasgapdf_extract_images"))
+    .unwrap_or_else(|_| {
+        create_error_json("Panic caught across FFI boundary in rasgapdf_extract_images")
+    })
 }
 
 /// Retorna a versão da biblioteca.
@@ -202,7 +216,9 @@ pub extern "C" fn rasgapdf_parse_raw_bytes(bytes_ptr: *const u8, len: usize) -> 
             Err(e) => create_error_json(&format!("Parse error: {}", e)),
         }
     }))
-    .unwrap_or_else(|_| create_error_json("Panic caught across FFI boundary in rasgapdf_parse_raw_bytes"))
+    .unwrap_or_else(|_| {
+        create_error_json("Panic caught across FFI boundary in rasgapdf_parse_raw_bytes")
+    })
 }
 
 /// Extrai texto puro em ordem natural de leitura diretamente de um slice de bytes em RAM.
@@ -217,7 +233,9 @@ pub extern "C" fn rasgapdf_extract_text_bytes(bytes_ptr: *const u8, len: usize) 
             Ok(text) => {
                 // Remove eventuais bytes nulos internos para compatibilidade CString
                 let clean = text.replace('\0', "");
-                CString::new(clean).unwrap_or_else(|_| CString::new("").unwrap()).into_raw()
+                CString::new(clean)
+                    .unwrap_or_else(|_| CString::new("").unwrap())
+                    .into_raw()
             }
             Err(_) => CString::new("").unwrap().into_raw(),
         }
@@ -255,7 +273,9 @@ pub extern "C" fn rasgapdf_extract_images_bytes(
             Err(e) => create_error_json(&format!("JSON serialization error: {}", e)),
         }
     }))
-    .unwrap_or_else(|_| create_error_json("Panic caught across FFI boundary in rasgapdf_extract_images_bytes"))
+    .unwrap_or_else(|_| {
+        create_error_json("Panic caught across FFI boundary in rasgapdf_extract_images_bytes")
+    })
 }
 
 /// Modo 2 (Em Memória / WebAssembly): Processa bytes em RAM e retorna JSON estruturado.
@@ -264,7 +284,9 @@ pub extern "C" fn rasgapdf_parse_bytes(bytes_ptr: *const u8, len: usize) -> *mut
     catch_unwind(AssertUnwindSafe(|| {
         rasgapdf_parse_bytes_options(bytes_ptr, len, std::ptr::null())
     }))
-    .unwrap_or_else(|_| create_error_json("Panic caught across FFI boundary in rasgapdf_parse_bytes"))
+    .unwrap_or_else(|_| {
+        create_error_json("Panic caught across FFI boundary in rasgapdf_parse_bytes")
+    })
 }
 
 /// Modo 2 (Em Memória / WebAssembly): Processa bytes em RAM com opcoes customizadas.
@@ -302,7 +324,9 @@ pub extern "C" fn rasgapdf_parse_bytes_options(
             Err(e) => create_error_json(&format!("Parse error: {}", e)),
         }
     }))
-    .unwrap_or_else(|_| create_error_json("Panic caught across FFI boundary in rasgapdf_parse_bytes_options"))
+    .unwrap_or_else(|_| {
+        create_error_json("Panic caught across FFI boundary in rasgapdf_parse_bytes_options")
+    })
 }
 
 /// Funcoes utilitarias de alocacao de memoria para WebAssembly no Browser:
@@ -351,7 +375,8 @@ mod tests {
 
     #[test]
     fn test_success_json_with_null_character() {
-        let json_with_null = "{\"file_name\":\"test\\u0000file\",\"text\":\"hello\0world\"}".to_string();
+        let json_with_null =
+            "{\"file_name\":\"test\\u0000file\",\"text\":\"hello\0world\"}".to_string();
         let ptr = success_json_to_c_char(json_with_null);
         assert!(!ptr.is_null());
         let c_str = unsafe { CStr::from_ptr(ptr) };

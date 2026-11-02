@@ -8,10 +8,10 @@ pub enum Token {
     HexString(Vec<u8>),
     Name(String),
     Keyword(String),
-    DictOpen,  // <<
-    DictClose, // >>
-    ArrayOpen, // [
-    ArrayClose,// ]
+    DictOpen,   // <<
+    DictClose,  // >>
+    ArrayOpen,  // [
+    ArrayClose, // ]
 }
 
 pub struct Lexer<'a> {
@@ -275,7 +275,9 @@ impl<'a> Lexer<'a> {
         let mut is_real = false;
 
         // Optional leading sign
-        if self.pos < self.data.len() && (self.data[self.pos] == b'+' || self.data[self.pos] == b'-') {
+        if self.pos < self.data.len()
+            && (self.data[self.pos] == b'+' || self.data[self.pos] == b'-')
+        {
             self.pos += 1;
         }
 
@@ -333,7 +335,10 @@ impl<'a> Lexer<'a> {
             if self.pos < self.data.len() {
                 let bad = self.data[self.pos];
                 self.pos += 1;
-                return Err(format!("Unexpected byte 0x{:02X} at position {}", bad, start));
+                return Err(format!(
+                    "Unexpected byte 0x{:02X} at position {}",
+                    bad, start
+                ));
             }
             return Ok(Token::Keyword(String::new()));
         }
@@ -358,7 +363,10 @@ fn is_whitespace(b: u8) -> bool {
 }
 
 fn is_delimiter(b: u8) -> bool {
-    matches!(b, b'(' | b')' | b'<' | b'>' | b'[' | b']' | b'{' | b'}' | b'/' | b'%')
+    matches!(
+        b,
+        b'(' | b')' | b'<' | b'>' | b'[' | b']' | b'{' | b'}' | b'/' | b'%'
+    )
 }
 
 fn is_number_start(b: u8) -> bool {
@@ -385,10 +393,22 @@ mod tests {
     fn test_lex_names() {
         let data = b"/Type /Font#20Name /Page/Kids";
         let mut lexer = Lexer::new(data);
-        assert_eq!(lexer.next_token().unwrap(), Some(Token::Name("Type".into())));
-        assert_eq!(lexer.next_token().unwrap(), Some(Token::Name("Font Name".into())));
-        assert_eq!(lexer.next_token().unwrap(), Some(Token::Name("Page".into())));
-        assert_eq!(lexer.next_token().unwrap(), Some(Token::Name("Kids".into())));
+        assert_eq!(
+            lexer.next_token().unwrap(),
+            Some(Token::Name("Type".into()))
+        );
+        assert_eq!(
+            lexer.next_token().unwrap(),
+            Some(Token::Name("Font Name".into()))
+        );
+        assert_eq!(
+            lexer.next_token().unwrap(),
+            Some(Token::Name("Page".into()))
+        );
+        assert_eq!(
+            lexer.next_token().unwrap(),
+            Some(Token::Name("Kids".into()))
+        );
         assert_eq!(lexer.next_token().unwrap(), None);
     }
 
@@ -421,7 +441,10 @@ mod tests {
         assert_eq!(lexer.next_token().unwrap(), Some(Token::ArrayOpen));
         assert_eq!(lexer.next_token().unwrap(), Some(Token::Integer(1)));
         assert_eq!(lexer.next_token().unwrap(), Some(Token::Integer(2)));
-        assert_eq!(lexer.next_token().unwrap(), Some(Token::LiteralString(b"str".to_vec())));
+        assert_eq!(
+            lexer.next_token().unwrap(),
+            Some(Token::LiteralString(b"str".to_vec()))
+        );
         assert_eq!(lexer.next_token().unwrap(), Some(Token::ArrayClose));
         assert_eq!(lexer.next_token().unwrap(), Some(Token::DictClose));
         assert_eq!(lexer.next_token().unwrap(), None);
@@ -463,13 +486,19 @@ mod tests {
 
         // Truncated hex string without '>'
         let mut lex3 = Lexer::new(b"<4142");
-        assert_eq!(lex3.next_token().unwrap(), Some(Token::HexString(vec![0x41, 0x42])));
+        assert_eq!(
+            lex3.next_token().unwrap(),
+            Some(Token::HexString(vec![0x41, 0x42]))
+        );
     }
 
     #[test]
     fn test_lexer_name_with_invalid_hex() {
         let mut lex = Lexer::new(b"/Name#ZZ/#/A#20B");
-        assert_eq!(lex.next_token().unwrap(), Some(Token::Name("Name#ZZ".into())));
+        assert_eq!(
+            lex.next_token().unwrap(),
+            Some(Token::Name("Name#ZZ".into()))
+        );
         assert_eq!(lex.next_token().unwrap(), Some(Token::Name("#".into())));
         assert_eq!(lex.next_token().unwrap(), Some(Token::Name("A B".into())));
     }
