@@ -344,7 +344,7 @@ def extract_images_bytes(data: bytes, output_dir: str) -> Dict[str, Any]:
 
 
 def to_spatial_chunks(
-    doc_or_page: Dict[str, Any],
+    doc_or_page: Union[Dict[str, Any], str, bytes, Path],
     max_chars: int = 1500,
     overlap_blocks: int = 1,
 ) -> List[Dict[str, Any]]:
@@ -353,7 +353,7 @@ def to_spatial_chunks(
     a lista completa de bboxes individuais para citação visual precisa.
 
     Args:
-        doc_or_page: Dicionário do documento (SpatialDocument) ou página (SpatialPage).
+        doc_or_page: Dicionário do documento (SpatialDocument), página (SpatialPage), ou caminho/bytes de PDF.
         max_chars: Limite aproximado de caracteres por chunk (padrão: 1500).
         overlap_blocks: Quantidade de blocos preservados como sobreposição (padrão: 1).
 
@@ -365,7 +365,11 @@ def to_spatial_chunks(
         - page_number: Número da página (1-based).
         - block_count: Número de blocos agrupados.
         - token_estimate: Estimativa aproximada de tokens.
+        - coordinate_system: "source" ou "viewer_oriented".
     """
+    if isinstance(doc_or_page, (str, bytes, Path)):
+        doc_or_page = parse_pdf(doc_or_page)
+
     def _bbox_to_list(b: Any) -> List[float]:
         if isinstance(b, dict):
             return [float(b.get("x0", 0.0)), float(b.get("y0", 0.0)), float(b.get("x1", 0.0)), float(b.get("y1", 0.0))]
@@ -375,6 +379,7 @@ def to_spatial_chunks(
 
     def _chunk_page(page: Dict[str, Any], start_id: int) -> List[Dict[str, Any]]:
         page_num = page.get("page_number", 1)
+        coord_sys = page.get("coordinate_system", page.get("coordinate_space", "source"))
         blocks = page.get("text_blocks", [])
         if not blocks:
             return []
@@ -392,7 +397,7 @@ def to_spatial_chunks(
 
             b_len = len(b_text) + 1
             if curr_blocks and (curr_len + b_len > max_chars):
-                chunks.append(_emit_chunk(page_num, cid, curr_blocks))
+                chunks.append(_emit_chunk(page_num, cid, curr_blocks, coord_sys))
                 cid += 1
                 if overlap_blocks > 0 and len(curr_blocks) > overlap_blocks:
                     curr_blocks = curr_blocks[-overlap_blocks:]
@@ -405,11 +410,11 @@ def to_spatial_chunks(
             curr_len += b_len
 
         if curr_blocks:
-            chunks.append(_emit_chunk(page_num, cid, curr_blocks))
+            chunks.append(_emit_chunk(page_num, cid, curr_blocks, coord_sys))
 
         return chunks
 
-    def _emit_chunk(page_num: int, chunk_id: int, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _emit_chunk(page_num: int, chunk_id: int, items: List[Dict[str, Any]], coord_sys: str = "source") -> Dict[str, Any]:
         texts = [item["text"] for item in items]
         bboxes = [item["bbox"] for item in items]
         min_x0 = min(bb[0] for bb in bboxes) if bboxes else 0.0
@@ -425,6 +430,7 @@ def to_spatial_chunks(
             "overall_bbox": [min_x0, min_y0, max_x1, max_y1],
             "block_count": len(items),
             "token_estimate": (len(full_text) + 3) // 4,
+            "coordinate_system": coord_sys,
         }
 
     if "pages" in doc_or_page:

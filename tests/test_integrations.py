@@ -309,9 +309,21 @@ def t28_coordinate_contract_and_cropbox():
     p0 = doc_astro["pages"][0]
     assert "width" in p0 and "height" in p0
     assert "rotation" in p0
+    assert p0.get("coordinate_system") == "source"
+    assert "initial_rotation" in p0
+
     # Test apply_rotation option
     doc_rot = rasgapdf.parse_pdf(str(pdf_astro), apply_rotation=True)
     assert len(doc_rot["pages"]) == len(doc_astro["pages"])
+    p_rot = doc_rot["pages"][0]
+    assert p_rot.get("coordinate_system") == "viewer_oriented"
+    assert p_rot.get("rotation") == 0
+    assert p_rot.get("initial_rotation") == p0.get("rotation")
+
+    # Spatial chunks preserve coordinate state
+    chunks = rasgapdf.to_spatial_chunks(str(pdf_astro))
+    assert len(chunks) > 0
+    assert chunks[0].get("coordinate_system") == "source"
 
 def t29_image_only_pdf_handling():
     img_pdf = REPO_ROOT / "tests" / "fixtures" / "image_only.pdf"

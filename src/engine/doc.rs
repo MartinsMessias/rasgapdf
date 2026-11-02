@@ -845,6 +845,8 @@ impl<'a> PurePdfDoc<'a> {
                 width: page_info.width,
                 height: page_info.height,
                 rotation: page_info.rotation,
+                initial_rotation: page_info.rotation,
+                coordinate_system: "source".to_string(),
                 text_blocks,
                 tables,
                 raw_span_count: raw_spans.len(),

@@ -204,12 +204,22 @@ pub struct SpatialImage {
     pub file: Option<String>,
 }
 
+fn default_coordinate_system() -> String {
+    "source".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpatialPage {
     pub page_number: usize, // 1-indexed
     pub width: f32,
     pub height: f32,
     pub rotation: i32,
+    /// Rotação nativa original da página no PDF (0, 90, 180, 270), preservada mesmo quando normalizada.
+    #[serde(default)]
+    pub initial_rotation: i32,
+    /// Sistema de coordenadas dos bboxes: "source" (não-rotacionado) ou "viewer_oriented" (normalizado).
+    #[serde(default = "default_coordinate_system", alias = "coordinate_space")]
+    pub coordinate_system: String,
     pub text_blocks: Vec<SpatialBlock>,
     pub tables: Vec<SpatialTable>,
     pub raw_span_count: usize,
@@ -281,14 +291,21 @@ pub struct SpatialChunk {
     pub overall_bbox: BoundingBox,
     pub block_count: usize,
     pub token_estimate: usize,
+    /// Sistema de coordenadas das bboxes: "source" ou "viewer_oriented".
+    #[serde(default = "default_coordinate_system", alias = "coordinate_space")]
+    pub coordinate_system: String,
 }
 
 impl SpatialPage {
     /// Normaliza todos os elementos geométricos da página de acordo com sua rotação nativa.
     /// Para 90 e 270 graus, a largura e altura são permutadas.
     pub fn rotated(&self) -> SpatialPage {
+        let initial_rot = if self.initial_rotation != 0 { self.initial_rotation } else { self.rotation };
         if self.rotation == 0 || self.rotation % 360 == 0 {
-            return self.clone();
+            let mut p = self.clone();
+            p.coordinate_system = "viewer_oriented".to_string();
+            p.initial_rotation = initial_rot;
+            return p;
         }
         let rot = self.rotation;
         let pw = self.width;
@@ -341,6 +358,8 @@ impl SpatialPage {
             width: new_w,
             height: new_h,
             rotation: 0,
+            initial_rotation: if self.initial_rotation != 0 { self.initial_rotation } else { self.rotation },
+            coordinate_system: "viewer_oriented".to_string(),
             text_blocks,
             tables,
             raw_span_count: self.raw_span_count,
@@ -367,7 +386,7 @@ impl SpatialPage {
         for block in &self.text_blocks {
             let block_text_len: usize = block.lines.iter().map(|l| l.text.len() + 1).sum();
             if !current_blocks.is_empty() && (current_len + block_text_len > max_chars) {
-                chunks.push(Self::build_chunk_from_blocks(self.page_number, chunk_id, &current_blocks));
+                chunks.push(Self::build_chunk_from_blocks(self.page_number, chunk_id, &self.coordinate_system, &current_blocks));
                 chunk_id += 1;
 
                 if overlap_blocks > 0 && current_blocks.len() > overlap_blocks {
@@ -385,13 +404,13 @@ impl SpatialPage {
         }
 
         if !current_blocks.is_empty() {
-            chunks.push(Self::build_chunk_from_blocks(self.page_number, chunk_id, &current_blocks));
+            chunks.push(Self::build_chunk_from_blocks(self.page_number, chunk_id, &self.coordinate_system, &current_blocks));
         }
 
         chunks
     }
 
-    fn build_chunk_from_blocks(page_number: usize, chunk_id: usize, blocks: &[&SpatialBlock]) -> SpatialChunk {
+    fn build_chunk_from_blocks(page_number: usize, chunk_id: usize, coordinate_system: &str, blocks: &[&SpatialBlock]) -> SpatialChunk {
         let mut text_parts = Vec::new();
         let mut bboxes = Vec::new();
         let mut min_x0 = f32::MAX;
@@ -427,6 +446,7 @@ impl SpatialPage {
             overall_bbox,
             block_count: blocks.len(),
             token_estimate,
+            coordinate_system: coordinate_system.to_string(),
         }
     }
 }
