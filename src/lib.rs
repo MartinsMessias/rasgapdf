@@ -2,6 +2,7 @@ pub mod drawing;
 pub mod engine;
 pub mod ffi;
 pub mod image;
+pub mod mcp;
 pub mod spatial;
 pub mod table;
 pub mod types;

@@ -99,6 +99,7 @@ Reconstructs the visual hierarchy into visual paragraphs (`text_blocks`), text l
 | `coordinate_system` | `string` | Coordinate space state: `"source"` or `"viewer_oriented"` |
 | `media_box` | `array<float>?` | Declared physical MediaBox rectangle in points [x0, y0, x1, y1] |
 | `crop_box` | `array<float>?` | Active visible CropBox rectangle in points [x0, y0, x1, y1] (takes precedence per ISO 32000-1) |
+| `is_complex_layout` | `boolean` | Indicates visual/geometric layout complexity (diagrams, borderless grids) for VLM triage |
 | `text_blocks` | `array<SpatialBlock>` | Visual paragraphs |
 | `tables` | `array<SpatialTable>` | Auto-detected matrix tables |
 | `raw_span_count` | `integer` | Number of raw text spans used for table detection |
@@ -137,6 +138,8 @@ When building RAG pipelines, chunks group semantic blocks while preserving const
 | `block_count` | `integer` | Number of blocks in this chunk |
 | `token_estimate` | `integer` | Approximate token count (`(chars + 3) // 4`) |
 | `coordinate_system` | `string` | Coordinate space state matching the page (`"source"` or `"viewer_oriented"`) |
+| `is_complex_layout` | `boolean` | Indicates visual/geometric layout complexity for selective VLM vision inspection |
+| `complexity_score` | `float?` | Geometric complexity score [0.0..=1.0] (triage threshold: >= 0.45) |
 
 ---
 
@@ -302,6 +305,8 @@ Only populated when the parser is created with `extract_drawings` (CLI: `--drawi
 | Field | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `mode` | `string` | `"structured"` | `structured` or `raw` |
+| `reading_order` | `string` | `"natural"` | Reading order strategy: `natural` (Recursive XY-Cut) or `raw` |
+| `apply_rotation` | `bool` | `false` | Normalize bboxes to rotated viewer orientation |
 | `detect_tables` | `bool` | `true` | Enable matrix table detection |
 | `min_table_columns` | `integer` | `3` | Minimum columns to form a table |
 | `column_tolerance` | `float` | `16.0` | Horizontal alignment tolerance (points) |

@@ -63,6 +63,8 @@ fn test_spatial_chunks_preserve_all_constituent_bboxes() {
                 spans: vec![],
             },
         ],
+        is_complex_layout: false,
+        complexity_score: None,
     };
 
     let block2 = SpatialBlock {
@@ -81,6 +83,8 @@ fn test_spatial_chunks_preserve_all_constituent_bboxes() {
                 spans: vec![],
             },
         ],
+        is_complex_layout: false,
+        complexity_score: None,
     };
 
     let page = SpatialPage {
@@ -97,6 +101,7 @@ fn test_spatial_chunks_preserve_all_constituent_bboxes() {
         drawings: vec![],
         media_box: Some([0.0, 0.0, 612.0, 792.0]),
         crop_box: Some([0.0, 0.0, 612.0, 792.0]),
+        is_complex_layout: false,
     };
 
     // When max_chars is large enough, both blocks are grouped into a single chunk
@@ -384,4 +389,67 @@ fn test_citation_bbox_deduplication_for_overlapping_chunks() {
     assert_eq!(deduped[0], box_a);
     assert_eq!(deduped[1], box_b);
     assert_eq!(deduped[2], box_c);
+}
+
+#[test]
+fn test_is_complex_layout_triage_contract() {
+    let complex_block = SpatialBlock {
+        block_id: 1,
+        block_type: "text".to_string(),
+        bbox: BoundingBox::new(50.0, 100.0, 300.0, 200.0),
+        lines: vec![],
+        is_complex_layout: true,
+        complexity_score: Some(0.75),
+    };
+
+    let simple_block = SpatialBlock {
+        block_id: 2,
+        block_type: "text".to_string(),
+        bbox: BoundingBox::new(50.0, 220.0, 300.0, 300.0),
+        lines: vec![],
+        is_complex_layout: false,
+        complexity_score: Some(0.10),
+    };
+
+    let page = SpatialPage {
+        page_number: 1,
+        width: 612.0,
+        height: 792.0,
+        rotation: 90,
+        initial_rotation: 90,
+        coordinate_system: "source".to_string(),
+        text_blocks: vec![complex_block, simple_block],
+        tables: vec![],
+        raw_span_count: 2,
+        images: vec![],
+        drawings: vec![],
+        media_box: Some([0.0, 0.0, 612.0, 792.0]),
+        crop_box: Some([0.0, 0.0, 612.0, 792.0]),
+        is_complex_layout: true,
+    };
+
+    assert!(page.is_complex_layout);
+    let chunks = page.to_spatial_chunks(1500, 0);
+    assert_eq!(chunks.len(), 1);
+    assert!(chunks[0].is_complex_layout);
+    assert_eq!(chunks[0].complexity_score, Some(0.75));
+
+    let rot = page.rotated();
+    assert!(rot.is_complex_layout);
+    assert!(rot.text_blocks[0].is_complex_layout);
+    assert_eq!(rot.text_blocks[0].complexity_score, Some(0.75));
+}
+
+#[test]
+fn test_reading_order_options_contract() {
+    let def_opts = ParserOptions::default();
+    assert_eq!(def_opts.reading_order, "natural");
+
+    let json_empty = "{}";
+    let parsed_def: ParserOptions = serde_json::from_str(json_empty).unwrap();
+    assert_eq!(parsed_def.reading_order, "natural");
+
+    let json_raw = r#"{"reading_order": "raw"}"#;
+    let parsed_raw: ParserOptions = serde_json::from_str(json_raw).unwrap();
+    assert_eq!(parsed_raw.reading_order, "raw");
 }

@@ -790,8 +790,9 @@ impl<'a> PurePdfDoc<'a> {
             interp.interpret(&page_info.contents)?;
 
             let raw_coord_spans = interp.spans;
+            let raw_drawings = interp.drawings;
             let drawings = if options.extract_drawings {
-                let mut d = interp.drawings;
+                let mut d = raw_drawings.clone();
                 if options.filter_background_fills {
                     let page_area = (page_info.width * page_info.height).abs();
                     d.retain(|item| {
@@ -849,14 +850,25 @@ impl<'a> PurePdfDoc<'a> {
 
             // Group non-table spans into lines and blocks
             let mut text_blocks = Vec::new();
-            if !non_table_spans.is_empty() {
+            let ordered_non_table_spans = if options.reading_order == "natural" {
+                recursive_xy_cut(
+                    &non_table_spans,
+                    options.column_tolerance,
+                    options.row_tolerance,
+                    0,
+                )
+            } else {
+                non_table_spans.clone()
+            };
+
+            if !ordered_non_table_spans.is_empty() {
                 let mut current_block_lines = Vec::new();
                 let mut current_line_spans = Vec::new();
-                let mut last_y = non_table_spans[0].y0;
-                let mut last_line_y = non_table_spans[0].y0;
+                let mut last_y = ordered_non_table_spans[0].y0;
+                let mut last_line_y = ordered_non_table_spans[0].y0;
                 let mut block_counter = 1;
 
-                for span in &non_table_spans {
+                for span in &ordered_non_table_spans {
                     let is_same_line =
                         (span.y0 - last_y).abs() <= (options.row_tolerance / 2.0).max(3.0);
                     if !is_same_line {
@@ -866,14 +878,24 @@ impl<'a> PurePdfDoc<'a> {
                             current_line_spans.clear();
                         }
 
-                        let is_new_block = (span.y0 - last_line_y).abs() > 13.5;
+                        let is_new_block =
+                            (span.y0 - last_line_y).abs() > 13.5 || span.y0 < last_line_y - 20.0;
                         if is_new_block && !current_block_lines.is_empty() {
                             let block_bbox = compute_lines_bbox(&current_block_lines);
+                            let (is_complex, comp_score) = compute_block_complexity(
+                                &block_bbox,
+                                &current_block_lines,
+                                &raw_drawings,
+                                page_info.width,
+                                page_info.height,
+                            );
                             text_blocks.push(SpatialBlock {
                                 block_id: block_counter,
                                 block_type: "text".to_string(),
                                 bbox: block_bbox,
                                 lines: std::mem::take(&mut current_block_lines),
+                                is_complex_layout: is_complex,
+                                complexity_score: Some(comp_score),
                             });
                             block_counter += 1;
                         }
@@ -892,11 +914,20 @@ impl<'a> PurePdfDoc<'a> {
 
                 if !current_block_lines.is_empty() {
                     let block_bbox = compute_lines_bbox(&current_block_lines);
+                    let (is_complex, comp_score) = compute_block_complexity(
+                        &block_bbox,
+                        &current_block_lines,
+                        &raw_drawings,
+                        page_info.width,
+                        page_info.height,
+                    );
                     text_blocks.push(SpatialBlock {
                         block_id: block_counter,
                         block_type: "text".to_string(),
                         bbox: block_bbox,
                         lines: current_block_lines,
+                        is_complex_layout: is_complex,
+                        complexity_score: Some(comp_score),
                     });
                 }
             }
@@ -1002,6 +1033,7 @@ impl<'a> PurePdfDoc<'a> {
                 }
             }
 
+            let is_page_complex = text_blocks.iter().any(|b| b.is_complex_layout);
             pages.push(SpatialPage {
                 page_number: p + 1,
                 width: page_info.width,
@@ -1016,6 +1048,7 @@ impl<'a> PurePdfDoc<'a> {
                 drawings,
                 media_box: page_info.media_box,
                 crop_box: page_info.crop_box,
+                is_complex_layout: is_page_complex,
             });
         }
 
@@ -1089,6 +1122,212 @@ fn compute_lines_bbox(lines: &[SpatialLine]) -> BoundingBox {
     } else {
         BoundingBox::new(x0, y0, x1, y1)
     }
+}
+
+/// Algoritmo Recursive XY-Cut para ordenação natural de leitura (Natural Reading Order).
+/// Divide recursivamente regiões em eixos X e Y através de projeções de espaços em branco (gutters/gaps),
+/// garantindo que layouts multi-coluna, cabeçalhos, barras laterais e rodapés sejam ordenados
+/// na sequência correta de leitura sem interleaving de colunas.
+fn recursive_xy_cut(
+    spans: &[RawSpan],
+    col_tolerance: f32,
+    row_tolerance: f32,
+    depth: usize,
+) -> Vec<RawSpan> {
+    if spans.len() <= 1 || depth >= 20 {
+        let mut leaf = spans.to_vec();
+        leaf.sort_by(|a, b| {
+            let row_tol = (row_tolerance / 2.0).max(3.0);
+            let y_bucket_a = (a.y0 / row_tol).round() as i32;
+            let y_bucket_b = (b.y0 / row_tol).round() as i32;
+            if y_bucket_a != y_bucket_b {
+                y_bucket_a.cmp(&y_bucket_b)
+            } else {
+                a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal)
+            }
+        });
+        return leaf;
+    }
+
+    // 1. Tentar corte horizontal (Y-cut) primeiro: faixas de espaçamento vertical
+    let mut y_intervals: Vec<(f32, f32)> = spans
+        .iter()
+        .map(|s| (s.y0.min(s.y1), s.y0.max(s.y1)))
+        .collect();
+    y_intervals.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut merged_y: Vec<(f32, f32)> = Vec::new();
+    for (y0, y1) in y_intervals {
+        if let Some(last) = merged_y.last_mut() {
+            if y0 <= last.1 + 1.5 {
+                last.1 = last.1.max(y1);
+            } else {
+                merged_y.push((y0, y1));
+            }
+        } else {
+            merged_y.push((y0, y1));
+        }
+    }
+
+    let min_y_gap = (row_tolerance * 1.8).max(12.0);
+    let mut best_y_cut: Option<f32> = None;
+    let mut max_y_gap = 0.0f32;
+
+    if merged_y.len() >= 2 {
+        for i in 0..(merged_y.len() - 1) {
+            let gap = merged_y[i + 1].0 - merged_y[i].1;
+            if gap >= min_y_gap && gap > max_y_gap {
+                max_y_gap = gap;
+                best_y_cut = Some((merged_y[i].1 + merged_y[i + 1].0) / 2.0);
+            }
+        }
+    }
+
+    if let Some(cut_y) = best_y_cut {
+        let (top, bottom): (Vec<RawSpan>, Vec<RawSpan>) =
+            spans.iter().cloned().partition(|s| s.y0 < cut_y);
+        if !top.is_empty() && !bottom.is_empty() {
+            let mut ordered = recursive_xy_cut(&top, col_tolerance, row_tolerance, depth + 1);
+            ordered.extend(recursive_xy_cut(
+                &bottom,
+                col_tolerance,
+                row_tolerance,
+                depth + 1,
+            ));
+            return ordered;
+        }
+    }
+
+    // 2. Tentar corte vertical (X-cut): gutters entre colunas (ex.: 2 ou 3 colunas)
+    let mut x_intervals: Vec<(f32, f32)> = spans
+        .iter()
+        .map(|s| (s.x0.min(s.x1), s.x0.max(s.x1)))
+        .collect();
+    x_intervals.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut merged_x: Vec<(f32, f32)> = Vec::new();
+    for (x0, x1) in x_intervals {
+        if let Some(last) = merged_x.last_mut() {
+            if x0 <= last.1 + 1.0 {
+                last.1 = last.1.max(x1);
+            } else {
+                merged_x.push((x0, x1));
+            }
+        } else {
+            merged_x.push((x0, x1));
+        }
+    }
+
+    let min_x_gap = col_tolerance.max(12.0);
+    let mut best_x_cut: Option<f32> = None;
+    let mut max_x_gap = 0.0f32;
+
+    if merged_x.len() >= 2 {
+        for i in 0..(merged_x.len() - 1) {
+            let gap = merged_x[i + 1].0 - merged_x[i].1;
+            if gap >= min_x_gap && gap > max_x_gap {
+                max_x_gap = gap;
+                best_x_cut = Some((merged_x[i].1 + merged_x[i + 1].0) / 2.0);
+            }
+        }
+    }
+
+    if let Some(cut_x) = best_x_cut {
+        let (left, right): (Vec<RawSpan>, Vec<RawSpan>) = spans
+            .iter()
+            .cloned()
+            .partition(|s| (s.x0 + s.x1) / 2.0 < cut_x);
+        if !left.is_empty() && !right.is_empty() {
+            let mut ordered = recursive_xy_cut(&left, col_tolerance, row_tolerance, depth + 1);
+            ordered.extend(recursive_xy_cut(
+                &right,
+                col_tolerance,
+                row_tolerance,
+                depth + 1,
+            ));
+            return ordered;
+        }
+    }
+
+    // 3. Caso folha: não há mais separadores claros, ordenar por (Y, X) padrão
+    let mut leaf = spans.to_vec();
+    leaf.sort_by(|a, b| {
+        let row_tol = (row_tolerance / 2.0).max(3.0);
+        let y_bucket_a = (a.y0 / row_tol).round() as i32;
+        let y_bucket_b = (b.y0 / row_tol).round() as i32;
+        if y_bucket_a != y_bucket_b {
+            y_bucket_a.cmp(&y_bucket_b)
+        } else {
+            a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal)
+        }
+    });
+    leaf
+}
+
+/// Avalia a complexidade geométrica de um bloco para triagem sub-página em modelos de visão (VLM).
+/// Retorna (is_complex_layout, complexity_score).
+fn compute_block_complexity(
+    bbox: &BoundingBox,
+    lines: &[SpatialLine],
+    drawings: &[crate::types::SpatialDrawing],
+    page_width: f32,
+    page_height: f32,
+) -> (bool, f32) {
+    let mut score = 0.0f32;
+
+    // 1. Sobreposição com elementos vetoriais (paths, curves, rects de diagramas/gráficos)
+    let mut intersecting_drawings = 0usize;
+    for d in drawings {
+        // Ignora preenchimentos de fundo que cobrem mais de 90% da página
+        if d.bbox.width >= page_width * 0.90 && d.bbox.height >= page_height * 0.90 {
+            continue;
+        }
+        let overlaps = bbox.x0 < d.bbox.x1
+            && bbox.x1 > d.bbox.x0
+            && bbox.y0 < d.bbox.y1
+            && bbox.y1 > d.bbox.y0;
+        if overlaps {
+            intersecting_drawings += 1;
+        }
+    }
+    if intersecting_drawings > 0 {
+        score += (0.25 * (intersecting_drawings as f32)).min(0.55);
+    }
+
+    // 2. Colisão de texto / spans sobrepostos no mesmo bloco
+    let mut collisions = 0usize;
+    for line in lines {
+        if line.spans.len() >= 2 {
+            for i in 0..(line.spans.len() - 1) {
+                let s1 = &line.spans[i].bbox;
+                let s2 = &line.spans[i + 1].bbox;
+                let overlap_x = (s1.x1.min(s2.x1) - s1.x0.max(s2.x0)).max(0.0);
+                let overlap_y = (s1.y1.min(s2.y1) - s1.y0.max(s2.y0)).max(0.0);
+                if overlap_x > 2.0 && overlap_y > 2.0 {
+                    collisions += 1;
+                }
+            }
+        }
+    }
+    if collisions > 0 {
+        score += (0.20 * (collisions as f32)).min(0.40);
+    }
+
+    // 3. Densidade fragmentada de múltiplas mini-colunas na mesma linha (possível tabela sem bordas)
+    let mut fragmented_lines = 0usize;
+    for line in lines {
+        if line.spans.len() >= 4 {
+            fragmented_lines += 1;
+        }
+    }
+    if fragmented_lines >= 2 {
+        score += 0.25;
+    }
+
+    let clamped = score.clamp(0.0, 1.0);
+    let is_complex = clamped >= 0.45;
+    let rounded_score = (clamped * 100.0).round() / 100.0;
+    (is_complex, rounded_score)
 }
 
 /// Clusters touching or sub-character glyph spans on the same baseline.

@@ -35,6 +35,8 @@ namespace RasgaPdf
 
     public class ParserOptions
     {
+        [JsonPropertyName("reading_order")]
+        public string ReadingOrder { get; set; } = "natural";
         [JsonPropertyName("mode")]
         public string Mode { get; set; } = "structured";
 
@@ -95,6 +97,11 @@ namespace RasgaPdf
 
     public class SpatialBlock
     {
+        [JsonPropertyName("is_complex_layout")]
+        public bool IsComplexLayout { get; set; }
+
+        [JsonPropertyName("complexity_score")]
+        public float? ComplexityScore { get; set; }
         [JsonPropertyName("block_id")] public int BlockId { get; set; }
         [JsonPropertyName("block_type")] public string BlockType { get; set; } = "text";
         [JsonPropertyName("bbox")] public BoundingBox BBox { get; set; } = new();
@@ -198,6 +205,8 @@ namespace RasgaPdf
 
     public class SpatialPage
     {
+        [JsonPropertyName("is_complex_layout")]
+        public bool IsComplexLayout { get; set; }
         [JsonPropertyName("page_number")] public int PageNumber { get; set; }
         [JsonPropertyName("width")] public float Width { get; set; }
         [JsonPropertyName("height")] public float Height { get; set; }
@@ -215,6 +224,11 @@ namespace RasgaPdf
 
     public class SpatialChunk
     {
+        [JsonPropertyName("is_complex_layout")]
+        public bool IsComplexLayout { get; set; }
+
+        [JsonPropertyName("complexity_score")]
+        public float? ComplexityScore { get; set; }
         [JsonPropertyName("chunk_id")] public int ChunkId { get; set; }
         [JsonPropertyName("page_number")] public int PageNumber { get; set; }
         [JsonPropertyName("text")] public string Text { get; set; } = string.Empty;

@@ -120,14 +120,41 @@ cargo build --release
 ./target/release/rasgapdf sample.pdf --raw --format tsv | awk -F'\t' '$1 == 1 {print $2, $3, $8}'
 ./target/release/rasgapdf sample.pdf --raw --format csv -o coordinates.csv
 
-# 🎯 MODE 2: Hierarchical Structured Document
+# 🎯 MODE 2: Hierarchical Structured Document (Natural Reading Order via XY-Cut)
 ./target/release/rasgapdf sample.pdf --pretty
+./target/release/rasgapdf sample.pdf --reading-order natural   # default: Recursive XY-Cut multi-column
+./target/release/rasgapdf sample.pdf --apply-rotation         # normalize coordinates to rotated viewport
 ./target/release/rasgapdf sample.pdf -o structured.json
+
+# 🤖 Built-in Model Context Protocol (MCP) Server for AI Assistants
+./target/release/rasgapdf mcp
 
 # 🖼️ GRAPHICS (opt-in): embedded images and vector paths
 ./target/release/rasgapdf sample.pdf --images --drawings --pretty
 ./target/release/rasgapdf sample.pdf --extract-images ./out   # writes ./out/*.jpg + manifest.json
 ```
+
+---
+
+### 🔌 Model Context Protocol (MCP) Server
+
+RasgaPDF ships with a native, zero-dependency **MCP Server** (`rasgapdf mcp`) exposing JSON-RPC 2.0 tools over stdio for **Claude Desktop**, **Cursor**, **Antigravity**, and AI agents:
+
+```json
+{
+  "mcpServers": {
+    "rasgapdf": {
+      "command": "rasgapdf",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+* **`parse_pdf`**: Extracts structured 2D text blocks, tables, and bounding boxes.
+* **`search_document`**: Locates queries and returns precise bounding boxes for visual citations.
+* **`get_chunks`**: Emits semantic RAG chunks with constituent bounding boxes and token counts.
+* **`get_triage`**: Scans for complex layouts (`is_complex_layout == true` / $S(R) \ge 0.45$) for selective Vision Model (VLM) routing.
 
 ---
 

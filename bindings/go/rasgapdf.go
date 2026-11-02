@@ -40,6 +40,7 @@ type RawSpatialDocument struct {
 // Options defines the parser configurations for structured mode
 type Options struct {
 	Mode            string  `json:"mode,omitempty"`
+	ReadingOrder    string  `json:"reading_order,omitempty"`
 	DetectTables    bool    `json:"detect_tables"`
 	MinTableColumns int     `json:"min_table_columns"`
 	ColumnTolerance float32 `json:"column_tolerance"`
@@ -59,6 +60,7 @@ type Options struct {
 func DefaultOptions() Options {
 	return Options{
 		Mode:            "structured",
+		ReadingOrder:    "natural",
 		DetectTables:    true,
 		MinTableColumns: 3,
 		ColumnTolerance: 16.0,
@@ -97,8 +99,10 @@ type SpatialLine struct {
 type SpatialBlock struct {
 	BlockID   int           `json:"block_id"`
 	BlockType string        `json:"block_type"`
-	BBox      BoundingBox   `json:"bbox"`
-	Lines     []SpatialLine `json:"lines"`
+	BBox            BoundingBox   `json:"bbox"`
+	Lines           []SpatialLine `json:"lines"`
+	IsComplexLayout bool          `json:"is_complex_layout,omitempty"`
+	ComplexityScore *float32      `json:"complexity_score,omitempty"`
 }
 
 // SpatialCell represents a single cell in an extracted table
@@ -196,6 +200,7 @@ type SpatialPage struct {
 	CoordinateSystem string           `json:"coordinate_system"`
 	MediaBox         []float32        `json:"media_box,omitempty"`
 	CropBox          []float32        `json:"crop_box,omitempty"`
+	IsComplexLayout  bool             `json:"is_complex_layout,omitempty"`
 	TextBlocks       []SpatialBlock   `json:"text_blocks"`
 	Tables           []SpatialTable   `json:"tables"`
 	RawSpanCount     int              `json:"raw_span_count"`
@@ -213,6 +218,8 @@ type SpatialChunk struct {
 	BlockCount       int           `json:"block_count"`
 	TokenEstimate    int           `json:"token_estimate"`
 	CoordinateSystem string        `json:"coordinate_system"`
+	IsComplexLayout  bool          `json:"is_complex_layout,omitempty"`
+	ComplexityScore  *float32      `json:"complexity_score,omitempty"`
 }
 
 // SpatialDocument represents the entire parsed PDF document

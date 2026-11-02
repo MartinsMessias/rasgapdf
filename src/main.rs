@@ -18,13 +18,25 @@ pub enum OutputFormat {
     name = "rasgapdf",
     author = "Messias Martins",
     version = env!("CARGO_PKG_VERSION"),
-    about = "⚡ Blazing-fast 2D Spatial PDF Parser in Pure Rust",
-    long_about = "Extracts exact physical 2D coordinates (X/Y) or structured blocks/tables from PDF files at native hardware speeds."
+    about = "⚡ Blazing-fast 2D Spatial PDF Parser in Pure Rust with MCP Server",
+    long_about = "Extracts exact physical 2D coordinates (X/Y) or structured blocks/tables from PDF files at native hardware speeds, with built-in Model Context Protocol (MCP) server."
 )]
 struct Cli {
-    /// Caminho para o arquivo PDF
-    #[arg(value_name = "PDF_FILE")]
-    input: String,
+    /// Caminho para o arquivo PDF (ou 'mcp' para iniciar o servidor MCP stdio)
+    #[arg(value_name = "PDF_FILE_OR_COMMAND")]
+    input: Option<String>,
+
+    /// Iniciar o servidor MCP (Model Context Protocol) via stdio
+    #[arg(long, default_value_t = false)]
+    mcp: bool,
+
+    /// Estratégia de leitura: natural (Recursive XY-Cut multi-coluna) ou raw
+    #[arg(long, default_value = "natural")]
+    reading_order: String,
+
+    /// Normalizar bboxes e dimensões de acordo com a rotação nativa da página
+    #[arg(long, default_value_t = false)]
+    apply_rotation: bool,
 
     /// Ativar Modo Bruto: retorna exclusivamente a lista plana de coordenadas X/Y sem overhead de blocos/tabelas
     #[arg(short, long, default_value_t = false)]
@@ -93,9 +105,25 @@ fn exit_with_parse_error(context: &str, err: &dyn std::fmt::Display) -> ! {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Cli::parse();
 
+    if args.mcp || args.input.as_deref() == Some("mcp") {
+        if let Err(e) = rasgapdf::mcp::run_mcp_server() {
+            eprintln!("❌ Erro ao executar servidor MCP: {e}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
+    let input_path = match args.input.as_deref() {
+        Some(path) => path,
+        None => {
+            eprintln!("❌ Erro: Nenhum arquivo PDF fornecido. Use 'rasgapdf <PDF_FILE>' ou 'rasgapdf mcp'.");
+            std::process::exit(1);
+        }
+    };
+
     if args.raw {
         // --- MODO 1: COORDENADAS BRUTAS (RAW X/Y) ---
-        let raw_doc = match parse_raw_file(&args.input) {
+        let raw_doc = match parse_raw_file(input_path) {
             Ok(d) => d,
             Err(e) => exit_with_parse_error("❌ Erro ao processar PDF (modo raw)", &e),
         };
@@ -164,6 +192,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // --- MODO 2: ESTRUTURADO (HIERÁRQUICO COM BLOCOS E TABELAS) ---
         let options = ParserOptions {
             mode: "structured".to_string(),
+            reading_order: args.reading_order.clone(),
             detect_tables: !args.no_tables,
             min_table_columns: args.min_table_cols,
             column_tolerance: args.col_tolerance,
@@ -171,18 +200,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             extract_images: args.images || args.extract_images.is_some(),
             extract_drawings: args.drawings,
             filter_background_fills: !args.keep_backgrounds,
-            apply_rotation: false,
+            apply_rotation: args.apply_rotation,
         };
 
-        let doc = match parse_file(&args.input, &options) {
+        let mut doc = match parse_file(input_path, &options) {
             Ok(d) => d,
             Err(e) => exit_with_parse_error("❌ Erro ao processar PDF", &e),
         };
 
+        if args.apply_rotation {
+            doc.pages = doc.pages.into_iter().map(|p| p.rotated()).collect();
+        }
+
         // --- Sidecar: grava os streams de imagem originais em disco ---
         if let Some(dir) = args.extract_images.as_deref() {
             let dir_path = std::path::PathBuf::from(dir);
-            match extract_images(&args.input) {
+            match extract_images(input_path) {
                 Ok(mut found) => match write_images_to_dir(&mut found, &dir_path) {
                     Ok(written) => match write_manifest(&found, written, &doc.file_name, &dir_path)
                     {
@@ -276,7 +309,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             OutputFormat::Csv | OutputFormat::Tsv => {
                 eprintln!("⚠️ Formatos CSV e TSV diretos são recomendados no modo `--raw`. Alternando para listagem plana...");
-                let raw_doc = parse_raw_file(&args.input).map_err(|e| e.to_string())?;
+                let raw_doc = parse_raw_file(input_path).map_err(|e| e.to_string())?;
                 if args.format == OutputFormat::Csv {
                     let mut out = String::from("page,x0,y0,x1,y1,font_size,font_name,text\n");
                     for s in &raw_doc.spans {

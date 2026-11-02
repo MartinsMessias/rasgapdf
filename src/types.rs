@@ -133,6 +133,10 @@ pub struct SpatialBlock {
     pub block_type: String, // "text" | "table"
     pub bbox: BoundingBox,
     pub lines: Vec<SpatialLine>,
+    #[serde(default)]
+    pub is_complex_layout: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub complexity_score: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -262,6 +266,9 @@ pub struct SpatialPage {
     /// Bounding box do CropBox visível [x0, y0, x1, y1] em pontos PostScript.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crop_box: Option<[f32; 4]>,
+    /// Indica se a página contém layouts complexos (gráficos, tabelas sem borda ou sobreposições) para triagem VLM.
+    #[serde(default)]
+    pub is_complex_layout: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -272,10 +279,17 @@ pub struct SpatialDocument {
     pub pages: Vec<SpatialPage>,
 }
 
+fn default_reading_order() -> String {
+    "natural".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ParserOptions {
     pub mode: String, // "structured" (default) ou "raw"
+    /// Estratégia de leitura: "natural" (Recursive XY-Cut multi-coluna) ou "raw" / "top_to_bottom"
+    #[serde(default = "default_reading_order")]
+    pub reading_order: String,
     pub detect_tables: bool,
     pub min_table_columns: usize,
     pub column_tolerance: f32,
@@ -295,6 +309,7 @@ impl Default for ParserOptions {
     fn default() -> Self {
         Self {
             mode: "structured".to_string(),
+            reading_order: "natural".to_string(),
             detect_tables: true,
             min_table_columns: 3,
             column_tolerance: 16.0,
@@ -320,6 +335,12 @@ pub struct SpatialChunk {
     /// Sistema de coordenadas das bboxes: "source" ou "viewer_oriented".
     #[serde(default = "default_coordinate_system", alias = "coordinate_space")]
     pub coordinate_system: String,
+    /// Indica se o chunk contém layouts complexos para triagem seletiva de VLM.
+    #[serde(default)]
+    pub is_complex_layout: bool,
+    /// Score de complexidade geométrica [0.0..=1.0] (threshold de triagem: >= 0.45).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub complexity_score: Option<f32>,
 }
 
 impl SpatialPage {
@@ -433,6 +454,7 @@ impl SpatialPage {
             drawings,
             media_box: self.media_box,
             crop_box: self.crop_box,
+            is_complex_layout: self.is_complex_layout,
         }
     }
 
@@ -527,6 +549,17 @@ impl SpatialPage {
             BoundingBox::new(0.0, 0.0, 0.0, 0.0)
         };
 
+        let is_complex_layout = blocks.iter().any(|b| b.is_complex_layout);
+        let max_score = blocks
+            .iter()
+            .filter_map(|b| b.complexity_score)
+            .fold(0.0f32, |acc, s| acc.max(s));
+        let complexity_score = if max_score > 0.0 {
+            Some(max_score)
+        } else {
+            None
+        };
+
         SpatialChunk {
             chunk_id,
             page_number,
@@ -536,6 +569,8 @@ impl SpatialPage {
             block_count: blocks.len(),
             token_estimate,
             coordinate_system: coordinate_system.to_string(),
+            is_complex_layout,
+            complexity_score,
         }
     }
 }

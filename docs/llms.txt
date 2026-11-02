@@ -79,10 +79,13 @@ let raw = parse_raw_file("document.pdf")?;
 let doc = parse_file("document.pdf", &ParserOptions::default())?;
 ```
 
-### CLI (`rasgapdf`)
+### CLI (`rasgapdf`) & Model Context Protocol (MCP) Server
 ```bash
 rasgapdf sample.pdf --raw
 rasgapdf sample.pdf --raw --format tsv
-rasgapdf sample.pdf --pretty -o structured.json
+rasgapdf sample.pdf --pretty --reading-order natural -o structured.json
 rasgapdf sample.pdf --images --drawings --extract-images ./out
+
+# Run native stdio Model Context Protocol (MCP) server for Claude Desktop / Cursor / Antigravity
+rasgapdf mcp
 ```

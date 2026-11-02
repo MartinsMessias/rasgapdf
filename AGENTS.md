@@ -94,6 +94,27 @@ This guarantees $(0, 0)$ is strictly the Top-Left corner of the visible screen.
   - **180°:** $x0' = W - x1$, $x1' = W - x0$, $y0' = H - y1$, $y1' = H - y0$.
   - **270°:** $x0' = y0$, $x1' = y1$, $y0' = W - x1$, $y1' = W - x0$ (width and height swap).
 
+### D. Natural Reading Order via Recursive XY-Cut
+* **Algorithm:** When `reading_order: "natural"` (the default), `PurePdfDoc` sorts non-table spans using the **Recursive XY-Cut** algorithm.
+* **Projection Cuts:** It projects whitespace histograms along the horizontal (Y-cut) axis to partition sections and paragraphs, and vertical (X-cut) gutters (width $\ge 16.0$ pt) to separate multi-column layouts and sidebars.
+* **Benefit:** Solves the multi-column interleaving defect where left-column and right-column lines with identical vertical coordinates would otherwise be merged into the same block.
+
+### E. Sub-Page VLM Triage (`is_complex_layout` & `complexity_score`)
+* **Scoring Metric:** Each `SpatialBlock` and `SpatialChunk` is scored for geometric complexity $S(R) \in [0.0, 1.0]$ based on:
+  1. Intersection with vector paths/drawings ($+0.25..0.55$).
+  2. Overlapping text spans and collisions ($+0.20..0.40$).
+  3. Irregular multi-span column fragmentation / borderless grids ($+0.25$).
+* **Threshold:** If $S(R) \ge 0.45$, `is_complex_layout` is set to `true`.
+* **VLM Cost Efficiency:** Downstream AI pipelines can crop **only** the flagged sub-page bounding boxes to send to Vision-Language Models (VLM), saving 80%+ image tokens compared to full-page 300 DPI rasterization.
+
+### F. Native Model Context Protocol (MCP) Server
+* **Subcommand:** `rasgapdf mcp` executes a high-performance JSON-RPC 2.0 stdio server with zero external dependencies.
+* **Supported Tools:**
+  - `parse_pdf`: Returns structured 2D spatial text blocks, tables, and exact bounding boxes.
+  - `search_document`: Searches terms and returns matching spans with visual bounding boxes for citations.
+  - `get_chunks`: Returns semantic chunks with constituent bounding boxes, token estimates, and complexity flags.
+  - `get_triage`: Scans a PDF and returns the exact list of sub-page bounding boxes flagged as `is_complex_layout`.
+
 ---
 
 ## 4. Spatial RAG Chunking Contract
@@ -228,3 +249,25 @@ Verify published packages:
 - **crates.io:** `https://crates.io/crates/rasgapdf`
 - **NuGet:** `https://www.nuget.org/packages/RasgaPdf/`
 - **Hugging Face:** `https://huggingface.co/spaces/MartinsMessias/rasgapdf`
+
+---
+
+## 8. Autonomous Self-Updating Documentation Directive
+
+All AI coding agents (and human contributors) interacting with this codebase are bound by the **Self-Updating Documentation Contract**:
+
+1. **Immediate Synchronization:** Whenever any change is made to:
+   - CLI flags, commands, or subcommands (`src/main.rs`).
+   - Data models, fields, or serialization options (`src/types.rs`).
+   - Parser options or defaults (`ParserOptions`).
+   - Engine algorithms or coordinate handling (`src/engine/`).
+2. **Mandatory Documentation Targets:** The agent must automatically inspect and synchronize:
+   - `AGENTS.md` (Architecture, contracts, and checklists).
+   - `README.md` (Features, CLI usage, benchmarks, and API examples).
+   - `docs/SCHEMA.md` (JSON data model specifications).
+   - `llms.txt` and `llms-full.txt` (AI context declarations).
+   - Cross-platform bindings (`bindings/go/rasgapdf.go`, `bindings/csharp/RasgaPdf.cs`).
+3. **Automated Verification:**
+   - Run `cargo fmt -- --check` and `cargo clippy -- -D warnings`.
+   - Run `cargo test` and `python tests/test_integrations.py`.
+   - Verify that all documented CLI options match `rasgapdf --help`.
