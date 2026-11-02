@@ -204,8 +204,8 @@ namespace RasgaPdf
         [JsonPropertyName("rotation")] public int Rotation { get; set; }
         [JsonPropertyName("initial_rotation")] public int InitialRotation { get; set; }
         [JsonPropertyName("coordinate_system")] public string CoordinateSystem { get; set; } = "source";
-        [JsonPropertyName("media_box")] public BoundingBox? MediaBox { get; set; }
-        [JsonPropertyName("crop_box")] public BoundingBox? CropBox { get; set; }
+        [JsonPropertyName("media_box")] public float[]? MediaBox { get; set; }
+        [JsonPropertyName("crop_box")] public float[]? CropBox { get; set; }
         [JsonPropertyName("text_blocks")] public SpatialBlock[] TextBlocks { get; set; } = Array.Empty<SpatialBlock>();
         [JsonPropertyName("tables")] public SpatialTable[] Tables { get; set; } = Array.Empty<SpatialTable>();
         [JsonPropertyName("raw_span_count")] public int RawSpanCount { get; set; }

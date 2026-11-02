@@ -194,8 +194,8 @@ type SpatialPage struct {
 	Rotation         int              `json:"rotation"`
 	InitialRotation  int              `json:"initial_rotation"`
 	CoordinateSystem string           `json:"coordinate_system"`
-	MediaBox         *BoundingBox     `json:"media_box,omitempty"`
-	CropBox          *BoundingBox     `json:"crop_box,omitempty"`
+	MediaBox         []float32        `json:"media_box,omitempty"`
+	CropBox          []float32        `json:"crop_box,omitempty"`
 	TextBlocks       []SpatialBlock   `json:"text_blocks"`
 	Tables           []SpatialTable   `json:"tables"`
 	RawSpanCount     int              `json:"raw_span_count"`
