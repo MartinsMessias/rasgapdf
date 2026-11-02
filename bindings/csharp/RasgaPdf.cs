@@ -202,6 +202,8 @@ namespace RasgaPdf
         [JsonPropertyName("width")] public float Width { get; set; }
         [JsonPropertyName("height")] public float Height { get; set; }
         [JsonPropertyName("rotation")] public int Rotation { get; set; }
+        [JsonPropertyName("initial_rotation")] public int InitialRotation { get; set; }
+        [JsonPropertyName("coordinate_system")] public string CoordinateSystem { get; set; } = "source";
         [JsonPropertyName("media_box")] public BoundingBox? MediaBox { get; set; }
         [JsonPropertyName("crop_box")] public BoundingBox? CropBox { get; set; }
         [JsonPropertyName("text_blocks")] public SpatialBlock[] TextBlocks { get; set; } = Array.Empty<SpatialBlock>();
@@ -209,6 +211,18 @@ namespace RasgaPdf
         [JsonPropertyName("raw_span_count")] public int RawSpanCount { get; set; }
         [JsonPropertyName("images")] public SpatialImage[] Images { get; set; } = Array.Empty<SpatialImage>();
         [JsonPropertyName("drawings")] public SpatialDrawing[] Drawings { get; set; } = Array.Empty<SpatialDrawing>();
+    }
+
+    public class SpatialChunk
+    {
+        [JsonPropertyName("chunk_id")] public int ChunkId { get; set; }
+        [JsonPropertyName("page_number")] public int PageNumber { get; set; }
+        [JsonPropertyName("text")] public string Text { get; set; } = string.Empty;
+        [JsonPropertyName("bboxes")] public BoundingBox[] BBoxes { get; set; } = Array.Empty<BoundingBox>();
+        [JsonPropertyName("overall_bbox")] public BoundingBox OverallBBox { get; set; } = new();
+        [JsonPropertyName("block_count")] public int BlockCount { get; set; }
+        [JsonPropertyName("token_estimate")] public int TokenEstimate { get; set; }
+        [JsonPropertyName("coordinate_system")] public string CoordinateSystem { get; set; } = "source";
     }
 
     public class SpatialDocument
@@ -327,8 +341,8 @@ namespace RasgaPdf
         public static string GetVersion()
         {
             var ptr = rasgapdf_version();
-            if (ptr == IntPtr.Zero) return "0.3.3";
-            return Marshal.PtrToStringUTF8(ptr) ?? "0.3.3";
+            if (ptr == IntPtr.Zero) return "0.3.4";
+            return Marshal.PtrToStringUTF8(ptr) ?? "0.3.4";
         }
 
         /// <summary>

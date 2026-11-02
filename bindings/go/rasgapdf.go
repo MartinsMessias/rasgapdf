@@ -188,17 +188,31 @@ type ImageManifest struct {
 
 // SpatialPage holds elements for a single page
 type SpatialPage struct {
-	PageNumber   int              `json:"page_number"`
-	Width        float32          `json:"width"`
-	Height       float32          `json:"height"`
-	Rotation     int              `json:"rotation"`
-	MediaBox     *BoundingBox     `json:"media_box,omitempty"`
-	CropBox      *BoundingBox     `json:"crop_box,omitempty"`
-	TextBlocks   []SpatialBlock   `json:"text_blocks"`
-	Tables       []SpatialTable   `json:"tables"`
-	RawSpanCount int              `json:"raw_span_count"`
-	Images       []SpatialImage   `json:"images"`
-	Drawings     []SpatialDrawing `json:"drawings"`
+	PageNumber       int              `json:"page_number"`
+	Width            float32          `json:"width"`
+	Height           float32          `json:"height"`
+	Rotation         int              `json:"rotation"`
+	InitialRotation  int              `json:"initial_rotation"`
+	CoordinateSystem string           `json:"coordinate_system"`
+	MediaBox         *BoundingBox     `json:"media_box,omitempty"`
+	CropBox          *BoundingBox     `json:"crop_box,omitempty"`
+	TextBlocks       []SpatialBlock   `json:"text_blocks"`
+	Tables           []SpatialTable   `json:"tables"`
+	RawSpanCount     int              `json:"raw_span_count"`
+	Images           []SpatialImage   `json:"images"`
+	Drawings         []SpatialDrawing `json:"drawings"`
+}
+
+// SpatialChunk represents a semantic chunk for RAG with constituent bounding boxes
+type SpatialChunk struct {
+	ChunkID          int           `json:"chunk_id"`
+	PageNumber       int           `json:"page_number"`
+	Text             string        `json:"text"`
+	BBoxes           []BoundingBox `json:"bboxes"`
+	OverallBBox      BoundingBox   `json:"overall_bbox"`
+	BlockCount       int           `json:"block_count"`
+	TokenEstimate    int           `json:"token_estimate"`
+	CoordinateSystem string        `json:"coordinate_system"`
 }
 
 // SpatialDocument represents the entire parsed PDF document
@@ -428,4 +442,32 @@ func ExtractImagesBytes(data []byte, outputDir string) (*ImageManifest, error) {
 	}
 
 	return &manifest, nil
+}
+
+// DeduplicateBBoxes removes duplicate bounding boxes within a tolerance (in points)
+func DeduplicateBBoxes(bboxes []BoundingBox, tolerance float32) []BoundingBox {
+	unique := make([]BoundingBox, 0, len(bboxes))
+	for _, b := range bboxes {
+		isDup := false
+		for _, u := range unique {
+			if diff(b.X0, u.X0) <= tolerance &&
+				diff(b.Y0, u.Y0) <= tolerance &&
+				diff(b.X1, u.X1) <= tolerance &&
+				diff(b.Y1, u.Y1) <= tolerance {
+				isDup = true
+				break
+			}
+		}
+		if !isDup {
+			unique = append(unique, b)
+		}
+	}
+	return unique
+}
+
+func diff(a, b float32) float32 {
+	if a > b {
+		return a - b
+	}
+	return b - a
 }

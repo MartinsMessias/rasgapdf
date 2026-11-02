@@ -77,6 +77,10 @@ Reconstructs the visual hierarchy into visual paragraphs (`text_blocks`), text l
   "width": 595.0,
   "height": 842.0,
   "rotation": 0,
+  "initial_rotation": 90,
+  "coordinate_system": "viewer_oriented",
+  "media_box": { "x0": 0.0, "y0": 0.0, "x1": 595.0, "y1": 842.0, "width": 595.0, "height": 842.0 },
+  "crop_box": { "x0": 36.0, "y0": 54.0, "x1": 576.0, "y1": 756.0, "width": 540.0, "height": 702.0 },
   "text_blocks": [ ... ],
   "tables": [ ... ],
   "raw_span_count": 142,
@@ -90,12 +94,49 @@ Reconstructs the visual hierarchy into visual paragraphs (`text_blocks`), text l
 | `page_number` | `integer` | 1-based page index |
 | `width` | `float` | Page width in typographical points |
 | `height` | `float` | Page height in typographical points |
-| `rotation` | `integer` | Real page `/Rotate` value (0, 90, 180, 270) reported by the pure Rust parser |
+| `rotation` | `integer` | Normalized viewer rotation (0 when `apply_rotation: true` to prevent double-rotation) |
+| `initial_rotation` | `integer` | Original page `/Rotate` entry in the PDF catalog (0, 90, 180, 270) |
+| `coordinate_system` | `string` | Coordinate space state: `"source"` or `"viewer_oriented"` |
+| `media_box` | `BoundingBox?` | Declared physical MediaBox rectangle in points |
+| `crop_box` | `BoundingBox?` | Active visible CropBox rectangle in points (takes precedence per ISO 32000-1) |
 | `text_blocks` | `array<SpatialBlock>` | Visual paragraphs |
 | `tables` | `array<SpatialTable>` | Auto-detected matrix tables |
 | `raw_span_count` | `integer` | Number of raw text spans used for table detection |
 | `images` | `array<SpatialImage>` | Embedded images. Empty unless the parser is created with `extract_images` |
 | `drawings` | `array<SpatialDrawing>` | Vector paths. Empty unless the parser is created with `extract_drawings` |
+
+---
+
+### Semantic RAG Level: `SpatialChunk`
+
+When building RAG pipelines, chunks group semantic blocks while preserving constituent bounding boxes for accurate visual citation highlighting:
+
+```json
+{
+  "chunk_id": 1,
+  "page_number": 1,
+  "text": "Full concatenated semantic chunk text...",
+  "bboxes": [
+    { "x0": 50.0, "y0": 67.0, "x1": 244.0, "y1": 83.0, "width": 194.0, "height": 16.0 },
+    { "x0": 50.0, "y0": 90.0, "x1": 310.0, "y1": 106.0, "width": 260.0, "height": 16.0 }
+  ],
+  "overall_bbox": { "x0": 50.0, "y0": 67.0, "x1": 310.0, "y1": 106.0, "width": 260.0, "height": 39.0 },
+  "block_count": 2,
+  "token_estimate": 128,
+  "coordinate_system": "viewer_oriented"
+}
+```
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `chunk_id` | `integer` | 1-based sequential chunk identifier |
+| `page_number` | `integer` | 1-based page index |
+| `text` | `string` | Concatenated semantic text of all blocks in the chunk |
+| `bboxes` | `array<BoundingBox>` | Exact individual bounding box per constituent text block (multi-quad highlight) |
+| `overall_bbox` | `BoundingBox` | Enclosing bounding rectangle covering all blocks in the chunk |
+| `block_count` | `integer` | Number of blocks in this chunk |
+| `token_estimate` | `integer` | Approximate token count (`(chars + 3) // 4`) |
+| `coordinate_system` | `string` | Coordinate space state matching the page (`"source"` or `"viewer_oriented"`) |
 
 ---
 

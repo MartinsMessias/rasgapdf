@@ -302,7 +302,135 @@ function extractText(input) {
 
 function version() {
   if (ffiLib && ffiLib.version) return ffiLib.version();
-  return '0.3.3';
+  return '0.3.4';
+}
+
+/**
+ * Agrupa blocos espaciais em chunks semânticos para RAG, preservando
+ * a lista completa de bboxes individuais para citação visual precisa.
+ */
+function toSpatialChunks(docOrPage, options = {}) {
+  const maxChars = options.maxChars || 1500;
+  const overlapBlocks = options.overlapBlocks !== undefined ? options.overlapBlocks : 1;
+
+  let doc = docOrPage;
+  if (typeof docOrPage === 'string' || Buffer.isBuffer(docOrPage)) {
+    doc = parsePdf(docOrPage);
+  }
+
+  function bboxToList(b) {
+    if (!b) return [0, 0, 0, 0];
+    if (Array.isArray(b)) return b.map(Number);
+    return [Number(b.x0 || 0), Number(b.y0 || 0), Number(b.x1 || 0), Number(b.y1 || 0)];
+  }
+
+  function emitChunk(pageNum, chunkId, items, coordSys = 'source') {
+    const texts = items.map(it => it.text);
+    const bboxes = items.map(it => it.bbox);
+    const minX0 = bboxes.length ? Math.min(...bboxes.map(b => b[0])) : 0;
+    const minY0 = bboxes.length ? Math.min(...bboxes.map(b => b[1])) : 0;
+    const maxX1 = bboxes.length ? Math.max(...bboxes.map(b => b[2])) : 0;
+    const maxY1 = bboxes.length ? Math.max(...bboxes.map(b => b[3])) : 0;
+    const fullText = texts.join('\n\n');
+    return {
+      chunk_id: chunkId,
+      page_number: pageNum,
+      text: fullText,
+      bboxes,
+      overall_bbox: [minX0, minY0, maxX1, maxY1],
+      block_count: items.length,
+      token_estimate: Math.floor((fullText.length + 3) / 4),
+      coordinate_system: coordSys
+    };
+  }
+
+  function chunkPage(page, startId) {
+    const pageNum = page.page_number || 1;
+    const coordSys = page.coordinate_system || page.coordinate_space || 'source';
+    const blocks = page.text_blocks || [];
+    if (!blocks.length) return [];
+
+    const chunks = [];
+    let currBlocks = [];
+    let currLen = 0;
+    let cid = startId;
+
+    for (const b of blocks) {
+      const lines = (b.lines || []).map(l => l.text || '').filter(Boolean);
+      const bText = lines.join('\n').trim();
+      if (!bText) continue;
+
+      const bLen = bText.length + 1;
+      if (currBlocks.length && (currLen + bLen > maxChars)) {
+        chunks.push(emitChunk(pageNum, cid, currBlocks, coordSys));
+        cid++;
+        if (overlapBlocks > 0 && currBlocks.length > overlapBlocks) {
+          currBlocks = currBlocks.slice(-overlapBlocks);
+          currLen = currBlocks.reduce((acc, cb) => acc + cb.text.length + 1, 0);
+        } else if (overlapBlocks === 0) {
+          currBlocks = [];
+          currLen = 0;
+        }
+      }
+
+      currBlocks.push({ block: b, text: bText, bbox: bboxToList(b.bbox) });
+      currLen += bLen;
+    }
+
+    if (currBlocks.length) {
+      chunks.push(emitChunk(pageNum, cid, currBlocks, coordSys));
+    }
+    return chunks;
+  }
+
+  if (doc && doc.pages) {
+    const result = [];
+    let cCounter = 1;
+    for (const p of doc.pages) {
+      const pChunks = chunkPage(p, cCounter);
+      cCounter += pChunks.length;
+      result.push(...pChunks);
+    }
+    return result;
+  }
+  return chunkPage(doc || {}, 1);
+}
+
+/**
+ * Remove bounding boxes duplicadas dentro de uma tolerância em pt.
+ */
+function deduplicateBboxes(bboxes, tolerance = 0.5) {
+  const unique = [];
+  for (const b of (bboxes || [])) {
+    let coords;
+    if (Array.isArray(b) && b.length >= 4) {
+      coords = [Number(b[0]), Number(b[1]), Number(b[2]), Number(b[3])];
+    } else if (b && typeof b === 'object') {
+      coords = [Number(b.x0 || 0), Number(b.y0 || 0), Number(b.x1 || 0), Number(b.y1 || 0)];
+    } else {
+      continue;
+    }
+
+    const isDup = unique.some(u =>
+      Math.abs(coords[0] - u[0]) <= tolerance &&
+      Math.abs(coords[1] - u[1]) <= tolerance &&
+      Math.abs(coords[2] - u[2]) <= tolerance &&
+      Math.abs(coords[3] - u[3]) <= tolerance
+    );
+    if (!isDup) unique.push(coords);
+  }
+  return unique;
+}
+
+/**
+ * Consolida e deduplica todas as bboxes de uma lista de chunks citados.
+ */
+function mergeCitationBboxes(chunks, tolerance = 0.5) {
+  const allBoxes = [];
+  for (const ch of (chunks || [])) {
+    if (ch.bboxes) allBoxes.push(...ch.bboxes);
+  }
+  return deduplicateBboxes(allBoxes, tolerance);
 }
 
 module.exports = {
@@ -313,5 +441,8 @@ module.exports = {
   extractText,
   extractImages,
   extractImagesBytes,
+  toSpatialChunks,
+  deduplicateBboxes,
+  mergeCitationBboxes,
   version
 };

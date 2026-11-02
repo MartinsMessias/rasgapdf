@@ -70,4 +70,4 @@ void rasgapdf_free_string(char* ptr);
 ```c
 const char* rasgapdf_version(void);
 ```
-- **Description**: Returns constant version literal (e.g., `"0.3.3"`). Do **not** free.
+- **Description**: Returns constant version literal (e.g., `"0.3.4"`). Do **not** free.

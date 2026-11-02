@@ -136,7 +136,7 @@ node index.js
 In your `Cargo.toml`:
 ```toml
 [dependencies]
-rasgapdf = "0.3.1"
+rasgapdf = "0.3.4"
 ```
 
 ### Step 2: Parse File in Pure Rust

@@ -27,7 +27,17 @@ if (fs.existsSync(fixturePath)) {
   const doc = rasgapdf.parsePdf(fixturePath, { detect_tables: true, apply_rotation: true });
   assert.ok(doc.total_pages > 0, 'Structured doc should have pages');
   assert.ok(Array.isArray(doc.pages[0].text_blocks), 'text_blocks should be array');
+  assert.ok(doc.pages[0].coordinate_system === 'viewer_oriented', 'coordinate_system should be viewer_oriented');
   console.log(`[PASS] parsePdf: ${doc.pages.length} pages`);
+
+  // 3b. toSpatialChunks & deduplication
+  const chunks = rasgapdf.toSpatialChunks(doc, { maxChars: 1000, overlapBlocks: 1 });
+  assert.ok(Array.isArray(chunks), 'chunks should be an array');
+  assert.ok(chunks.length > 0, 'should generate chunks');
+  assert.ok(chunks[0].coordinate_system, 'chunks should have coordinate_system');
+  const merged = rasgapdf.mergeCitationBboxes(chunks);
+  assert.ok(Array.isArray(merged), 'merged bboxes should be an array');
+  console.log(`[PASS] toSpatialChunks: ${chunks.length} chunks, ${merged.length} deduped bboxes`);
 
   // 4. bytes API
   if (typeof rasgapdf.extractTextBytes === 'function') {
