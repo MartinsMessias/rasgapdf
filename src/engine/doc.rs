@@ -1331,8 +1331,8 @@ fn compute_block_complexity(
 }
 
 /// Clusters touching or sub-character glyph spans on the same baseline.
-/// Uses a dynamic threshold based on font size to distinguish genuine continuation/hyphen
-/// sub-spans (gap <= 0.75pt) from distinct words in small fonts (word spacing >= 1.59pt).
+/// Uses dynamic thresholds based on font size to distinguish genuine continuation/kerning
+/// sub-spans (gap in [-0.20*fsz, +0.09*fsz]) from distinct words (word spacing >= 1.59pt).
 fn cluster_touching_spans(spans: &[RawSpan]) -> Vec<RawSpan> {
     if spans.is_empty() {
         return Vec::new();
@@ -1345,14 +1345,16 @@ fn cluster_touching_spans(spans: &[RawSpan]) -> Vec<RawSpan> {
         let same_baseline = (next_span.y0 - current.y0).abs() <= 3.0;
         let gap = next_span.x0 - current.x1;
 
-        // Dynamic spacing limit based on font size:
-        // Inter-word gaps in 6pt fonts are ~1.59pt, while glyph/continuation gaps are <= 0.75pt.
-        let char_spacing_limit = (current.font_size * 0.10).clamp(0.4, 0.85);
+        // Dynamic spacing and kerning overlap limits based on font size:
+        // Inter-word gaps in 6pt fonts are ~1.59pt (and >= 1.82pt in 12-14pt fonts),
+        // while intra-word glyph/kerning gaps range from -0.20*font_size to +0.09*font_size.
+        let max_overlap = (current.font_size * 0.20).max(1.5);
+        let char_spacing_limit = (current.font_size * 0.09).clamp(0.4, 1.35);
 
         // Continuation conditions:
         // 1. Same baseline
         // 2. Not already separated by an explicit space in the text
-        // 3. Either touching/overlapping (gap >= -1.0 && gap <= char_spacing_limit),
+        // 3. Either touching/overlapping (gap >= -max_overlap && gap <= char_spacing_limit),
         //    OR continuing a trailing hyphen/slash (e.g. "NFS-", "0001-") where gap <= 1.2
         let ends_with_hyphen = current.text.ends_with('-') || current.text.ends_with('/');
         let allowed_limit = if ends_with_hyphen {
@@ -1363,7 +1365,7 @@ fn cluster_touching_spans(spans: &[RawSpan]) -> Vec<RawSpan> {
 
         let has_explicit_space = current.text.ends_with(' ') || next_span.text.starts_with(' ');
 
-        if same_baseline && !has_explicit_space && gap >= -1.0 && gap <= allowed_limit {
+        if same_baseline && !has_explicit_space && gap >= -max_overlap && gap <= allowed_limit {
             // Merge horizontally touching spans
             current.text.push_str(&next_span.text);
             current.x1 = current.x1.max(next_span.x1);

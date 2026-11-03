@@ -103,6 +103,7 @@ pub fn extract_text_bytes(pdf_bytes: &[u8]) -> Result<String, Box<dyn Error + Se
     let mut out = String::with_capacity(cap);
     let mut last_page = 0;
     let mut last_y0 = -1.0;
+    let mut last_x1 = -1.0_f32;
 
     for span in &raw.spans {
         let span_y0 = if span.y0.is_finite() {
@@ -121,10 +122,21 @@ pub fn extract_text_bytes(pdf_bytes: &[u8]) -> Result<String, Box<dyn Error + Se
             out.push('\n');
             last_y0 = span_y0;
         } else if !out.ends_with(' ') && !span.text.starts_with(' ') {
-            out.push(' ');
+            let gap = if span.x0.is_finite() && last_x1 >= 0.0 {
+                span.x0 - last_x1
+            } else {
+                f32::MAX
+            };
+            let char_spacing_limit = (span.font_size * 0.09).clamp(0.4, 1.35);
+            if gap > char_spacing_limit {
+                out.push(' ');
+            }
         }
 
         out.push_str(&span.text);
+        if span.x1.is_finite() {
+            last_x1 = span.x1;
+        }
     }
 
     if !out.ends_with('\n') && !out.is_empty() {
@@ -151,5 +163,37 @@ mod tests {
     fn test_nonexistent_and_nul_path() {
         assert!(parse_raw_file("nonexistent\0_file.pdf").is_err());
         assert!(parse_file("nonexistent\0_file.pdf", &ParserOptions::default()).is_err());
+    }
+
+    #[test]
+    fn test_extract_text_bytes_glyph_by_glyph_stream() {
+        let mut pdf = Vec::new();
+        pdf.extend_from_slice(b"%PDF-1.4\n");
+        let o1 = pdf.len();
+        pdf.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        let o2 = pdf.len();
+        pdf.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [ 3 0 R ] /Count 1 >>\nendobj\n");
+        let o3 = pdf.len();
+        pdf.extend_from_slice(
+            b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 612 792 ] /Contents 4 0 R >>\nendobj\n",
+        );
+        let o4 = pdf.len();
+        let content = b"BT\n/F1 12 Tf\n1 0 0 1 72 700 Tm\n(T) Tj\n7.3 0 Td (A) Tj\n8.0 0 Td (M) Tj\n13.5 0 Td (L) Tj\n6.7 0 Td (i) Tj\n3.3 0 Td (n) Tj\n6.7 0 Td (h) Tj\n6.7 0 Td (a) Tj\n6.7 0 Td (s) Tj\nET\n";
+        pdf.extend_from_slice(
+            format!("4 0 obj\n<< /Length {} >>\nstream\n", content.len()).as_bytes(),
+        );
+        pdf.extend_from_slice(content);
+        pdf.extend_from_slice(b"\nendstream\nendobj\n");
+        let xref_pos = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "xref\n0 5\n0000000000 65535 f \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \ntrailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{}\n%%EOF",
+                o1, o2, o3, o4, xref_pos
+            )
+            .as_bytes(),
+        );
+
+        let text = extract_text_bytes(&pdf).unwrap();
+        assert_eq!(text.trim(), "TAM Linhas");
     }
 }

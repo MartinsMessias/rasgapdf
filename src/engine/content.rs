@@ -477,16 +477,55 @@ impl<'a> ContentInterpreter<'a> {
         // Only emit spans with non-whitespace text to avoid emitting blank bounding boxes
         let trimmed = combined_text.trim_matches(|c: char| c.is_whitespace() || c == '\u{00A0}');
         if !trimmed.is_empty() {
-            self.spans.push(RawCoordSpan {
-                page: self.page_num,
-                x0: round_coord(x0),
-                y0: round_coord(y0),
-                x1: round_coord(x1),
-                y1: round_coord(y1),
-                font_size: self.current_font_size,
-                font_name: self.current_font_name.clone(),
-                text: combined_text,
-            });
+            let rx0 = round_coord(x0);
+            let ry0 = round_coord(y0);
+            let rx1 = round_coord(x1);
+            let ry1 = round_coord(y1);
+
+            let mut merged = false;
+            if let Some(last) = self.spans.last_mut() {
+                let same_page = last.page == self.page_num;
+                let same_baseline = (ry0 - last.y0).abs() <= 3.0;
+                let same_font_size = (self.current_font_size - last.font_size).abs() <= 1.0;
+                let gap = rx0 - last.x1;
+
+                let max_overlap = (last.font_size * 0.20).max(1.5);
+                let char_spacing_limit = (last.font_size * 0.09).clamp(0.4, 1.35);
+                let ends_with_hyphen = last.text.ends_with('-') || last.text.ends_with('/');
+                let allowed_limit = if ends_with_hyphen {
+                    char_spacing_limit.max(1.2)
+                } else {
+                    char_spacing_limit
+                };
+                let has_explicit_space = last.text.ends_with(' ') || combined_text.starts_with(' ');
+
+                if same_page
+                    && same_baseline
+                    && same_font_size
+                    && !has_explicit_space
+                    && gap >= -max_overlap
+                    && gap <= allowed_limit
+                {
+                    last.text.push_str(&combined_text);
+                    last.x1 = last.x1.max(rx1);
+                    last.y0 = last.y0.min(ry0);
+                    last.y1 = last.y1.max(ry1);
+                    merged = true;
+                }
+            }
+
+            if !merged {
+                self.spans.push(RawCoordSpan {
+                    page: self.page_num,
+                    x0: rx0,
+                    y0: ry0,
+                    x1: rx1,
+                    y1: ry1,
+                    font_size: self.current_font_size,
+                    font_name: self.current_font_name.clone(),
+                    text: combined_text,
+                });
+            }
         }
 
         let advance_matrix = Matrix::new(1.0, 0.0, 0.0, 1.0, word_width, 0.0);
@@ -733,5 +772,41 @@ B\n";
             assert!(d.bbox.width.is_finite());
             assert!(d.bbox.height.is_finite());
         }
+    }
+
+    #[test]
+    fn test_glyph_by_glyph_stream_coalesces_into_words() {
+        // Simulates Cairo/Chromium/LATAM PDF streams emitting one character per Tj + Td
+        // Standard Helvetica widths at 12pt: L=6.67, A=8.00, T=7.33, M=10.00, V=8.00, o=6.67
+        let stream = b"BT\n\
+/F1 12 Tf\n\
+1 0 0 1 72 700 Tm\n\
+(L) Tj\n\
+6.7 0 Td (A) Tj\n\
+7.5 0 Td (T) Tj\n\
+6.8 0 Td (A) Tj\n\
+8.0 0 Td (M) Tj\n\
+13.5 0 Td (V) Tj\n\
+8.0 0 Td (o) Tj\n\
+6.7 0 Td (o) Tj\n\
+ET\n";
+
+        let mut fonts = HashMap::new();
+        let f1 = PdfFont::new("F1".into());
+        fonts.insert("F1".into(), f1);
+
+        let mut interp = ContentInterpreter::new(1, 842.0, &fonts);
+        interp.interpret(stream).unwrap();
+
+        assert_eq!(
+            interp.spans.len(),
+            2,
+            "Glyphs must coalesce into 2 distinct words, got: {:?}",
+            interp.spans
+        );
+        assert_eq!(interp.spans[0].text, "LATAM");
+        assert_eq!(interp.spans[1].text, "Voo");
+        assert!((interp.spans[0].x0 - 72.0).abs() < 0.1);
+        assert!((interp.spans[0].x1 - 111.0).abs() < 0.2);
     }
 }
