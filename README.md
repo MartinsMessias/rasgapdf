@@ -30,7 +30,6 @@ pipeline_tag: document-question-answering
 **The Blazing-Fast 2D Spatial PDF Parser powered by Pure Rust.**  
 *Extract exact physical coordinates (Raw X/Y) or structured blocks & tables at native hardware speeds.*
 
-[![Hugging Face Space](https://img.shields.io/badge/%F0%9F%A4%97%20Space-Live%20Demo-blue)](https://huggingface.co/spaces/martinsmessias/rasgapdf)
 [![PyPI version](https://img.shields.io/pypi/v/rasgapdf.svg?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/rasgapdf/)
 [![PyPI Downloads](https://img.shields.io/pepy/dt/rasgapdf?color=blue&logo=pypi&logoColor=white&label=PyPI%20downloads)](https://pypi.org/project/rasgapdf/)
 [![npm version](https://img.shields.io/npm/v/rasgapdf.svg?color=red&logo=npm)](https://www.npmjs.com/package/rasgapdf)
@@ -39,11 +38,8 @@ pipeline_tag: document-question-answering
 [![Crates.io Downloads](https://img.shields.io/crates/d/rasgapdf?color=orange&logo=rust&logoColor=white&label=crates.io%20downloads)](https://crates.io/crates/rasgapdf)
 [![NuGet version](https://img.shields.io/nuget/v/RasgaPdf.svg?color=purple&logo=nuget)](https://www.nuget.org/packages/RasgaPdf/)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/RasgaPdf?color=purple&logo=nuget&logoColor=white&label=NuGet%20downloads)](https://www.nuget.org/packages/RasgaPdf/)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/MartinsMessias/rasgapdf/badge)](https://securityscorecards.dev/viewer/?uri=github.com/MartinsMessias/rasgapdf)
-[![Commercial License](https://img.shields.io/badge/Commercial%20License-Available-success.svg)](mailto:messiasads2017@gmail.com?subject=RasgaPDF%20Commercial%20License%20Inquiry)
 
-[**GitHub Repo**](https://github.com/MartinsMessias/rasgapdf) • [**Web Visualizer**](https://martinsmessias.github.io/rasgapdf/) • [**HF Space Demo**](https://huggingface.co/spaces/martinsmessias/rasgapdf) • [**Docs Map (Diátaxis)**](docs/DIATAXIS.md) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md) • [**llms.txt**](llms.txt)
+[**GitHub Repo**](https://github.com/MartinsMessias/rasgapdf) • [**Web Visualizer**](https://martinsmessias.github.io/rasgapdf/) • [**Docs Map (Diátaxis)**](docs/DIATAXIS.md) • [**Two Modes**](#-two-extraction-modes) • [**CLI Tool**](#-standalone-cli-tool) • [**Architecture**](docs/ARCHITECTURE.md) • [**Spatial Schema**](docs/SCHEMA.md) • [**llms.txt**](llms.txt)
 
 </div>
 
