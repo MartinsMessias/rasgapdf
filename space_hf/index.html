@@ -142,7 +142,7 @@
     <div class="w-full flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-3">
         <span class="text-xl sm:text-2xl font-black bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">⚡ RasgaPDF</span>
-        <span class="text-xs px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono font-bold">v0.4.1</span>
+        <span class="text-xs px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono font-bold">v0.4.2</span>
         <span id="headerComputeBadge" class="hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">Client-Side Compute</span>
       </div>
 
@@ -650,7 +650,7 @@
     let wasmEngine = null;
     async function initWasmEngine() {
       try {
-        const wasmRes = await fetch('rasgapdf.wasm?v=0.4.1-' + Date.now());
+        const wasmRes = await fetch('rasgapdf.wasm?v=0.4.2-' + Date.now());
         if (wasmRes.ok) {
           const wasmBytes = await wasmRes.arrayBuffer();
           const { instance } = await WebAssembly.instantiate(wasmBytes);

@@ -85,7 +85,7 @@ manifest = rasgapdf.extract_images("sample.pdf", "./extracted_images")
 ```javascript
 const { parseRaw, parsePdf, extractImages, version } = require('rasgapdf');
 
-console.log(version()); // "0.4.1"
+console.log(version()); // "0.4.2"
 
 // Mode 1: Flat Physical Coordinates
 const raw = parseRaw('sample.pdf');
