@@ -68,6 +68,13 @@ impl<'a> PurePdfDoc<'a> {
     /// Opens and parses a PDF from a byte slice
     pub fn from_bytes(data: &'a [u8]) -> Result<Self, String> {
         let xref = XRefTable::parse(data)?;
+        if let Some(enc) = xref.trailer.get("Encrypt") {
+            if !matches!(enc, PdfObject::Null) {
+                return Err(
+                    "Encrypted PDF (/Encrypt dictionary present in trailer): password-protected or encrypted streams cannot be parsed without decryption".into(),
+                );
+            }
+        }
         let mut doc = Self {
             data,
             xref,
@@ -421,6 +428,50 @@ impl<'a> PurePdfDoc<'a> {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+
+                    // /Encoding (Name or Dictionary with /BaseEncoding and /Differences per ISO 32000-2 §9.6.5)
+                    if let Some(enc_obj) = resolved_font.dict_get("Encoding") {
+                        if let Ok(enc_resolved) = self.resolve(enc_obj) {
+                            match &enc_resolved {
+                                PdfObject::Name(enc_name) => {
+                                    pdf_font.apply_base_encoding(enc_name);
+                                }
+                                PdfObject::Dictionary(enc_dict) => {
+                                    if let Some(base_enc) =
+                                        enc_dict.get("BaseEncoding").and_then(|b| b.as_name())
+                                    {
+                                        pdf_font.apply_base_encoding(base_enc);
+                                    }
+                                    if let Some(diff_obj) = enc_dict.get("Differences") {
+                                        if let Ok(diff_resolved) = self.resolve(diff_obj) {
+                                            if let Some(diff_arr) = diff_resolved.as_array() {
+                                                let mut current_code: Option<u32> = None;
+                                                for item in diff_arr {
+                                                    match item {
+                                                        PdfObject::Integer(code)
+                                                            if (0..=65535).contains(code) =>
+                                                        {
+                                                            current_code = Some(*code as u32);
+                                                        }
+                                                        PdfObject::Name(glyph_name) => {
+                                                            if let Some(code) = current_code {
+                                                                pdf_font.apply_differences_entry(
+                                                                    code, glyph_name,
+                                                                );
+                                                                current_code = code.checked_add(1);
+                                                            }
+                                                        }
+                                                        _ => {}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -1780,5 +1831,67 @@ mod tests {
         assert_eq!(parsed[1], 0.0);
         assert_eq!(parsed[2], 612.0);
         assert_eq!(parsed[3], 792.0);
+    }
+
+    #[test]
+    fn test_encrypted_pdf_rejected_deterministically() {
+        let mut pdf = Vec::new();
+        pdf.extend_from_slice(b"%PDF-2.0\n");
+        let o1 = pdf.len();
+        pdf.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        let o2 = pdf.len();
+        pdf.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Count 0 >>\nendobj\n");
+        let o3 = pdf.len();
+        pdf.extend_from_slice(b"3 0 obj\n<< /Filter /Standard /V 5 /R 6 /Length 256 >>\nendobj\n");
+        let xref_pos = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "xref\n0 4\n0000000000 65535 f \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R /Encrypt 3 0 R >>\nstartxref\n{}\n%%EOF",
+                o1, o2, o3, xref_pos
+            )
+            .as_bytes(),
+        );
+
+        let res = PurePdfDoc::from_bytes(&pdf);
+        assert!(res.is_err());
+        assert!(res.err().unwrap().contains("Encrypted PDF"));
+    }
+
+    #[test]
+    fn test_font_encoding_differences_dictionary_in_doc() {
+        let mut pdf = Vec::new();
+        pdf.extend_from_slice(b"%PDF-2.0\n");
+        let o1 = pdf.len();
+        pdf.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        let o2 = pdf.len();
+        pdf.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [ 3 0 R ] /Count 1 >>\nendobj\n");
+        let o3 = pdf.len();
+        pdf.extend_from_slice(
+            b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 612 792 ] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+        );
+        let o4 = pdf.len();
+        pdf.extend_from_slice(
+            b"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [ 1 /fi /fl /eacute ] >> >>\nendobj\n",
+        );
+        let o5 = pdf.len();
+        let stream_data = b"BT /F1 12 Tf 72 700 Td <016E616C20026F772063616603> Tj ET";
+        pdf.extend_from_slice(
+            format!("5 0 obj\n<< /Length {} >>\nstream\n", stream_data.len()).as_bytes(),
+        );
+        pdf.extend_from_slice(stream_data);
+        pdf.extend_from_slice(b"\nendstream\nendobj\n");
+        let xref_pos = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "xref\n0 6\n0000000000 65535 f \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \n{:010} 00000 n \ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{}\n%%EOF",
+                o1, o2, o3, o4, o5, xref_pos
+            )
+            .as_bytes(),
+        );
+
+        let mut doc = PurePdfDoc::from_bytes(&pdf).unwrap();
+        let raw_doc = doc.parse_raw("test.pdf").unwrap();
+        assert_eq!(raw_doc.spans.len(), 1);
+        assert_eq!(raw_doc.spans[0].text, "final flow café");
     }
 }

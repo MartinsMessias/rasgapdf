@@ -11,7 +11,7 @@ RasgaPDF is an ultra-fast, zero-dependency 2D spatial PDF parser implemented in 
 ```
                       ┌──────────────────────────────────────┐
                       │    RasgaPDF Core (Pure Rust Engine)  │
-                      │   ISO 32000-1 Lexer, XRef, Content   │
+                      │ ISO 32000-1 & 32000-2 (PDF 2.0) Core │
                       │  Viewport Normalization & Clustering  │
                       └──────────────────┬───────────────────┘
                                          │
@@ -48,9 +48,9 @@ rasgapdf/
 │   ├── table.rs            # 2D projection matrix table detection
 │   ├── drawing.rs          # Vector path / drawings extractor
 │   ├── image.rs            # Embedded image stream extraction & file sidecar
-│   └── engine/             # ISO 32000-1 parser (lexer, xref, font cmap, content stream)
+│   └── engine/             # ISO 32000-1 (PDF 1.7) & ISO 32000-2:2020 (PDF 2.0) parser
 │       ├── doc.rs          # PurePdfDoc, PageInfo, CropBox & MediaBox hierarchy
-│       └── content.rs      # ContentInterpreter, state stack, and glyph transforms
+│       └── content.rs      # ContentInterpreter, state stack, /ActualText, and glyph transforms
 ├── bindings/
 │   ├── python/             # PyPI package (rasgapdf) + LangChain & LlamaIndex integrations
 │   ├── nodejs/             # npm package (rasgapdf) powered by koffi

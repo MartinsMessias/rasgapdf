@@ -83,6 +83,18 @@ impl GraphicsState {
     }
 }
 
+/// Marked-content stack entry for ISO 32000-2:2020 §14.9.4 `/ActualText` replacement
+#[derive(Debug, Clone)]
+enum MarkedContentEntry {
+    Other,
+    ActualText {
+        text: String,
+        bbox: Option<[f32; 4]>,
+        font_size: f32,
+        font_name: String,
+    },
+}
+
 /// Content stream interpreter that extracts 2D atomic spans and vector drawings
 pub struct ContentInterpreter<'a> {
     page_num: usize,
@@ -93,6 +105,7 @@ pub struct ContentInterpreter<'a> {
     fonts: &'a HashMap<String, PdfFont>,
     state_stack: Vec<GraphicsState>,
     current_state: GraphicsState,
+    marked_content_stack: Vec<MarkedContentEntry>,
 
     // Text state
     text_matrix: Matrix,
@@ -100,6 +113,9 @@ pub struct ContentInterpreter<'a> {
     current_font_name: String,
     current_font_size: f32,
     text_leading: f32,
+    char_spacing: f32,
+    word_spacing: f32,
+    horiz_scaling: f32,
     pub in_text: bool,
 
     // Vector path state
@@ -137,11 +153,15 @@ impl<'a> ContentInterpreter<'a> {
             fonts,
             state_stack: Vec::new(),
             current_state: GraphicsState::new(),
+            marked_content_stack: Vec::new(),
             text_matrix: Matrix::identity(),
             text_line_matrix: Matrix::identity(),
             current_font_name: String::new(),
             current_font_size: 10.0,
             text_leading: 0.0,
+            char_spacing: 0.0,
+            word_spacing: 0.0,
+            horiz_scaling: 100.0,
             in_text: false,
             current_path: Vec::new(),
             current_point: (0.0, 0.0),
@@ -179,6 +199,28 @@ impl<'a> ContentInterpreter<'a> {
                     operands.push(Token::Keyword(format!("__ARR_LEN_{}", arr_tokens.len())));
                     for t in arr_tokens {
                         operands.push(t);
+                    }
+                }
+                Token::DictOpen => {
+                    // Collect inline property dictionary tokens (e.g., for BDC /ActualText)
+                    // without letting inner `true`/`false`/`null` keywords prematurely execute
+                    operands.push(Token::DictOpen);
+                    let mut depth = 1usize;
+                    while let Some(sub_tok) = lexer.next_token()? {
+                        match sub_tok {
+                            Token::DictOpen => {
+                                depth = depth.saturating_add(1);
+                                operands.push(Token::DictOpen);
+                            }
+                            Token::DictClose => {
+                                operands.push(Token::DictClose);
+                                depth = depth.saturating_sub(1);
+                                if depth == 0 {
+                                    break;
+                                }
+                            }
+                            other => operands.push(other),
+                        }
                     }
                 }
                 other => {
@@ -261,6 +303,22 @@ impl<'a> ContentInterpreter<'a> {
                     self.text_leading = get_num(arg);
                 }
             }
+            "Tc" => {
+                if let Some(arg) = args.last() {
+                    self.char_spacing = get_num(arg);
+                }
+            }
+            "Tw" => {
+                if let Some(arg) = args.last() {
+                    self.word_spacing = get_num(arg);
+                }
+            }
+            "Tz" => {
+                if let Some(arg) = args.last() {
+                    let tz = get_num(arg);
+                    self.horiz_scaling = if tz.abs() > 0.001 { tz } else { 100.0 };
+                }
+            }
             "Tm" => {
                 if args.len() >= 6 {
                     let a = get_num(&args[args.len() - 6]);
@@ -304,19 +362,20 @@ impl<'a> ContentInterpreter<'a> {
                 }
             }
             "TJ" => {
+                let tz_scale = self.horiz_scaling / 100.0;
                 for item in args {
                     match item {
                         Token::LiteralString(bytes) | Token::HexString(bytes) => {
                             self.emit_text_string(bytes);
                         }
                         Token::Integer(k) => {
-                            let kern = (*k as f32) / 1000.0 * self.current_font_size;
+                            let kern = (*k as f32) / 1000.0 * self.current_font_size * tz_scale;
                             let kern = if kern.is_finite() { kern } else { 0.0 };
                             let delta = Matrix::new(1.0, 0.0, 0.0, 1.0, -kern, 0.0);
                             self.text_matrix = delta.concat(&self.text_matrix);
                         }
                         Token::Real(k) => {
-                            let kern = (*k as f32) / 1000.0 * self.current_font_size;
+                            let kern = (*k as f32) / 1000.0 * self.current_font_size * tz_scale;
                             let kern = if kern.is_finite() { kern } else { 0.0 };
                             let delta = Matrix::new(1.0, 0.0, 0.0, 1.0, -kern, 0.0);
                             self.text_matrix = delta.concat(&self.text_matrix);
@@ -331,6 +390,77 @@ impl<'a> ContentInterpreter<'a> {
                 self.text_matrix = self.text_line_matrix;
                 if let Some(Token::LiteralString(bytes) | Token::HexString(bytes)) = args.last() {
                     self.emit_text_string(bytes);
+                }
+            }
+            "\"" => {
+                if args.len() >= 3 {
+                    self.word_spacing = get_num(&args[args.len() - 3]);
+                    self.char_spacing = get_num(&args[args.len() - 2]);
+                }
+                let trans = Matrix::new(1.0, 0.0, 0.0, 1.0, 0.0, -self.text_leading);
+                self.text_line_matrix = trans.concat(&self.text_line_matrix);
+                self.text_matrix = self.text_line_matrix;
+                if let Some(Token::LiteralString(bytes) | Token::HexString(bytes)) = args.last() {
+                    self.emit_text_string(bytes);
+                }
+            }
+
+            // --- Marked-content operators (ISO 32000-2:2020 §14.6 / §14.9.4 /ActualText) ---
+            "BMC" => {
+                if self.marked_content_stack.len() < MAX_GRAPHICS_STATE_DEPTH {
+                    self.marked_content_stack.push(MarkedContentEntry::Other);
+                }
+            }
+            "BDC" => {
+                if self.marked_content_stack.len() < MAX_GRAPHICS_STATE_DEPTH {
+                    let mut actual_text: Option<String> = None;
+                    for window in args.windows(2) {
+                        if let Token::Name(ref key) = window[0] {
+                            if key == "ActualText" {
+                                if let Token::LiteralString(ref bytes)
+                                | Token::HexString(ref bytes) = window[1]
+                                {
+                                    actual_text = Some(super::font::decode_pdf_text_string(bytes));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if let Some(text) = actual_text {
+                        self.marked_content_stack
+                            .push(MarkedContentEntry::ActualText {
+                                text,
+                                bbox: None,
+                                font_size: self.current_font_size,
+                                font_name: self.current_font_name.clone(),
+                            });
+                    } else {
+                        self.marked_content_stack.push(MarkedContentEntry::Other);
+                    }
+                }
+            }
+            "EMC" => {
+                if let Some(MarkedContentEntry::ActualText {
+                    text,
+                    bbox,
+                    font_size,
+                    font_name,
+                }) = self.marked_content_stack.pop()
+                {
+                    let has_outer_actual_text = self
+                        .marked_content_stack
+                        .iter()
+                        .any(|e| matches!(e, MarkedContentEntry::ActualText { .. }));
+                    if !has_outer_actual_text {
+                        let [rx0, ry0, rx1, ry1] = bbox.unwrap_or_else(|| {
+                            let eff = self.text_matrix.concat(&self.current_state.ctm);
+                            let (px, py) = eff.transform_point(0.0, 0.0);
+                            let x = round_coord(px - self.origin_x);
+                            let y = round_coord(self.max_y - py);
+                            [x, round_coord(y - font_size), x, y]
+                        });
+                        self.push_or_coalesce_span(rx0, ry0, rx1, ry1, font_size, &font_name, text);
+                    }
                 }
             }
 
@@ -458,8 +588,16 @@ impl<'a> ContentInterpreter<'a> {
         }
 
         let combined_text: String = decoded_glyphs.iter().map(|(s, _)| s.as_str()).collect();
-        let total_adv: f32 = decoded_glyphs.iter().map(|(_, w)| *w).sum();
-        let word_width = total_adv * self.current_font_size;
+        // ISO 32000-2:2020 §9.4.4 text positioning formula:
+        // tx = ((w0 - Tj/1000) * Tfs + Tc + Tw) * Th
+        let tz_scale = self.horiz_scaling / 100.0;
+        let word_width: f32 = decoded_glyphs
+            .iter()
+            .map(|(s, w)| {
+                let tw = if s == " " { self.word_spacing } else { 0.0 };
+                (*w * self.current_font_size + self.char_spacing + tw) * tz_scale
+            })
+            .sum();
 
         let eff_matrix = self.text_matrix.concat(&self.current_state.ctm);
 
@@ -474,62 +612,108 @@ impl<'a> ContentInterpreter<'a> {
         let y0 = (self.max_y - tr_y).min(self.max_y - bl_y);
         let y1 = (self.max_y - tr_y).max(self.max_y - bl_y);
 
-        // Only emit spans with non-whitespace text to avoid emitting blank bounding boxes
-        let trimmed = combined_text.trim_matches(|c: char| c.is_whitespace() || c == '\u{00A0}');
-        if !trimmed.is_empty() {
-            let rx0 = round_coord(x0);
-            let ry0 = round_coord(y0);
-            let rx1 = round_coord(x1);
-            let ry1 = round_coord(y1);
+        let rx0 = round_coord(x0);
+        let ry0 = round_coord(y0);
+        let rx1 = round_coord(x1);
+        let ry1 = round_coord(y1);
 
-            let mut merged = false;
-            if let Some(last) = self.spans.last_mut() {
-                let same_page = last.page == self.page_num;
-                let same_baseline = (ry0 - last.y0).abs() <= 3.0;
-                let same_font_size = (self.current_font_size - last.font_size).abs() <= 1.0;
-                let gap = rx0 - last.x1;
-
-                let max_overlap = (last.font_size * 0.20).max(1.5);
-                let char_spacing_limit = (last.font_size * 0.09).clamp(0.4, 1.35);
-                let ends_with_hyphen = last.text.ends_with('-') || last.text.ends_with('/');
-                let allowed_limit = if ends_with_hyphen {
-                    char_spacing_limit.max(1.2)
-                } else {
-                    char_spacing_limit
-                };
-                let has_explicit_space = last.text.ends_with(' ') || combined_text.starts_with(' ');
-
-                if same_page
-                    && same_baseline
-                    && same_font_size
-                    && !has_explicit_space
-                    && gap >= -max_overlap
-                    && gap <= allowed_limit
-                {
-                    last.text.push_str(&combined_text);
-                    last.x1 = last.x1.max(rx1);
-                    last.y0 = last.y0.min(ry0);
-                    last.y1 = last.y1.max(ry1);
-                    merged = true;
+        // If inside an active /ActualText marked-content block (ISO 32000-2:2020 §14.9.4),
+        // accumulate the bounding box onto the innermost ActualText entry and suppress raw glyphs.
+        let mut suppressed_by_actual_text = false;
+        for entry in self.marked_content_stack.iter_mut().rev() {
+            if let MarkedContentEntry::ActualText {
+                bbox,
+                font_size,
+                font_name,
+                ..
+            } = entry
+            {
+                if bbox.is_none() {
+                    *font_size = self.current_font_size;
+                    *font_name = self.current_font_name.clone();
+                    *bbox = Some([rx0, ry0, rx1, ry1]);
+                } else if let Some(b) = bbox {
+                    b[0] = b[0].min(rx0);
+                    b[1] = b[1].min(ry0);
+                    b[2] = b[2].max(rx1);
+                    b[3] = b[3].max(ry1);
                 }
+                suppressed_by_actual_text = true;
+                break;
             }
+        }
 
-            if !merged {
-                self.spans.push(RawCoordSpan {
-                    page: self.page_num,
-                    x0: rx0,
-                    y0: ry0,
-                    x1: rx1,
-                    y1: ry1,
-                    font_size: self.current_font_size,
-                    font_name: self.current_font_name.clone(),
-                    text: combined_text,
-                });
-            }
+        if !suppressed_by_actual_text {
+            let font_size = self.current_font_size;
+            let font_name = self.current_font_name.clone();
+            self.push_or_coalesce_span(rx0, ry0, rx1, ry1, font_size, &font_name, combined_text);
         }
 
         let advance_matrix = Matrix::new(1.0, 0.0, 0.0, 1.0, word_width, 0.0);
         self.text_matrix = advance_matrix.concat(&self.text_matrix);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn push_or_coalesce_span(
+        &mut self,
+        rx0: f32,
+        ry0: f32,
+        rx1: f32,
+        ry1: f32,
+        font_size: f32,
+        font_name: &str,
+        combined_text: String,
+    ) {
+        // Only emit spans with non-whitespace text to avoid emitting blank bounding boxes
+        let trimmed = combined_text.trim_matches(|c: char| c.is_whitespace() || c == '\u{00A0}');
+        if trimmed.is_empty() {
+            return;
+        }
+
+        let mut merged = false;
+        if let Some(last) = self.spans.last_mut() {
+            let same_page = last.page == self.page_num;
+            let same_baseline = (ry0 - last.y0).abs() <= 3.0;
+            let same_font_size = (font_size - last.font_size).abs() <= 1.0;
+            let gap = rx0 - last.x1;
+
+            let max_overlap = (last.font_size * 0.20).max(1.5);
+            let char_spacing_limit = (last.font_size * 0.09).clamp(0.4, 1.35);
+            let ends_with_hyphen = last.text.ends_with('-') || last.text.ends_with('/');
+            let allowed_limit = if ends_with_hyphen {
+                char_spacing_limit.max(1.2)
+            } else {
+                char_spacing_limit
+            };
+            let has_explicit_space = last.text.ends_with(' ') || combined_text.starts_with(' ');
+
+            if same_page
+                && same_baseline
+                && same_font_size
+                && !has_explicit_space
+                && gap >= -max_overlap
+                && gap <= allowed_limit
+            {
+                last.text.push_str(&combined_text);
+                last.x1 = last.x1.max(rx1);
+                last.y0 = last.y0.min(ry0);
+                last.y1 = last.y1.max(ry1);
+                merged = true;
+            }
+        }
+
+        if !merged {
+            self.spans.push(RawCoordSpan {
+                page: self.page_num,
+                x0: rx0,
+                y0: ry0,
+                x1: rx1,
+                y1: ry1,
+                font_size,
+                font_name: font_name.to_string(),
+                text: combined_text,
+            });
+        }
     }
 
     fn finish_drawing(&mut self, dtype: &str, is_stroke: bool, is_fill: bool) {
@@ -808,5 +992,56 @@ ET\n";
         assert_eq!(interp.spans[1].text, "Voo");
         assert!((interp.spans[0].x0 - 72.0).abs() < 0.1);
         assert!((interp.spans[0].x1 - 111.0).abs() < 0.2);
+    }
+
+    #[test]
+    fn test_pdf20_actual_text_marked_content_bdc_emc() {
+        // ISO 32000-2:2020 §14.9.4: /Span << /ActualText (ffi) >> BDC replaces PUA glyph inside "office"
+        let stream = b"BT\n\
+/F1 12 Tf\n\
+1 0 0 1 72 700 Tm\n\
+(o) Tj\n\
+/Span << /MCID 0 /ActualText (ffi) >> BDC\n\
+(?) Tj\n\
+EMC\n\
+(ce) Tj\n\
+ET\n";
+
+        let mut fonts = HashMap::new();
+        let f1 = PdfFont::new("F1".into());
+        fonts.insert("F1".into(), f1);
+
+        let mut interp = ContentInterpreter::new(1, 842.0, &fonts);
+        interp.interpret(stream).unwrap();
+
+        assert_eq!(interp.spans.len(), 1);
+        assert_eq!(interp.spans[0].text, "office");
+    }
+
+    #[test]
+    fn test_text_state_operators_tc_tw_tz_and_quote() {
+        // ISO 32000-2:2020 §9.3-9.4: Tc, Tw, Tz, and " operator
+        let stream = b"BT\n\
+/F1 12 Tf\n\
+14 TL\n\
+1 0 0 1 72 700 Tm\n\
+1.5 Tc 0.5 Tw 100 Tz\n\
+(A) Tj\n\
+9.5 0 Td (B) Tj\n\
+2.0 0.0 (NextLine) \"\n\
+ET\n";
+
+        let mut fonts = HashMap::new();
+        let f1 = PdfFont::new("F1".into());
+        fonts.insert("F1".into(), f1);
+
+        let mut interp = ContentInterpreter::new(1, 842.0, &fonts);
+        interp.interpret(stream).unwrap();
+
+        assert_eq!(interp.spans.len(), 2);
+        // 'A' at 12pt Helvetica is 8.0pt + 1.5pt Tc = 9.5pt advance, so 9.5 Td 'B' coalesces into "AB"
+        assert_eq!(interp.spans[0].text, "AB");
+        assert_eq!(interp.spans[1].text, "NextLine");
+        assert!(interp.spans[1].y0 > interp.spans[0].y0);
     }
 }

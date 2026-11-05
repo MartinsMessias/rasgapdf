@@ -14,6 +14,7 @@ pub struct PdfFont {
     pub ascent: f32,
     pub descent: f32,
     pub to_unicode: HashMap<u32, String>,
+    pub encoding_map: HashMap<u32, String>,
     pub cid_widths: HashMap<u32, f32>,
 }
 
@@ -30,6 +31,7 @@ impl PdfFont {
             ascent: 0.95,
             descent: -0.25,
             to_unicode: HashMap::new(),
+            encoding_map: HashMap::new(),
             cid_widths: HashMap::new(),
         }
     }
@@ -172,9 +174,262 @@ impl PdfFont {
         }
     }
 
-    /// Converts a raw character code to Unicode string via /ToUnicode CMap, or fallback to Windows-1252 / Latin-1 / ASCII
+    /// Applies a named base encoding (e.g., `/MacRomanEncoding` or `/WinAnsiEncoding`) per ISO 32000-2 §9.6.5
+    pub fn apply_base_encoding(&mut self, encoding_name: &str) {
+        if encoding_name == "MacRomanEncoding" {
+            for &(code, s) in MAC_ROMAN_HIGH_BYTES {
+                self.encoding_map.insert(code as u32, s.to_string());
+            }
+        }
+    }
+
+    /// Applies an entry from a font `/Encoding` `/Differences` array per ISO 32000-2 §9.6.5.2
+    pub fn apply_differences_entry(&mut self, code: u32, glyph_name: &str) {
+        if let Some(mapped) = Self::resolve_glyph_name(glyph_name) {
+            self.encoding_map.insert(code, mapped);
+        }
+    }
+
+    /// Resolves an Adobe Glyph List (AGL) or `uniXXXX`/`uXXXX` glyph name to its Unicode string
+    pub fn resolve_glyph_name(raw_name: &str) -> Option<String> {
+        let base = raw_name.split('.').next().unwrap_or(raw_name);
+        if base.is_empty() || base == ".notdef" {
+            return None;
+        }
+
+        // Single ASCII letter or digit
+        if base.len() == 1 {
+            let b = base.as_bytes()[0];
+            if b.is_ascii_alphanumeric() {
+                return Some(base.to_string());
+            }
+        }
+
+        // uniXXXX (one or more 4-hex-digit UTF-16 code units)
+        if let Some(hex_part) = base.strip_prefix("uni") {
+            if !hex_part.is_empty()
+                && hex_part.len() % 4 == 0
+                && hex_part.bytes().all(|b| b.is_ascii_hexdigit())
+            {
+                let mut u16s = Vec::with_capacity(hex_part.len() / 4);
+                for chunk in hex_part.as_bytes().chunks_exact(4) {
+                    if let Ok(s) = std::str::from_utf8(chunk) {
+                        if let Ok(v) = u16::from_str_radix(s, 16) {
+                            u16s.push(v);
+                        }
+                    }
+                }
+                if let Ok(decoded) = String::from_utf16(&u16s) {
+                    if !decoded.is_empty() {
+                        return Some(decoded);
+                    }
+                }
+            }
+        }
+
+        // uXXXX .. uXXXXXX scalar value
+        if let Some(hex_part) = base.strip_prefix('u') {
+            if (4..=6).contains(&hex_part.len()) && hex_part.bytes().all(|b| b.is_ascii_hexdigit())
+            {
+                if let Ok(code) = u32::from_str_radix(hex_part, 16) {
+                    if let Some(ch) = char::from_u32(code) {
+                        return Some(ch.to_string());
+                    }
+                }
+            }
+        }
+
+        let mapped = match base {
+            // Ligatures
+            "fi" => "fi",
+            "fl" => "fl",
+            "ff" => "ff",
+            "ffi" => "ffi",
+            "ffl" => "ffl",
+            "AE" => "Æ",
+            "ae" => "æ",
+            "OE" => "Œ",
+            "oe" => "œ",
+            "IJ" => "IJ",
+            "ij" => "ij",
+            // Whitespace & ASCII punctuation / digits
+            "space" => " ",
+            "nbspace" | "nonbreakingspace" => "\u{00A0}",
+            "exclam" => "!",
+            "quotedbl" => "\"",
+            "numbersign" => "#",
+            "dollar" => "$",
+            "percent" => "%",
+            "ampersand" => "&",
+            "quotesingle" => "'",
+            "parenleft" => "(",
+            "parenright" => ")",
+            "asterisk" => "*",
+            "plus" => "+",
+            "comma" => ",",
+            "hyphen" | "minus" => "-",
+            "sfthyphen" | "softhyphen" => "\u{00AD}",
+            "period" => ".",
+            "slash" => "/",
+            "zero" => "0",
+            "one" => "1",
+            "two" => "2",
+            "three" => "3",
+            "four" => "4",
+            "five" => "5",
+            "six" => "6",
+            "seven" => "7",
+            "eight" => "8",
+            "nine" => "9",
+            "colon" => ":",
+            "semicolon" => ";",
+            "less" => "<",
+            "equal" => "=",
+            "greater" => ">",
+            "question" => "?",
+            "at" => "@",
+            "bracketleft" => "[",
+            "backslash" => "\\",
+            "bracketright" => "]",
+            "asciicircum" => "^",
+            "underscore" => "_",
+            "grave" => "`",
+            "braceleft" => "{",
+            "bar" | "brokenbar" => "|",
+            "braceright" => "}",
+            "asciitilde" => "~",
+            // Typography & Symbols
+            "bullet" => "•",
+            "endash" => "–",
+            "emdash" => "—",
+            "quoteleft" => "‘",
+            "quoteright" => "’",
+            "quotedblleft" => "“",
+            "quotedblright" => "”",
+            "quotesinglbase" => "‚",
+            "quotedblbase" => "„",
+            "guillemotleft" => "«",
+            "guillemotright" => "»",
+            "guilsinglleft" => "‹",
+            "guilsinglright" => "›",
+            "ellipsis" => "…",
+            "dagger" => "†",
+            "daggerdbl" => "‡",
+            "perthousand" => "‰",
+            "Euro" | "euro" => "€",
+            "sterling" => "£",
+            "yen" => "¥",
+            "cent" => "¢",
+            "currency" => "¤",
+            "florin" => "ƒ",
+            "copyright" => "©",
+            "registered" => "®",
+            "trademark" => "™",
+            "degree" => "°",
+            "plusminus" => "±",
+            "multiply" => "×",
+            "divide" => "÷",
+            "section" => "§",
+            "paragraph" => "¶",
+            "ordfeminine" => "ª",
+            "ordmasculine" => "º",
+            "exclamdown" => "¡",
+            "questiondown" => "¿",
+            "logicalnot" => "¬",
+            "mu" | "micro" => "µ",
+            "periodcentered" | "middot" => "·",
+            "onesuperior" => "¹",
+            "twosuperior" => "²",
+            "threesuperior" => "³",
+            "onequarter" => "¼",
+            "onehalf" => "½",
+            "threequarters" => "¾",
+            // Latin-1 & Latin Extended Accents
+            "Agrave" => "À",
+            "Aacute" => "Á",
+            "Acircumflex" => "Â",
+            "Atilde" => "Ã",
+            "Adieresis" => "Ä",
+            "Aring" => "Å",
+            "Ccedilla" => "Ç",
+            "Egrave" => "È",
+            "Eacute" => "É",
+            "Ecircumflex" => "Ê",
+            "Edieresis" => "Ë",
+            "Igrave" => "Ì",
+            "Iacute" => "Í",
+            "Icircumflex" => "Î",
+            "Idieresis" => "Ï",
+            "Eth" => "Ð",
+            "Ntilde" => "Ñ",
+            "Ograve" => "Ò",
+            "Oacute" => "Ó",
+            "Ocircumflex" => "Ô",
+            "Otilde" => "Õ",
+            "Odieresis" => "Ö",
+            "Oslash" => "Ø",
+            "Ugrave" => "Ù",
+            "Uacute" => "Ú",
+            "Ucircumflex" => "Û",
+            "Udieresis" => "Ü",
+            "Yacute" => "Ý",
+            "Ydieresis" => "Ÿ",
+            "Thorn" => "Þ",
+            "germandbls" => "ß",
+            "agrave" => "à",
+            "aacute" => "á",
+            "acircumflex" => "â",
+            "atilde" => "ã",
+            "adieresis" => "ä",
+            "aring" => "å",
+            "ccedilla" => "ç",
+            "egrave" => "è",
+            "eacute" => "é",
+            "ecircumflex" => "ê",
+            "edieresis" => "ë",
+            "igrave" => "ì",
+            "iacute" => "í",
+            "icircumflex" => "î",
+            "idieresis" => "ï",
+            "eth" => "ð",
+            "ntilde" => "ñ",
+            "ograve" => "ò",
+            "oacute" => "ó",
+            "ocircumflex" => "ô",
+            "otilde" => "õ",
+            "odieresis" => "ö",
+            "oslash" => "ø",
+            "ugrave" => "ù",
+            "uacute" => "ú",
+            "ucircumflex" => "û",
+            "udieresis" => "ü",
+            "yacute" => "ý",
+            "thorn" => "þ",
+            "ydieresis" => "ÿ",
+            "Scaron" => "Š",
+            "scaron" => "š",
+            "Zcaron" => "Ž",
+            "zcaron" => "ž",
+            "Lslash" => "Ł",
+            "lslash" => "ł",
+            "dotlessi" => "ı",
+            "circumflex" => "ˆ",
+            "tilde" => "˜",
+            "macron" => "¯",
+            "acute" => "´",
+            "dieresis" => "¨",
+            "cedilla" => "¸",
+            _ => return None,
+        };
+        Some(mapped.to_string())
+    }
+
+    /// Converts a raw character code to Unicode string via /ToUnicode CMap, /Encoding (/Differences or BaseEncoding), or fallback to Windows-1252 / Latin-1 / ASCII per ISO 32000-2:2020 §9.10.2
     pub fn decode_char(&self, char_code: u32) -> String {
         if let Some(s) = self.to_unicode.get(&char_code) {
+            return s.clone();
+        }
+        if let Some(s) = self.encoding_map.get(&char_code) {
             return s.clone();
         }
         if char_code < 256 {
@@ -234,9 +489,7 @@ impl PdfFont {
                     if let Ok(Some(dst_tok)) = lexer.next_token() {
                         let dst_str = match dst_tok {
                             Token::HexString(dst_bytes) => decode_utf16_be(&dst_bytes),
-                            Token::LiteralString(dst_bytes) => {
-                                String::from_utf8_lossy(&dst_bytes).to_string()
-                            }
+                            Token::LiteralString(dst_bytes) => decode_pdf_text_string(&dst_bytes),
                             _ => continue,
                         };
                         let src_code = read_code(&src_bytes);
@@ -282,10 +535,18 @@ impl PdfFont {
                                 if t == Token::ArrayClose {
                                     break;
                                 }
-                                if let Token::HexString(db) = t {
-                                    let s = decode_utf16_be(&db);
-                                    self.to_unicode.insert(cur, s);
-                                    cur += 1;
+                                match t {
+                                    Token::HexString(db) => {
+                                        let s = decode_utf16_be(&db);
+                                        self.to_unicode.insert(cur, s);
+                                        cur += 1;
+                                    }
+                                    Token::LiteralString(db) => {
+                                        let s = decode_pdf_text_string(&db);
+                                        self.to_unicode.insert(cur, s);
+                                        cur += 1;
+                                    }
+                                    _ => {}
                                 }
                             }
                         }
@@ -307,9 +568,31 @@ fn read_code(bytes: &[u8]) -> u32 {
     code
 }
 
+/// Decodes a PDF 2.0 (ISO 32000-2:2020 §7.9.2.2) text string:
+/// - `0xEF 0xBB 0xBF` prefix -> UTF-8 encoded string (new in PDF 2.0)
+/// - `0xFE 0xFF` prefix -> UTF-16BE encoded string
+/// - Otherwise valid UTF-8 or PDFDocEncoding / Windows-1252 fallback
+pub fn decode_pdf_text_string(bytes: &[u8]) -> String {
+    if let Some(rest) = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
+        return String::from_utf8_lossy(rest).into_owned();
+    }
+    if let Some(rest) = bytes.strip_prefix(&[0xFE, 0xFF]) {
+        return decode_utf16_be(rest);
+    }
+    if let Ok(utf8_str) = std::str::from_utf8(bytes) {
+        return utf8_str.to_string();
+    }
+    bytes.iter().map(|&b| PdfFont::cp1252_to_char(b)).collect()
+}
+
 fn decode_utf16_be(bytes: &[u8]) -> String {
-    if bytes.len() % 2 == 0 {
-        let u16s: Vec<u16> = bytes
+    // ISO 32000-2:2020 §7.9.2.2: Support UTF-8 BOM (EF BB BF) and UTF-16BE BOM (FE FF)
+    if let Some(rest) = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
+        return String::from_utf8_lossy(rest).into_owned();
+    }
+    let payload = bytes.strip_prefix(&[0xFE, 0xFF]).unwrap_or(bytes);
+    if payload.len() % 2 == 0 {
+        let u16s: Vec<u16> = payload
             .chunks_exact(2)
             .map(|chunk| ((chunk[0] as u16) << 8) | (chunk[1] as u16))
             .collect();
@@ -317,8 +600,122 @@ fn decode_utf16_be(bytes: &[u8]) -> String {
             return s;
         }
     }
-    String::from_utf8_lossy(bytes).to_string()
+    String::from_utf8_lossy(payload).to_string()
 }
+
+static MAC_ROMAN_HIGH_BYTES: &[(u8, &str)] = &[
+    (0x80, "Ä"),
+    (0x81, "Å"),
+    (0x82, "Ç"),
+    (0x83, "É"),
+    (0x84, "Ñ"),
+    (0x85, "Ö"),
+    (0x86, "Ü"),
+    (0x87, "á"),
+    (0x88, "à"),
+    (0x89, "â"),
+    (0x8A, "ä"),
+    (0x8B, "ã"),
+    (0x8C, "å"),
+    (0x8D, "ç"),
+    (0x8E, "é"),
+    (0x8F, "è"),
+    (0x90, "ê"),
+    (0x91, "ë"),
+    (0x92, "í"),
+    (0x93, "ì"),
+    (0x94, "î"),
+    (0x95, "ï"),
+    (0x96, "ñ"),
+    (0x97, "ó"),
+    (0x98, "ò"),
+    (0x99, "ô"),
+    (0x9A, "ö"),
+    (0x9B, "õ"),
+    (0x9C, "ú"),
+    (0x9D, "ù"),
+    (0x9E, "û"),
+    (0x9F, "ü"),
+    (0xA0, "†"),
+    (0xA1, "°"),
+    (0xA2, "¢"),
+    (0xA3, "£"),
+    (0xA4, "§"),
+    (0xA5, "•"),
+    (0xA6, "¶"),
+    (0xA7, "ß"),
+    (0xA8, "®"),
+    (0xA9, "©"),
+    (0xAA, "™"),
+    (0xAB, "´"),
+    (0xAC, "¨"),
+    (0xAE, "Æ"),
+    (0xAF, "Ø"),
+    (0xB4, "¥"),
+    (0xB5, "µ"),
+    (0xBB, "ª"),
+    (0xBC, "º"),
+    (0xBE, "æ"),
+    (0xBF, "ø"),
+    (0xC0, "¿"),
+    (0xC1, "¡"),
+    (0xC2, "¬"),
+    (0xC4, "ƒ"),
+    (0xC7, "«"),
+    (0xC8, "»"),
+    (0xC9, "…"),
+    (0xCA, "\u{00A0}"),
+    (0xCB, "À"),
+    (0xCC, "Ã"),
+    (0xCD, "Õ"),
+    (0xCE, "Œ"),
+    (0xCF, "œ"),
+    (0xD0, "–"),
+    (0xD1, "—"),
+    (0xD2, "“"),
+    (0xD3, "”"),
+    (0xD4, "‘"),
+    (0xD5, "’"),
+    (0xD6, "÷"),
+    (0xD8, "ÿ"),
+    (0xD9, "Ÿ"),
+    (0xDA, "/"),
+    (0xDB, "€"),
+    (0xDC, "‹"),
+    (0xDD, "›"),
+    (0xDE, "fi"),
+    (0xDF, "fl"),
+    (0xE0, "‡"),
+    (0xE1, "·"),
+    (0xE2, "‚"),
+    (0xE3, "„"),
+    (0xE4, "‰"),
+    (0xE5, "Â"),
+    (0xE6, "Ê"),
+    (0xE7, "Á"),
+    (0xE8, "Ë"),
+    (0xE9, "È"),
+    (0xEA, "Í"),
+    (0xEB, "Î"),
+    (0xEC, "Ï"),
+    (0xED, "Ì"),
+    (0xEE, "Ó"),
+    (0xEF, "Ô"),
+    (0xF1, "Ò"),
+    (0xF2, "Ú"),
+    (0xF3, "Û"),
+    (0xF4, "Ù"),
+    (0xF5, "ı"),
+    (0xF6, "ˆ"),
+    (0xF7, "˜"),
+    (0xF8, "¯"),
+    (0xFA, "˙"),
+    (0xFB, "˚"),
+    (0xFC, "¸"),
+    (0xFD, "˝"),
+    (0xFE, "˛"),
+    (0xFF, "ˇ"),
+];
 
 #[cfg(test)]
 mod tests {
@@ -344,6 +741,37 @@ endcmap\n";
         assert_eq!(font.decode_char(0x30), "0");
         assert_eq!(font.decode_char(0x35), "5");
         assert_eq!(font.decode_char(0x39), "9");
+    }
+
+    #[test]
+    fn test_pdf20_utf8_and_utf16be_bom_text_strings() {
+        // ISO 32000-2:2020 §7.9.2.2 UTF-8 BOM (EF BB BF) + "São Paulo"
+        let mut utf8_bom = vec![0xEF, 0xBB, 0xBF];
+        utf8_bom.extend_from_slice("São Paulo".as_bytes());
+        assert_eq!(decode_pdf_text_string(&utf8_bom), "São Paulo");
+
+        // ISO 32000-2:2020 §7.9.2.2 UTF-16BE BOM (FE FF) + "Ação"
+        let utf16_bom = vec![0xFE, 0xFF, 0x00, 0x41, 0x00, 0xE7, 0x00, 0xE3, 0x00, 0x6F];
+        assert_eq!(decode_pdf_text_string(&utf16_bom), "Ação");
+        assert_eq!(decode_utf16_be(&utf16_bom), "Ação");
+    }
+
+    #[test]
+    fn test_font_encoding_differences_and_mac_roman() {
+        let mut font = PdfFont::new("F1".into());
+        font.apply_base_encoding("MacRomanEncoding");
+        assert_eq!(font.decode_char(0x8E), "é");
+        assert_eq!(font.decode_char(0xDE), "fi");
+
+        // /Differences overrides BaseEncoding
+        font.apply_differences_entry(1, "fi");
+        font.apply_differences_entry(2, "eacute.sc");
+        font.apply_differences_entry(3, "uni00E3");
+        font.apply_differences_entry(4, "Euro");
+        assert_eq!(font.decode_char(1), "fi");
+        assert_eq!(font.decode_char(2), "é");
+        assert_eq!(font.decode_char(3), "ã");
+        assert_eq!(font.decode_char(4), "€");
     }
 }
 

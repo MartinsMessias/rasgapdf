@@ -56,6 +56,21 @@ impl XRefTable {
                         if tr_kw == "trailer" {
                             if let Ok(Some(PdfObject::Dictionary(tr_dict))) = parser.parse_object()
                             {
+                                // ISO 32000-2:2020 §7.5.8.4: Hybrid-reference files may include
+                                // /XRefStm in an ASCII trailer pointing to a supplemental XRef stream
+                                // containing compressed objects (/Type /ObjStm).
+                                if let Some(xref_stm_offset) = tr_dict
+                                    .get("XRefStm")
+                                    .and_then(|x| x.as_i64())
+                                    .filter(|&i| i >= 0 && (i as usize) < data.len())
+                                    .map(|i| i as usize)
+                                {
+                                    if visited_offsets.insert(xref_stm_offset) {
+                                        let _ =
+                                            parse_xref_stream_at(data, xref_stm_offset, &mut table);
+                                    }
+                                }
+
                                 // Chain previous xref table if /Prev exists
                                 let prev = tr_dict
                                     .get("Prev")
@@ -73,32 +88,14 @@ impl XRefTable {
                     break;
                 }
                 Some(Token::Integer(_obj_num)) => {
-                    // PDF 1.5+ Cross-Reference Stream: obj_num gen obj << /Type /XRef ... >> stream
-                    let _gen_num = match parser.next_token()? {
-                        Some(Token::Integer(g)) if g >= 0 => g as u16,
-                        _ => return Err("Expected generation number in XRef stream".into()),
-                    };
-                    match parser.next_token()? {
-                        Some(Token::Keyword(ref k)) if k == "obj" => {}
-                        _ => return Err("Expected 'obj' in XRef stream".into()),
-                    };
-
-                    let xref_stream_obj = match parser.parse_object()? {
-                        Some(PdfObject::Stream(s)) => s,
-                        _ => return Err("Expected stream for XRef stream object".into()),
-                    };
-
-                    let decompressed =
-                        decompress_stream(&xref_stream_obj.data, &xref_stream_obj.dict)?;
-                    read_binary_xref_stream(&decompressed, &xref_stream_obj.dict, &mut table)?;
-
-                    let prev = xref_stream_obj
-                        .dict
+                    // PDF 1.5+ / PDF 2.0 Cross-Reference Stream: obj_num gen obj << /Type /XRef ... >> stream
+                    let stream_dict = parse_xref_stream_at(data, offset, &mut table)?;
+                    let prev = stream_dict
                         .get("Prev")
                         .and_then(|p| p.as_i64())
                         .filter(|&i| i >= 0 && (i as usize) < data.len())
                         .map(|i| i as usize);
-                    for (k, v) in xref_stream_obj.dict {
+                    for (k, v) in stream_dict {
                         table.trailer.entry(k).or_insert(v);
                     }
                     current_offset = prev;
@@ -263,6 +260,36 @@ fn read_ascii_xref_subsections(parser: &mut Parser, table: &mut XRefTable) -> Re
     }
 
     Ok(())
+}
+
+/// Parses a PDF 1.5+ / PDF 2.0 Cross-Reference Stream object (`num gen obj << /Type /XRef ... >> stream`) at `offset`
+fn parse_xref_stream_at(
+    data: &[u8],
+    offset: usize,
+    table: &mut XRefTable,
+) -> Result<BTreeMap<String, PdfObject>, String> {
+    let mut parser = Parser::with_pos(data, offset);
+    match parser.next_token()? {
+        Some(Token::Integer(n)) if n >= 0 => {}
+        _ => return Err("Expected object number in XRef stream".into()),
+    }
+    match parser.next_token()? {
+        Some(Token::Integer(g)) if g >= 0 => {}
+        _ => return Err("Expected generation number in XRef stream".into()),
+    }
+    match parser.next_token()? {
+        Some(Token::Keyword(ref k)) if k == "obj" => {}
+        _ => return Err("Expected 'obj' in XRef stream".into()),
+    }
+
+    let xref_stream_obj = match parser.parse_object()? {
+        Some(PdfObject::Stream(s)) => s,
+        _ => return Err("Expected stream for XRef stream object".into()),
+    };
+
+    let decompressed = decompress_stream(&xref_stream_obj.data, &xref_stream_obj.dict)?;
+    read_binary_xref_stream(&decompressed, &xref_stream_obj.dict, table)?;
+    Ok(xref_stream_obj.dict)
 }
 
 /// Reads PDF 1.5+ compressed binary XRef stream
@@ -524,5 +551,53 @@ mod tests {
         let res = table.get_object(b"", ObjectId::new(5, 0), &mut cache);
         assert!(res.is_err());
         assert!(res.unwrap_err().contains("Cyclic object stream"));
+    }
+
+    #[test]
+    fn test_hybrid_xref_stm_resolves_compressed_objects() {
+        // ISO 32000-2:2020 §7.5.8.4: Hybrid-reference PDF with an ASCII xref table AND
+        // a supplemental /XRefStm stream defining a compressed object (Type 2).
+        let mut pdf = Vec::new();
+        pdf.extend_from_slice(b"%PDF-2.0\n");
+        let o1 = pdf.len();
+        pdf.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        let o3 = pdf.len();
+        // Object 3 is an uncompressed ObjStm containing Object 2 at relative offset 0
+        let objstm_payload = b"2 0 << /Type /Pages /Count 0 >>";
+        pdf.extend_from_slice(
+            format!(
+                "3 0 obj\n<< /Type /ObjStm /N 1 /First 4 /Length {} >>\nstream\n",
+                objstm_payload.len()
+            )
+            .as_bytes(),
+        );
+        pdf.extend_from_slice(objstm_payload);
+        pdf.extend_from_slice(b"\nendstream\nendobj\n");
+
+        // Object 4 is the supplemental /XRefStm stream with 1 entry for Object 2:
+        // Type=2 (compressed), stream_num=3, index=0 -> [2, 3, 0] with /W [1 1 1] and /Index [2 1]
+        let xref_stm_offset = pdf.len();
+        let xref_stm_bytes: [u8; 3] = [2, 3, 0];
+        pdf.extend_from_slice(
+            b"4 0 obj\n<< /Type /XRef /Size 5 /Index [ 2 1 ] /W [ 1 1 1 ] /Length 3 >>\nstream\n",
+        );
+        pdf.extend_from_slice(&xref_stm_bytes);
+        pdf.extend_from_slice(b"\nendstream\nendobj\n");
+
+        let ascii_xref_offset = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "xref\n0 2\n0000000000 65535 f \n{:010} 00000 n \n3 1\n{:010} 00000 n \ntrailer\n<< /Size 5 /Root 1 0 R /XRefStm {} >>\nstartxref\n{}\n%%EOF",
+                o1, o3, xref_stm_offset, ascii_xref_offset
+            )
+            .as_bytes(),
+        );
+
+        let table = XRefTable::parse(&pdf).unwrap();
+        let mut cache = HashMap::new();
+        let pages_obj = table
+            .get_object(&pdf, ObjectId::new(2, 0), &mut cache)
+            .expect("Object 2 from /XRefStm compressed stream must be resolved");
+        assert_eq!(pages_obj.dict_get("Type").unwrap().as_name(), Some("Pages"));
     }
 }
