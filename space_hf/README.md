@@ -3,8 +3,7 @@ title: RasgaPDF 2D Spatial PDF Parser
 emoji: ⚡
 colorFrom: blue
 colorTo: indigo
-sdk: docker
-app_port: 7860
+sdk: static
 pinned: false
 license: agpl-3.0
 tags:
